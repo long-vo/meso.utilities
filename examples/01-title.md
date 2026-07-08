@@ -1,4 +1,4 @@
-# SliderWeb
+# Slidedown
 
 ### Markdown → slides, in your browser
 

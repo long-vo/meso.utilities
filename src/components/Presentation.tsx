@@ -5,23 +5,27 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import type { Direction, Slide } from '../types';
+import type { Direction, Slide, ThemeName } from '../types';
 import SlideView from './Slide';
 import Controls from './Controls';
 import ProgressBar from './ProgressBar';
 import Overview from './Overview';
+import SpeakerView from './SpeakerView';
+import PrintView from './PrintView';
 import { useKeyboardNav } from '../hooks/useKeyboardNav';
 import { useFullscreen } from '../hooks/useFullscreen';
 
 const BASE_W = 1280;
 const BASE_H = 720;
 const IDLE_MS = 2800;
-const MIN_ZOOM = 1;
+const MIN_ZOOM = 0.9;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 1.25;
 
 interface Props {
   slides: Slide[];
+  theme: ThemeName;
+  onCycleTheme: () => void;
   onExit: () => void;
 }
 
@@ -30,12 +34,20 @@ interface Point {
   y: number;
 }
 
-export default function Presentation({ slides, onExit }: Props) {
+export default function Presentation({
+  slides,
+  theme,
+  onCycleTheme,
+  onExit,
+}: Props) {
   const count = slides.length;
 
   const [index, setIndex] = useState(0);
+  const [step, setStep] = useState(0);
   const [direction, setDirection] = useState<Direction>('none');
   const [overview, setOverview] = useState(false);
+  const [speakerOpen, setSpeakerOpen] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [fitScale, setFitScale] = useState(1);
   const [zoom, setZoom] = useState(1);
@@ -45,6 +57,8 @@ export default function Presentation({ slides, onExit }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const stageWrapRef = useRef<HTMLDivElement>(null);
   const indexRef = useRef(0);
+  const stepRef = useRef(0);
+  const slidesRef = useRef(slides);
   const idleTimer = useRef<number | null>(null);
   const fitScaleRef = useRef(1);
   const zoomRef = useRef(1);
@@ -57,6 +71,12 @@ export default function Presentation({ slides, onExit }: Props) {
     indexRef.current = index;
   }, [index]);
   useEffect(() => {
+    stepRef.current = step;
+  }, [step]);
+  useEffect(() => {
+    slidesRef.current = slides;
+  }, [slides]);
+  useEffect(() => {
     zoomRef.current = zoom;
   }, [zoom]);
   useEffect(() => {
@@ -68,36 +88,51 @@ export default function Presentation({ slides, onExit }: Props) {
     [count],
   );
 
+  // Move to another slide (used by next/prev). Sets the fragment step to the
+  // start when moving forward, or to the last fragment when moving back.
   const goTo = useCallback(
     (target: number, dir: Direction) => {
       const next = clamp(target);
       if (next === indexRef.current) return;
+      const fc = slidesRef.current[next]?.fragmentCount ?? 1;
       setDirection(dir);
       setIndex(next);
+      setStep(dir === 'prev' ? Math.max(0, fc - 1) : 0);
     },
     [clamp],
   );
 
-  const goNext = useCallback(() => goTo(indexRef.current + 1, 'next'), [goTo]);
-  const goPrev = useCallback(() => goTo(indexRef.current - 1, 'prev'), [goTo]);
-  const goFirst = useCallback(() => goTo(0, 'prev'), [goTo]);
-  const goLast = useCallback(() => goTo(count - 1, 'next'), [goTo, count]);
-
+  // Jump straight to a slide's start (overview / first / last).
   const jumpTo = useCallback(
     (i: number) => {
-      goTo(i, i >= indexRef.current ? 'next' : 'prev');
+      const next = clamp(i);
+      setDirection(next >= indexRef.current ? 'next' : 'prev');
+      setIndex(next);
+      setStep(0);
       setOverview(false);
     },
-    [goTo],
+    [clamp],
   );
 
-  // Reset zoom & pan whenever the slide changes.
+  const goNext = useCallback(() => {
+    const fc = slidesRef.current[indexRef.current]?.fragmentCount ?? 1;
+    if (stepRef.current < fc - 1) setStep((s) => s + 1);
+    else goTo(indexRef.current + 1, 'next');
+  }, [goTo]);
+
+  const goPrev = useCallback(() => {
+    if (stepRef.current > 0) setStep((s) => s - 1);
+    else goTo(indexRef.current - 1, 'prev');
+  }, [goTo]);
+
+  const goFirst = useCallback(() => jumpTo(0), [jumpTo]);
+  const goLast = useCallback(() => jumpTo(count - 1), [jumpTo, count]);
+
+  // Keep the zoom level across slides; just recenter the pan on each new slide.
   useEffect(() => {
-    setZoom(1);
     setPan({ x: 0, y: 0 });
   }, [index]);
 
-  // Clamp a pan offset so the slide can't be dragged fully out of view.
   const clampPan = useCallback((p: Point, z: number): Point => {
     const wrap = stageWrapRef.current;
     if (!wrap) return { x: 0, y: 0 };
@@ -186,6 +221,20 @@ export default function Presentation({ slides, onExit }: Props) {
     };
   }, [nudgeControls]);
 
+  // Export to PDF via the browser print dialog.
+  const exportPdf = useCallback(() => setPrinting(true), []);
+
+  useEffect(() => {
+    if (!printing) return;
+    const done = (): void => setPrinting(false);
+    window.addEventListener('afterprint', done);
+    const id = window.setTimeout(() => window.print(), 60);
+    return () => {
+      window.removeEventListener('afterprint', done);
+      window.clearTimeout(id);
+    };
+  }, [printing]);
+
   useKeyboardNav({
     onNext: goNext,
     onPrev: goPrev,
@@ -197,9 +246,11 @@ export default function Presentation({ slides, onExit }: Props) {
     onZoomIn: zoomIn,
     onZoomOut: zoomOut,
     onZoomReset: resetZoom,
+    onCycleTheme,
+    onToggleSpeaker: () => setSpeakerOpen((v) => !v),
+    onExport: exportPdf,
   });
 
-  // Drag-to-pan when zoomed in.
   const onPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     if (zoomRef.current <= 1) return;
     drag.current = {
@@ -254,7 +305,7 @@ export default function Presentation({ slides, onExit }: Props) {
         onPointerUp={endPan}
         onPointerCancel={endPan}
         onClick={(e) => {
-          if (zoom === 1 && e.target === e.currentTarget) goNext();
+          if (zoom <= 1 && e.target === e.currentTarget) goNext();
         }}
       >
         <div
@@ -268,6 +319,7 @@ export default function Presentation({ slides, onExit }: Props) {
             width={BASE_W}
             height={BASE_H}
             scale={effScale}
+            step={step}
           />
         </div>
       </div>
@@ -276,14 +328,20 @@ export default function Presentation({ slides, onExit }: Props) {
         index={index}
         count={count}
         zoom={zoom}
+        minZoom={MIN_ZOOM}
         maxZoom={MAX_ZOOM}
         isFullscreen={isFullscreen}
+        theme={theme}
+        speakerActive={speakerOpen}
         onPrev={goPrev}
         onNext={goNext}
         onZoomIn={zoomIn}
         onZoomOut={zoomOut}
         onZoomReset={resetZoom}
         onToggleOverview={() => setOverview((v) => !v)}
+        onToggleSpeaker={() => setSpeakerOpen((v) => !v)}
+        onCycleTheme={onCycleTheme}
+        onExport={exportPdf}
         onToggleFullscreen={toggleFullscreen}
         onExit={onExit}
       />
@@ -296,6 +354,19 @@ export default function Presentation({ slides, onExit }: Props) {
           onClose={() => setOverview(false)}
         />
       )}
+
+      {speakerOpen && (
+        <SpeakerView
+          slides={slides}
+          index={index}
+          theme={theme}
+          onNext={goNext}
+          onPrev={goPrev}
+          onClose={() => setSpeakerOpen(false)}
+        />
+      )}
+
+      {printing && <PrintView slides={slides} />}
     </div>
   );
 }

@@ -1,73 +1,127 @@
 import { useCallback, useRef, useState, type DragEvent } from 'react';
-import type { Slide } from '../types';
-import { isMarkdownFile, sampleSlides, slidesFromFiles } from '../lib/deck';
-import { Upload } from './Icons';
+import type { Deck, ThemeName } from '../types';
+import { isSupportedFile, sampleSlides, slidesFromFiles } from '../lib/deck';
+import { Moon, Sun, Upload } from './Icons';
 
 interface Props {
-  onLoad: (slides: Slide[]) => void;
+  onLoad: (deck: Deck) => void;
+  theme: ThemeName;
+  onCycleTheme: () => void;
 }
 
-export default function StartScreen({ onLoad }: Props) {
+export default function StartScreen({ onLoad, theme, onCycleTheme }: Props) {
   const [dragging, setDragging] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = useCallback(
     async (files: FileList | File[]) => {
       const arr = Array.from(files);
-      if (!arr.some((f) => isMarkdownFile(f.name))) {
-        setError('No Markdown files found. Choose one or more .md files.');
+      if (!arr.some((f) => isSupportedFile(f.name))) {
+        setError(
+          'No supported files found. Choose Markdown (.md), PDF, or image files.',
+        );
         return;
       }
       setError(null);
-      const slides = await slidesFromFiles(arr);
-      if (slides.length) onLoad(slides);
+      setBusy(true);
+      try {
+        const deck = await slidesFromFiles(arr);
+        if (deck.slides.length) onLoad(deck);
+        else setError('Those files had no pages or content to show.');
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : 'Could not read those files.',
+        );
+      } finally {
+        setBusy(false);
+      }
     },
     [onLoad],
   );
+
+  const loadSamples = useCallback(async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      onLoad(await sampleSlides());
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Could not load the sample deck.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }, [onLoad]);
 
   const onDrop = useCallback(
     (e: DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       setDragging(false);
+      if (busy) return;
       if (e.dataTransfer.files.length) void handleFiles(e.dataTransfer.files);
     },
-    [handleFiles],
+    [handleFiles, busy],
   );
 
   return (
     <div className="start">
+      <button
+        className="theme-toggle"
+        onClick={onCycleTheme}
+        title="Toggle theme (T)"
+        aria-label="Toggle light/dark theme"
+      >
+        {theme === 'dark' ? <Sun /> : <Moon />}
+      </button>
+
       <div className="start-inner">
-        <h1 className="start-title">SliderWeb</h1>
+        <h1 className="start-title">Slidedown</h1>
         <p className="start-subtitle">
-          Turn a set of Markdown files into a presentation. Each file becomes
-          one slide, ordered by filename.
+          Turn Markdown files, PDFs, and images into a presentation. Each
+          Markdown file or image is one slide; each PDF page is one slide.
         </p>
 
         <div
-          className={`dropzone ${dragging ? 'is-dragging' : ''}`}
+          className={`dropzone ${dragging ? 'is-dragging' : ''} ${
+            busy ? 'is-busy' : ''
+          }`}
           onDragOver={(e) => {
             e.preventDefault();
-            setDragging(true);
+            if (!busy) setDragging(true);
           }}
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
-          onClick={() => inputRef.current?.click()}
+          onClick={() => !busy && inputRef.current?.click()}
           role="button"
           tabIndex={0}
+          aria-busy={busy}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click();
+            if (!busy && (e.key === 'Enter' || e.key === ' '))
+              inputRef.current?.click();
           }}
         >
-          <Upload className="dropzone-icon" />
-          <p className="dropzone-primary">
-            Drop <strong>.md</strong> files here
-          </p>
-          <p className="dropzone-secondary">or click to choose files</p>
+          {busy ? (
+            <>
+              <div className="spinner" aria-hidden="true" />
+              <p className="dropzone-primary">Processing…</p>
+              <p className="dropzone-secondary">Rendering your slides</p>
+            </>
+          ) : (
+            <>
+              <Upload className="dropzone-icon" />
+              <p className="dropzone-primary">
+                Drop <strong>.md</strong>, <strong>.pdf</strong>, or image files
+                here
+              </p>
+              <p className="dropzone-secondary">or click to choose files</p>
+            </>
+          )}
           <input
             ref={inputRef}
             type="file"
-            accept=".md,.markdown,.mdown,.mkd,text/markdown"
+            accept=".md,.markdown,.mdown,.mkd,.pdf,.png,.jpg,.jpeg,.gif,.webp,.avif,.svg,.bmp,text/markdown,application/pdf,image/*"
             multiple
             hidden
             onChange={(e) => {
@@ -80,14 +134,15 @@ export default function StartScreen({ onLoad }: Props) {
         {error && <p className="start-error">{error}</p>}
 
         <div className="start-actions">
-          <button className="link-btn" onClick={() => onLoad(sampleSlides())}>
+          <button className="link-btn" disabled={busy} onClick={loadSamples}>
             Load sample deck
           </button>
         </div>
 
         <p className="start-hint">
-          Tip: select multiple files at once. Ordering follows the filename, so
-          prefix them like <code>01-intro.md</code>, <code>02-agenda.md</code>.
+          Multiple files sort by filename. Split one file into several slides
+          with <code>---</code>, add speaker notes after <code>???</code>, and
+          reveal content step by step with <code>+++</code>.
         </p>
       </div>
     </div>

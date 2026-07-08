@@ -97,6 +97,28 @@ body {
   transform: scale(1.01);
 }
 
+.dropzone.is-busy {
+  cursor: default;
+  border-color: var(--accent);
+  background: rgba(79, 70, 229, 0.06);
+}
+
+.spinner {
+  width: 34px;
+  height: 34px;
+  margin: 0 auto 14px;
+  border: 3px solid rgba(255, 255, 255, 0.18);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .dropzone-icon {
   color: var(--accent);
   margin-bottom: 12px;
@@ -246,6 +268,37 @@ body {
   height: 100%;
   padding: 64px 84px;
   overflow: auto;
+}
+
+.slide-content--image {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+}
+
+.slide-content--image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.mermaid-diagram {
+  display: flex;
+  justify-content: center;
+  margin: 0 0 0.7em;
+}
+
+.mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-error {
+  border-color: #e24b4a;
 }
 
 /* Entrance animations */
@@ -610,6 +663,24 @@ body {
   padding-left: 1.3em;
 }
 
+.thumb-slide--image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  transform: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thumb-slide--image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
 .thumb-label {
   display: block;
   margin-top: 8px;
@@ -645,5 +716,229 @@ body {
   }
   .progress-fill {
     transition: none;
+  }
+}
+
+/* ============================ Dark theme ============================ */
+[data-theme='dark'] {
+  --app-bg: #06070c;
+  --app-bg-2: #10131d;
+  --ink: #e7e9f2;
+  --ink-soft: #9aa4bd;
+  --line: #2a3143;
+  --slide-bg: linear-gradient(180deg, #1b2231 0%, #151a27 100%);
+  --accent: #8b83ff;
+}
+
+/* Code stays on a light card in both themes so highlight.js colours read. */
+.slide-content code,
+.slide-content pre {
+  color: #24292f;
+}
+
+.slide-content th {
+  color: #1f2430;
+}
+
+/* ============================ Fragments ============================ */
+.slide-content .fragment {
+  opacity: 0;
+  transition: opacity 0.28s ease;
+}
+
+.slide-content .fragment.fragment-visible {
+  opacity: 1;
+}
+
+.print-root .fragment {
+  opacity: 1 !important;
+}
+
+/* ============================ Theme toggle (start) ============================ */
+.theme-toggle {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.04);
+  color: #e6e8f0;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.ctrl-btn.is-active {
+  background: rgba(79, 70, 229, 0.4);
+  color: #fff;
+}
+
+.link-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ============================ Speaker view ============================ */
+.speaker-root {
+  font-family: var(--font-sans);
+}
+
+.speaker {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 18px 22px 24px;
+  background: linear-gradient(160deg, var(--app-bg-2), var(--app-bg));
+  color: #e7e9f2;
+  display: flex;
+  flex-direction: column;
+}
+
+.speaker-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.speaker-clock {
+  font-size: 40px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.sv-reset {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.speaker-count {
+  margin-left: auto;
+  color: #9aa4bd;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.speaker-main {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.sv-label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8b93ab;
+}
+
+.speaker-side .sv-label:not(:first-child) {
+  margin-top: 18px;
+}
+
+.sv-preview {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.speaker-nav {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.speaker-notes {
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  font-size: 16px;
+  line-height: 1.55;
+  color: #dfe2ee;
+  max-height: 42vh;
+  overflow: auto;
+}
+
+.speaker-notes :first-child {
+  margin-top: 0;
+}
+
+.speaker-notes h1,
+.speaker-notes h2,
+.speaker-notes h3 {
+  color: #fff;
+  margin: 0.3em 0;
+}
+
+.sv-muted {
+  color: #8b93ab;
+}
+
+.sv-end {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  color: #8b93ab;
+}
+
+/* ============================ Print / PDF export ============================ */
+.print-root {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: 1280px 720px;
+    margin: 0;
+  }
+
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background: #fff;
+  }
+
+  .presentation > *:not(.print-root) {
+    display: none !important;
+  }
+
+  .print-root {
+    display: block;
+  }
+
+  .print-page {
+    position: relative;
+    width: 1280px;
+    height: 720px;
+    overflow: hidden;
+    background: #fff;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .print-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  .print-page .slide-content {
+    width: 1280px;
+    height: 720px;
+    box-sizing: border-box;
   }
 }

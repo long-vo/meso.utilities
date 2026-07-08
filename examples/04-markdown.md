@@ -9,5 +9,5 @@ Everything you'd expect from GitHub-Flavored Markdown:
    - with sub-items
 4. Images, tables, blockquotes, and code blocks
 
-> Write your content the way you already write notes — SliderWeb handles the
+> Write your content the way you already write notes — Slidedown handles the
 > presentation.

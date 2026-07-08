@@ -29,10 +29,16 @@ export default function Overview({
             onClick={() => onSelect(i)}
           >
             <div className="thumb-stage">
-              <div
-                className="thumb-slide"
-                dangerouslySetInnerHTML={{ __html: s.html }}
-              />
+              {s.kind === 'image' ? (
+                <div className="thumb-slide thumb-slide--image">
+                  <img src={s.src} alt="" />
+                </div>
+              ) : (
+                <div
+                  className="thumb-slide"
+                  dangerouslySetInnerHTML={{ __html: s.html }}
+                />
+              )}
             </div>
             <span className="thumb-label">
               <span className="thumb-num">{i + 1}</span>

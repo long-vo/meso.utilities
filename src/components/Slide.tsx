@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { Direction, Slide } from '../types';
 
 interface Props {
@@ -6,6 +7,7 @@ interface Props {
   width: number;
   height: number;
   scale: number;
+  step: number;
 }
 
 /**
@@ -18,7 +20,20 @@ export default function SlideView({
   width,
   height,
   scale,
+  step,
 }: Props) {
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Reveal fragments up to the current step.
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root) return;
+    root.querySelectorAll<HTMLElement>('.fragment').forEach((f) => {
+      const i = Number(f.getAttribute('data-fragment') ?? '0');
+      f.classList.toggle('fragment-visible', i <= step);
+    });
+  }, [slide, step]);
+
   return (
     <div
       className={`slide-positioner anim-${direction}`}
@@ -28,10 +43,17 @@ export default function SlideView({
         className="slide"
         style={{ width, height, transform: `scale(${scale})` }}
       >
-        <div
-          className="slide-content"
-          dangerouslySetInnerHTML={{ __html: slide.html }}
-        />
+        {slide.kind === 'image' ? (
+          <div className="slide-content slide-content--image">
+            <img src={slide.src} alt={slide.title} draggable={false} />
+          </div>
+        ) : (
+          <div
+            ref={contentRef}
+            className="slide-content"
+            dangerouslySetInnerHTML={{ __html: slide.html }}
+          />
+        )}
       </article>
     </div>
   );

@@ -11,6 +11,9 @@ export interface NavHandlers {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
+  onCycleTheme: () => void;
+  onToggleSpeaker: () => void;
+  onExport: () => void;
 }
 
 /**
@@ -74,6 +77,21 @@ export function useKeyboardNav(handlers: NavHandlers): void {
         case '0':
           e.preventDefault();
           h.onZoomReset();
+          break;
+        case 't':
+        case 'T':
+          e.preventDefault();
+          h.onCycleTheme();
+          break;
+        case 's':
+        case 'S':
+          e.preventDefault();
+          h.onToggleSpeaker();
+          break;
+        case 'e':
+        case 'E':
+          e.preventDefault();
+          h.onExport();
           break;
         case 'Escape':
           h.onEscape();
