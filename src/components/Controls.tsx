@@ -6,6 +6,8 @@ import {
   Grid,
   Home,
   Moon,
+  Pause,
+  Play,
   Presenter,
   Printer,
   Sun,
@@ -23,8 +25,10 @@ interface Props {
   isFullscreen: boolean;
   theme: ThemeName;
   speakerActive: boolean;
+  playing: boolean;
   onPrev: () => void;
   onNext: () => void;
+  onTogglePlay: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
@@ -45,8 +49,10 @@ export default function Controls({
   isFullscreen,
   theme,
   speakerActive,
+  playing,
   onPrev,
   onNext,
+  onTogglePlay,
   onZoomIn,
   onZoomOut,
   onZoomReset,
@@ -131,6 +137,15 @@ export default function Controls({
       </button>
 
       <span className="ctrl-divider" />
+
+      <button
+        className={`ctrl-btn ${playing ? 'is-active' : ''}`}
+        onClick={onTogglePlay}
+        title={playing ? 'Pause auto-play (P)' : 'Auto-play (P)'}
+        aria-label={playing ? 'Pause auto-play' : 'Start auto-play'}
+      >
+        {playing ? <Pause /> : <Play />}
+      </button>
 
       <button
         className="ctrl-btn"

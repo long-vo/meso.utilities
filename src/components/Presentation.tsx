@@ -21,6 +21,7 @@ const IDLE_MS = 2800;
 const MIN_ZOOM = 0.9;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 1.25;
+const AUTO_MS = 4000;
 
 interface Props {
   slides: Slide[];
@@ -48,6 +49,7 @@ export default function Presentation({
   const [overview, setOverview] = useState(false);
   const [speakerOpen, setSpeakerOpen] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [playing, setPlaying] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [fitScale, setFitScale] = useState(1);
   const [zoom, setZoom] = useState(1);
@@ -235,6 +237,23 @@ export default function Presentation({
     };
   }, [printing]);
 
+  // Auto-play: advance fragments then slides on an interval; stop at the end.
+  useEffect(() => {
+    if (!playing) return;
+    const id = window.setInterval(() => {
+      const fc = slidesRef.current[indexRef.current]?.fragmentCount ?? 1;
+      const atEnd =
+        indexRef.current >= slidesRef.current.length - 1 &&
+        stepRef.current >= fc - 1;
+      if (atEnd) {
+        setPlaying(false);
+        return;
+      }
+      goNext();
+    }, AUTO_MS);
+    return () => window.clearInterval(id);
+  }, [playing, goNext]);
+
   useKeyboardNav({
     onNext: goNext,
     onPrev: goPrev,
@@ -249,6 +268,7 @@ export default function Presentation({
     onCycleTheme,
     onToggleSpeaker: () => setSpeakerOpen((v) => !v),
     onExport: exportPdf,
+    onTogglePlay: () => setPlaying((v) => !v),
   });
 
   const onPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
@@ -333,6 +353,8 @@ export default function Presentation({
         isFullscreen={isFullscreen}
         theme={theme}
         speakerActive={speakerOpen}
+        playing={playing}
+        onTogglePlay={() => setPlaying((v) => !v)}
         onPrev={goPrev}
         onNext={goNext}
         onZoomIn={zoomIn}

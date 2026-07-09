@@ -717,6 +717,10 @@ body {
   .progress-fill {
     transition: none;
   }
+  .stage-wrap .anim {
+    opacity: 1;
+    animation: none !important;
+  }
 }
 
 /* ============================ Dark theme ============================ */
@@ -741,17 +745,105 @@ body {
 }
 
 /* ============================ Fragments ============================ */
-.slide-content .fragment {
+.stage-wrap .fragment {
   opacity: 0;
   transition: opacity 0.28s ease;
 }
 
-.slide-content .fragment.fragment-visible {
+.stage-wrap .fragment.fragment-visible {
   opacity: 1;
 }
 
 .print-root .fragment {
   opacity: 1 !important;
+}
+
+/* Element entrance animations — only hidden on the live stage, so overview
+   thumbnails, the speaker preview, and PDF export always show full content. */
+.stage-wrap .anim {
+  opacity: 0;
+}
+
+.stage-wrap .anim.anim-run {
+  opacity: 1;
+}
+
+.stage-wrap .anim-fade.anim-run {
+  animation: sw-anim-fade 0.5s ease both;
+}
+.stage-wrap .anim-up.anim-run {
+  animation: sw-anim-up 0.5s ease both;
+}
+.stage-wrap .anim-down.anim-run {
+  animation: sw-anim-down 0.5s ease both;
+}
+.stage-wrap .anim-left.anim-run {
+  animation: sw-anim-left 0.5s ease both;
+}
+.stage-wrap .anim-right.anim-run {
+  animation: sw-anim-right 0.5s ease both;
+}
+.stage-wrap .anim-zoom.anim-run {
+  animation: sw-anim-zoom 0.5s ease both;
+}
+
+@keyframes sw-anim-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes sw-anim-up {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sw-anim-down {
+  from {
+    opacity: 0;
+    transform: translateY(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sw-anim-left {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sw-anim-right {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sw-anim-zoom {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* ============================ Theme toggle (start) ============================ */

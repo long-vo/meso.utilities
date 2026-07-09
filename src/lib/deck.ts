@@ -1,6 +1,7 @@
 import type { Deck, DeckMeta, ProtoSlide, ThemeName } from '../types';
 import { THEMES } from '../types';
 import { renderMarkdown } from './markdown';
+import { applyAnimations } from './animate';
 
 /**
  * Natural, case-insensitive filename compare so that
@@ -38,10 +39,13 @@ function titleFromFilename(name: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-/** The first Markdown heading in a chunk, or null. */
+/** The first Markdown heading in a chunk, or null (animation token stripped). */
 function firstHeading(md: string): string | null {
   const match = md.match(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/m);
-  return match ? match[1].trim() : null;
+  if (!match) return null;
+  return match[1]
+    .trim()
+    .replace(/^@(?:fade|up|down|left|right|zoom)(?::\d{1,5}){0,2}[ \t]*/, '');
 }
 
 interface FrontMatter {
@@ -109,6 +113,7 @@ async function chunkToProto(
     html = renderMarkdown(body);
   }
   html = await enhanceDiagrams(html);
+  html = applyAnimations(html);
 
   const notes = notesSrc
     ? await enhanceDiagrams(renderMarkdown(notesSrc))

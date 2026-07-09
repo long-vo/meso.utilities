@@ -68,6 +68,19 @@ export const ZoomOut = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const Play = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M7 5l12 7-12 7z" />
+  </svg>
+);
+
+export const Pause = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <rect x="6" y="5" width="4" height="14" rx="1" />
+    <rect x="14" y="5" width="4" height="14" rx="1" />
+  </svg>
+);
+
 export const Sun = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}>
     <circle cx="12" cy="12" r="4" />

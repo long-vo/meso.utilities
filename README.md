@@ -101,6 +101,7 @@ select all of them on the start screen to load them as a deck.
 | Reset zoom           | `0`                               |
 | Overview grid        | `O`                               |
 | Speaker view         | `S`                               |
+| Auto-play            | `P`                               |
 | Toggle theme         | `T`                               |
 | Export to PDF        | `E`                               |
 | Fullscreen           | `F`                               |
@@ -144,6 +145,11 @@ A single Markdown file can be more than one slide:
   in the speaker view.
 - **Fragments** — separate chunks with `+++` to reveal them one click at a
   time; `→` steps through fragments before moving to the next slide.
+- **Entrance animations** — start a block or bullet with `@up`, `@down`,
+  `@left`, `@right`, `@zoom`, or `@fade` to animate it in (on slide load, or
+  when its `+++` fragment is revealed). Add timing in ms: `@up:200` sets a
+  delay, `@zoom:0:800` sets delay then duration. Elements without a delay
+  auto-stagger.
 - **Front-matter** — an optional YAML block at the very top sets deck options:
 
 ```markdown
@@ -163,6 +169,8 @@ theme: dark
   front-matter `theme:`); your choice is remembered across sessions.
 - **Export to PDF** (`E`) — opens the print dialog laid out one slide per
   16:9 page; choose "Save as PDF".
+- **Auto-play** (`P`) — advances fragments then slides every few seconds,
+  hands-free, and stops at the end.
 
 ## Project structure
 

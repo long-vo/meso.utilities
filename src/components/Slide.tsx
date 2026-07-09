@@ -24,13 +24,30 @@ export default function SlideView({
 }: Props) {
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Reveal fragments up to the current step.
+  // Reveal fragments up to the current step, and play entrance animations for
+  // any elements that have just become visible (staggered).
   useEffect(() => {
     const root = contentRef.current;
     if (!root) return;
+
     root.querySelectorAll<HTMLElement>('.fragment').forEach((f) => {
       const i = Number(f.getAttribute('data-fragment') ?? '0');
       f.classList.toggle('fragment-visible', i <= step);
+    });
+
+    let order = 0;
+    root.querySelectorAll<HTMLElement>('.anim').forEach((el) => {
+      const frag = el.closest<HTMLElement>('.fragment');
+      const visible =
+        !frag || Number(frag.getAttribute('data-fragment') ?? '0') <= step;
+      if (visible && !el.classList.contains('anim-run')) {
+        const delay = el.getAttribute('data-anim-delay');
+        const duration = el.getAttribute('data-anim-duration');
+        el.style.animationDelay = delay != null ? `${delay}ms` : `${order * 90}ms`;
+        if (duration != null) el.style.animationDuration = `${duration}ms`;
+        el.classList.add('anim-run');
+        order += 1;
+      }
     });
   }, [slide, step]);
 

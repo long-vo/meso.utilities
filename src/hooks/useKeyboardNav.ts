@@ -14,6 +14,7 @@ export interface NavHandlers {
   onCycleTheme: () => void;
   onToggleSpeaker: () => void;
   onExport: () => void;
+  onTogglePlay: () => void;
 }
 
 /**
@@ -92,6 +93,11 @@ export function useKeyboardNav(handlers: NavHandlers): void {
         case 'E':
           e.preventDefault();
           h.onExport();
+          break;
+        case 'p':
+        case 'P':
+          e.preventDefault();
+          h.onTogglePlay();
           break;
         case 'Escape':
           h.onEscape();
