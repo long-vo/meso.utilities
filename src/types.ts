@@ -1,7 +1,23 @@
 export type SlideKind = 'markdown' | 'image';
 
-export const THEMES = ['light', 'dark'] as const;
+export const THEMES = [
+  'light',
+  'dark',
+  'midnight',
+  'sepia',
+  'forest',
+  'contrast',
+] as const;
 export type ThemeName = (typeof THEMES)[number];
+
+export const THEME_LABELS: Record<ThemeName, string> = {
+  light: 'Light',
+  dark: 'Dark',
+  midnight: 'Midnight',
+  sepia: 'Sepia',
+  forest: 'Forest',
+  contrast: 'High contrast',
+};
 
 export interface Slide {
   /** Stable id (index-based). */

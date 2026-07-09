@@ -81,6 +81,15 @@ export const Pause = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const Palette = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M12 3a9 9 0 1 0 0 18 2 2 0 0 0 2-2c0-.5-.2-1-.6-1.4-.3-.4-.5-.8-.5-1.3a2 2 0 0 1 2-2H17a4 4 0 0 0 4-4c0-3.9-4-7-9-7z" />
+    <circle cx="7.5" cy="11" r="1" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="7.5" r="1" fill="currentColor" stroke="none" />
+    <circle cx="16" cy="11" r="1" fill="currentColor" stroke="none" />
+  </svg>
+);
+
 export const Sun = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}>
     <circle cx="12" cy="12" r="4" />

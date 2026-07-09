@@ -63,9 +63,12 @@ Data flows in one direction: **files → `Slide[]` → render**.
   current/next slide, notes, and a timer, and shares state with the main window.
 - `src/components/PrintView.tsx` + a `@media print` block render one 1280×720
   page per slide; `exportPdf` sets `printing` then calls `window.print()`.
-- Theme is an app-level `ThemeName` on `document.documentElement`
-  (`data-theme`), persisted to `localStorage`, overridable per deck via
-  front-matter; dark values live under `[data-theme='dark']` in `styles.css`.
+- Theme is an app-level `ThemeName` (light, dark, midnight, sepia, forest,
+  contrast) on `document.documentElement` (`data-theme`), persisted to
+  `localStorage`, overridable per deck via front-matter. Each theme is a block
+  of CSS variables under `[data-theme='…']` in `styles.css` (including the
+  `--glow-*` aurora colours); add one by extending `THEMES` in `types.ts` plus a
+  CSS block and a `.swatch-*` colour.
 
 ## Conventions and gotchas
 
@@ -96,7 +99,7 @@ Data flows in one direction: **files → `Slide[]` → render**.
 
 ## Deployment
 
-`.github/workflows/deploy.yml` builds with Deno (`denoland/setup-deno`) and
-publishes `dist/` to GitHub Pages on push to `main` (enable Settings → Pages →
-Source: GitHub Actions). Vite `base` is `'./'` (relative) so the build works
+`.github/workflows/deno.yml` builds with Deno (`denoland/setup-deno`) and
+publishes `dist/` to GitHub Pages on every push to `master`; enable Settings →
+Pages → Source: GitHub Actions. Vite `base` is `'./'` (relative) so the build works
 under a repository sub-path without further configuration.

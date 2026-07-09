@@ -5,15 +5,14 @@ import {
   Expand,
   Grid,
   Home,
-  Moon,
   Pause,
   Play,
   Presenter,
   Printer,
-  Sun,
   ZoomIn,
   ZoomOut,
 } from './Icons';
+import ThemeMenu from './ThemeMenu';
 import type { ThemeName } from '../types';
 
 interface Props {
@@ -34,7 +33,7 @@ interface Props {
   onZoomReset: () => void;
   onToggleOverview: () => void;
   onToggleSpeaker: () => void;
-  onCycleTheme: () => void;
+  onSetTheme: (theme: ThemeName) => void;
   onExport: () => void;
   onToggleFullscreen: () => void;
   onExit: () => void;
@@ -58,7 +57,7 @@ export default function Controls({
   onZoomReset,
   onToggleOverview,
   onToggleSpeaker,
-  onCycleTheme,
+  onSetTheme,
   onExport,
   onToggleFullscreen,
   onExit,
@@ -165,14 +164,7 @@ export default function Controls({
         <Presenter />
       </button>
 
-      <button
-        className="ctrl-btn"
-        onClick={onCycleTheme}
-        title="Toggle theme (T)"
-        aria-label="Toggle light/dark theme"
-      >
-        {theme === 'dark' ? <Sun /> : <Moon />}
-      </button>
+      <ThemeMenu theme={theme} onSelect={onSetTheme} direction="up" />
 
       <button
         className="ctrl-btn"

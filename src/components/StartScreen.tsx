@@ -1,15 +1,16 @@
 import { useCallback, useRef, useState, type DragEvent } from 'react';
 import type { Deck, ThemeName } from '../types';
 import { isSupportedFile, sampleSlides, slidesFromFiles } from '../lib/deck';
-import { Moon, Sun, Upload } from './Icons';
+import { Upload } from './Icons';
+import ThemeMenu from './ThemeMenu';
 
 interface Props {
   onLoad: (deck: Deck) => void;
   theme: ThemeName;
-  onCycleTheme: () => void;
+  onSetTheme: (theme: ThemeName) => void;
 }
 
-export default function StartScreen({ onLoad, theme, onCycleTheme }: Props) {
+export default function StartScreen({ onLoad, theme, onSetTheme }: Props) {
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,14 +68,9 @@ export default function StartScreen({ onLoad, theme, onCycleTheme }: Props) {
 
   return (
     <div className="start">
-      <button
-        className="theme-toggle"
-        onClick={onCycleTheme}
-        title="Toggle theme (T)"
-        aria-label="Toggle light/dark theme"
-      >
-        {theme === 'dark' ? <Sun /> : <Moon />}
-      </button>
+      <div className="start-theme">
+        <ThemeMenu theme={theme} onSelect={onSetTheme} direction="down" />
+      </div>
 
       <div className="start-inner">
         <h1 className="start-title">Slidedown</h1>

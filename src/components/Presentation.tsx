@@ -26,6 +26,7 @@ const AUTO_MS = 4000;
 interface Props {
   slides: Slide[];
   theme: ThemeName;
+  onSetTheme: (theme: ThemeName) => void;
   onCycleTheme: () => void;
   onExit: () => void;
 }
@@ -38,6 +39,7 @@ interface Point {
 export default function Presentation({
   slides,
   theme,
+  onSetTheme,
   onCycleTheme,
   onExit,
 }: Props) {
@@ -362,7 +364,7 @@ export default function Presentation({
         onZoomReset={resetZoom}
         onToggleOverview={() => setOverview((v) => !v)}
         onToggleSpeaker={() => setSpeakerOpen((v) => !v)}
-        onCycleTheme={onCycleTheme}
+        onSetTheme={onSetTheme}
         onExport={exportPdf}
         onToggleFullscreen={toggleFullscreen}
         onExit={onExit}

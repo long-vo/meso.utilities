@@ -42,16 +42,16 @@ The tasks live in `deno.json` and mirror the npm scripts.
 
 ## Deploy to GitHub Pages
 
-The workflow at `.github/workflows/deploy.yml` builds the site **with Deno**
+The workflow at `.github/workflows/deno.yml` builds the site **with Deno**
 (`denoland/setup-deno`) and publishes it to GitHub Pages on every push to
-`main`.
+`master`.
 
 One-time setup:
 
-1. Push the repo to GitHub with `main` as the default branch.
+1. Push the repo to GitHub with `master` as the default branch.
 2. In the repo, open **Settings → Pages → Build and deployment** and set
    **Source** to **GitHub Actions**.
-3. Push to `main` (or trigger the workflow from the **Actions** tab).
+3. Push to `master` (or trigger the workflow from the **Actions** tab).
 
 Once it finishes, the site is live at a public URL:
 
@@ -165,8 +165,10 @@ theme: dark
 
 - **Speaker view** (`S`) opens a second window with the current and next
   slide, your notes, and an elapsed timer. Navigate from either window.
-- **Themes** — toggle light/dark with `T` or the theme button (also set via
-  front-matter `theme:`); your choice is remembered across sessions.
+- **Themes** — pick from Light, Dark, Midnight, Sepia, Forest, and High
+  contrast via the palette button (or cycle with `T`); set a deck's default
+  with front-matter `theme:` (e.g. `theme: midnight`). Your choice is
+  remembered across sessions.
 - **Export to PDF** (`E`) — opens the print dialog laid out one slide per
   16:9 page; choose "Save as PDF".
 - **Auto-play** (`P`) — advances fragments then slides every few seconds,

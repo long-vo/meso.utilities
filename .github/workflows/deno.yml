@@ -1,11 +1,12 @@
 name: Deploy to GitHub Pages
 
-# Builds the Vite app with Deno and publishes it to GitHub Pages.
+# Builds the Vite app with Deno and publishes it to GitHub Pages on every push
+# to master.
 # Enable it once under: Settings -> Pages -> Build and deployment -> Source: GitHub Actions.
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -13,7 +14,7 @@ permissions:
   pages: write
   id-token: write
 
-# Allow one concurrent deployment; newer pushes cancel in-progress runs.
+# Serialize Pages deployments; newer pushes cancel in-progress runs.
 concurrency:
   group: pages
   cancel-in-progress: true
