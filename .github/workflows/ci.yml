@@ -27,7 +27,7 @@ jobs:
         run: deno lint
 
       - name: Type check
-        run: deno check main.ts src/sanitize.test.ts
+        run: deno check main.ts src/sanitize.test.ts src/poker.test.ts
 
       - name: Test
         run: deno test --allow-read

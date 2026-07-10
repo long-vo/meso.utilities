@@ -20,8 +20,6 @@ const els = {
   download: $("download"),
   loadExample: $("load-example"),
   clear: $("clear"),
-  themeToggle: $("theme-toggle"),
-  themeIcon: document.querySelector(".theme-icon"),
   toast: $("toast"),
   modeJson: $("mode-json"),
   modeLog: $("mode-log"),
@@ -323,21 +321,6 @@ function downloadResult() {
   showToast(`Downloaded ${name}`);
 }
 
-function applyTheme(theme) {
-  document.documentElement.setAttribute("data-theme", theme);
-  els.themeIcon.textContent = theme === "dark" ? "🌙" : "☀️";
-  try {
-    localStorage.setItem("meso-theme", theme);
-  } catch {
-    /* storage may be unavailable; theme just won't persist */
-  }
-}
-
-function toggleTheme() {
-  const current = document.documentElement.getAttribute("data-theme");
-  applyTheme(current === "dark" ? "light" : "dark");
-}
-
 /* --------------------------------- wire --------------------------------- */
 
 els.fields.addEventListener("input", scheduleCompute);
@@ -380,13 +363,7 @@ els.loadExample.addEventListener("click", loadExample);
 els.clear.addEventListener("click", clearAll);
 els.copy.addEventListener("click", copyResult);
 els.download.addEventListener("click", downloadResult);
-els.themeToggle.addEventListener("click", toggleTheme);
+// (theme toggle is wired by the shared theme.js module)
 
-// Restore saved theme, then start with the example so the page looks alive.
-try {
-  const saved = localStorage.getItem("meso-theme");
-  if (saved === "light" || saved === "dark") applyTheme(saved);
-} catch {
-  /* ignore */
-}
+// Start with the example so the page looks alive.
 loadExample();

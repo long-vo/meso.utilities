@@ -3,22 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sanitize JSON — meso.utilities</title>
-  <meta name="description" content="Mask sensitive fields inside a JSON payload. Runs entirely in your browser." />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%94%92%3C/text%3E%3C/svg%3E" />
+  <title>meso.utilities — small tools for the team</title>
+  <meta name="description" content="A collection of small, self-contained team utilities: JSON sanitizer, scrum poker and more." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%A7%B0%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
-<body data-mode="json">
+<body>
   <header class="topbar">
     <div class="brand">
-      <span class="brand-mark" aria-hidden="true">🔒</span>
+      <span class="brand-mark" aria-hidden="true">🧰</span>
       <div class="brand-text">
         <span class="brand-name">meso.utilities</span>
-        <span class="brand-sub">Sanitize JSON</span>
+        <span class="brand-sub">Small tools for the team</span>
       </div>
     </div>
     <div class="topbar-actions">
-      <span class="pill pill-privacy" title="Your JSON never leaves this page.">
+      <span class="pill pill-privacy" title="Tools run entirely in your browser unless noted.">
         <span aria-hidden="true">🛡️</span> Runs in your browser
       </span>
       <button id="theme-toggle" class="icon-btn" type="button" aria-label="Toggle colour theme">
@@ -27,111 +27,49 @@
     </div>
   </header>
 
-  <main class="layout">
-    <section class="panel controls" aria-label="Options">
-      <div class="mode-switch" role="tablist" aria-label="Input mode">
-        <button id="mode-json" class="mode-btn is-active" role="tab" aria-selected="true" type="button">JSON</button>
-        <button id="mode-log" class="mode-btn" role="tab" aria-selected="false" type="button">Log file</button>
-      </div>
-
-      <div class="field only-log">
-        <label class="switch mask-all">
-          <input id="mask-all" type="checkbox" checked /> <span>Mask all values</span>
-        </label>
-        <p class="hint">Mask every value in each JSON block, Java <code>toString</code> dump and
-          <code>key=value</code> map. Turn off to mask only the fields below.</p>
-      </div>
-
-      <div class="field only-log">
-        <label class="switch mask-all">
-          <input id="redact" type="checkbox" /> <span>Redact IDs (UUIDs, IPs, emails)</span>
-        </label>
-        <p class="hint">Off by default. When on, also masks values by shape anywhere in the log — even
-          loose IDs in plain lines like <code>dossierId=…</code>.</p>
-      </div>
-
-      <div class="field">
-        <label for="fields">Field names to mask</label>
-        <input id="fields" type="text" spellcheck="false" autocomplete="off"
-          placeholder="lastName, email, phoneNumber, token" />
-        <p class="hint">Comma, space or newline separated. Matches keys at any depth (case-insensitive).</p>
-        <div id="field-chips" class="chips" aria-live="polite"></div>
-      </div>
-
-      <div class="field">
-        <label for="keep-num">Keep last N characters</label>
-        <div class="keep-row">
-          <input id="keep-range" type="range" min="0" max="12" value="4" />
-          <input id="keep-num" type="number" min="0" max="64" value="4" inputmode="numeric" />
-        </div>
-        <p class="hint">Characters left visible at the end of each masked value. <code>0</code> hides everything.</p>
-      </div>
-
-      <div class="field btn-row">
-        <button id="load-example" class="btn btn-ghost" type="button">Load example</button>
-        <button id="clear" class="btn btn-ghost" type="button">Clear</button>
-      </div>
+  <main class="hub">
+    <section class="hub-intro">
+      <h1>Utilities</h1>
+      <p>Small, self-contained tools for everyday team work. Pick one to get started.</p>
     </section>
 
-    <section class="panel editor" aria-label="Input">
-      <div class="panel-head">
-        <h2><span class="only-json">JSON payload</span><span class="only-log">Log text</span></h2>
-        <span id="input-status" class="status"></span>
-      </div>
-      <div class="attach only-log">
-        <label class="btn btn-small file-btn">
-          <input id="logfile" type="file" accept=".log,.txt,text/plain,application/json" hidden />
-          📎 Attach log file
-        </label>
-        <span id="logfile-name" class="file-name">or paste log text below</span>
-      </div>
-      <textarea id="input" class="code-area" spellcheck="false" autocomplete="off"
-        placeholder='{ "customer": { "lastName": "Weber", "email": "jara@example.com" } }'></textarea>
-      <p id="input-error" class="error-line" role="alert"></p>
-    </section>
-
-    <section class="panel result" aria-label="Sanitized result">
-      <div class="panel-head">
-        <h2>Result</h2>
-        <div class="result-tools">
-          <label class="switch" title="Collapse to a single line">
-            <input id="minify" type="checkbox" /> <span>Minify</span>
-          </label>
-          <button id="copy" class="btn btn-small" type="button">Copy</button>
-          <button id="download" class="btn btn-small" type="button">Download</button>
+    <section class="cards" aria-label="Available tools">
+      <a class="card" href="./sanitize/">
+        <div class="card-head">
+          <span class="card-icon" aria-hidden="true">🔒</span>
+          <h2>Sanitize JSON</h2>
         </div>
-      </div>
-      <pre class="code-out"><code id="output" aria-live="polite"></code></pre>
-      <div id="stats" class="stats" aria-live="polite"></div>
+        <p>Mask sensitive fields in JSON payloads and log files before sharing them.
+          Nothing is uploaded — masking runs entirely in your browser.</p>
+        <div class="card-meta">
+          <span class="tag">JSON</span>
+          <span class="tag">Logs</span>
+          <span class="tag">Client-side</span>
+          <span class="card-go" aria-hidden="true">→</span>
+        </div>
+      </a>
+
+      <a class="card" href="./poker/">
+        <div class="card-head">
+          <span class="card-icon" aria-hidden="true">🃏</span>
+          <h2>Scrum Poker</h2>
+        </div>
+        <p>Planning poker for estimation sessions — pick a card, reveal together,
+          agree on a number. Share a room code to estimate live with the team.</p>
+        <div class="card-meta">
+          <span class="tag">Estimation</span>
+          <span class="tag">Team</span>
+          <span class="tag">Live</span>
+          <span class="card-go" aria-hidden="true">→</span>
+        </div>
+      </a>
     </section>
   </main>
 
-  <section class="panel api" aria-label="API">
-    <details>
-      <summary>Use it as an API</summary>
-      <p class="hint">The same masking is available as a JSON endpoint when you run the Deno server (locally or on Deno Deploy). The static GitHub Pages build has no backend — the UI above still works fully, since masking runs in your browser.</p>
-      <pre class="code-out code-api"><code>curl -s http://localhost:8000/api/sanitize \
-  -H 'content-type: application/json' \
-  -d '{
-    "json": { "user": { "email": "a@b.com" }, "token": "sk_live_abc123" },
-    "fields": "email, token",
-    "keepLast": 4
-  }'</code></pre>
-      <p class="hint"><code>json</code> accepts a JSON string or an object. <code>fields</code> accepts a string or an array. Returns <code>{ sanitized, pretty, stats }</code>.</p>
-      <p class="hint">Mask every JSON block embedded in a log file:</p>
-      <pre class="code-out code-api"><code>curl -s http://localhost:8000/api/sanitize-log \
-  -H 'content-type: application/json' \
-  -d '{ "log": "INFO request={\"logonId\":\"L006344\",\"tenantId\":8334}", "keepLast": 0 }'</code></pre>
-      <p class="hint"><code>maskAll</code> defaults to <code>true</code> (redact every value); set it <code>false</code> and pass <code>fields</code> to mask only those keys. Returns <code>{ text, stats }</code>.</p>
-    </details>
-  </section>
-
   <footer class="footer">
-    Ported from the <code>/sanitize-text</code> Slack command · masking runs client-side, nothing is uploaded.
+    meso.utilities · tools run client-side unless a tool says otherwise.
   </footer>
 
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
-
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./theme.js"></script>
 </body>
 </html>

@@ -7,15 +7,21 @@
  * Local: `deno task start` (or `deno task dev` for watch mode).
  *
  * Routes:
- *   GET  /               -> the sanitizer UI (static/index.html)
- *   GET  /styles.css     -> stylesheet
- *   GET  /app.js         -> browser UI logic
- *   GET  /sanitize.mjs   -> the shared masking module (imported by the browser)
+ *   GET  /               -> the utilities hub / master page (static/index.html)
+ *   GET  /<tool>/        -> a tool page (static/<tool>/index.html); the bare
+ *                           path (/<tool>) redirects to the slash form
+ *   GET  /styles.css     -> shared stylesheet
+ *   GET  /theme.js       -> shared theme toggle
+ *   GET  /app.js         -> sanitizer UI logic
+ *   GET  /sanitize.mjs   -> shared masking module (imported by the browser)
+ *   GET  /poker.mjs      -> shared poker-room module (imported by the browser)
  *   POST /api/sanitize   -> { json, fields?, keepLast? } => { sanitized, pretty, stats }
  *   POST /api/sanitize-log -> { log, keepLast?, maskAll?, redact?, fields? } => { text, stats }
+ *   GET  /api/poker/ws   -> WebSocket upgrade for a scrum-poker room
  *   GET  /health         -> liveness probe
  */
 import { runSanitize, runSanitizeLog } from "./src/sanitize.mjs";
+import { handlePokerSocket } from "./src/poker-server.ts";
 
 const STATIC_DIR = new URL("./static/", import.meta.url);
 const SRC_DIR = new URL("./src/", import.meta.url);
@@ -130,7 +136,7 @@ async function handleApiSanitizeLog(req: Request): Promise<Response> {
 }
 
 async function handler(req: Request): Promise<Response> {
-  const { pathname } = new URL(req.url);
+  const { pathname, search } = new URL(req.url);
 
   if (req.method === "POST" && pathname === "/api/sanitize") {
     return await handleApiSanitize(req);
@@ -140,6 +146,10 @@ async function handler(req: Request): Promise<Response> {
     return await handleApiSanitizeLog(req);
   }
 
+  if (req.method === "GET" && pathname === "/api/poker/ws") {
+    return handlePokerSocket(req);
+  }
+
   if (req.method === "GET" || req.method === "HEAD") {
     if (pathname === "/health") {
       return json({ status: "ok", service: "meso.utilities", time: new Date().toISOString() });
@@ -147,13 +157,30 @@ async function handler(req: Request): Promise<Response> {
     if (pathname === "/" || pathname === "/index.html") {
       return (await serveFile(STATIC_DIR, "index.html")) ?? notFound();
     }
-    if (pathname === "/sanitize.mjs") {
-      return (await serveFile(SRC_DIR, "sanitize.mjs")) ?? notFound();
+    // Shared browser modules live in src/ — the same files the server imports.
+    if (pathname === "/sanitize.mjs" || pathname === "/poker.mjs") {
+      return (await serveFile(SRC_DIR, pathname.slice(1))) ?? notFound();
     }
     const asset = pathname.replace(/^\/+/, "");
     if (asset) {
       const res = await serveFile(STATIC_DIR, asset);
       if (res) return res;
+      // Tool pages live in subfolders (static/<tool>/index.html). Serve the
+      // trailing-slash form and redirect the bare path so relative asset URLs
+      // (../styles.css) resolve consistently.
+      if (pathname.endsWith("/")) {
+        const index = await serveFile(STATIC_DIR, asset + "index.html");
+        if (index) return index;
+      } else if (!asset.includes(".")) {
+        const index = await serveFile(STATIC_DIR, asset + "/index.html");
+        if (index) {
+          // Keep the query string — invite links like /poker?room=QK7M rely on it.
+          return new Response(null, {
+            status: 301,
+            headers: { location: `${pathname}/${search}` },
+          });
+        }
+      }
     }
   }
 

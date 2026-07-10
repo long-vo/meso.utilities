@@ -25,8 +25,8 @@ jobs:
       - name: Assemble static site
         run: |
           mkdir -p _site
-          cp static/index.html static/styles.css static/app.js _site/
-          cp src/sanitize.mjs _site/
+          cp -R static/. _site/
+          cp src/sanitize.mjs src/poker.mjs _site/
           touch _site/.nojekyll
 
       - name: Configure Pages

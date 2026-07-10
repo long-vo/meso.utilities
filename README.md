@@ -2,10 +2,16 @@
 
 [![CI](https://github.com/long-vo/meso.utilities/actions/workflows/ci.yml/badge.svg)](https://github.com/long-vo/meso.utilities/actions/workflows/ci.yml)
 
-A tiny [Deno](https://deno.com/) web app that ports the Slack `/sanitize-text` command to the
-browser: **mask sensitive fields inside a JSON payload**.
+A tiny [Deno](https://deno.com/) web app with small, self-contained team utilities behind a common
+master page (hub):
 
-**Live:** <https://long-vo.github.io/meso.utilities/> — masking runs entirely in your browser.
+- **Sanitize JSON** (`/sanitize/`) — mask sensitive fields inside a JSON payload or log file,
+  ported from the Slack `/sanitize-text` command.
+- **Scrum Poker** (`/poker/`) — planning poker for team estimation: share a room code, everyone
+  picks a card, reveal together.
+
+**Live:** <https://long-vo.github.io/meso.utilities/> — the hub; masking runs entirely in your
+browser.
 
 The masking logic (`src/sanitize.mjs`) is lifted verbatim — semantics-wise — from
 `slack-slash-app/src/commands/sanitizeText.js`, so a payload is masked here exactly the way the
@@ -98,6 +104,29 @@ UUIDs/IPs/emails/IBANs by shape anywhere). Response: `{ text, stats }` where `st
 
 `GET /health` returns a liveness JSON payload.
 
+## Scrum Poker
+
+Open `/poker/`, enter your name and either create a room or join with a teammate's 4–8 character
+code (invite links look like `/poker/?room=QK7M`). Everyone picks a card from the classic deck
+(0 ½ 1 2 3 5 8 13 20 40 100 ? ☕); votes stay hidden until someone hits **Reveal**, which locks the
+round and shows the average, the vote distribution and a consensus banner. **New round** clears the
+cards. Anyone can edit the shared story line, reveal or reset — no host role, no accounts. Empty
+rooms evaporate after a few minutes. Every player can pick a **card theme** (ocean, violet, forest,
+sunset, ruby) via the dots next to "Your card" — your deck and the card back other players see take
+that colour, and the choice is remembered for the next session.
+
+At the bottom sits a **random-name wheel** for picking who presents, breaks a tie or fetches the
+coffee. It mirrors the people in the room until someone edits it — add guests or remove names via
+the chips — after which it keeps the custom list. Spins are part of the room state, so everyone
+watches the wheel land on the same name.
+
+Live rooms need the Deno server: sockets connect to `/api/poker/ws?room=CODE&name=NAME` and rooms
+live in memory, driven by the shared reducer in `src/poker.mjs`. On Deno Deploy, sockets for one
+room may land on different isolates; a `BroadcastChannel` gossips per-isolate snapshots (participant
+maps are disjoint, shared flags resolve last-writer-wins) so every isolate renders the full room.
+On the static GitHub Pages build there is no server — the page detects this and falls back to a
+single-person **solo mode** using the same reducer in the browser.
+
 ## Deploy to Deno Deploy
 
 No build step. Point a Deno Deploy project at this repo with:
@@ -116,21 +145,34 @@ publishes it on every push to `main`.
 One-time setup: in the repo, go to **Settings → Pages → Build and deployment → Source** and choose
 **GitHub Actions**. The site then publishes to <https://long-vo.github.io/meso.utilities/>.
 
-The only feature not available on Pages is the `/api/sanitize` endpoint (it needs the Deno server);
-the interactive page is fully functional without it.
+Not available on Pages (both need the Deno server): the `/api/sanitize` endpoints and live poker
+rooms — the sanitizer is fully functional anyway, and the poker page falls back to solo mode.
 
 ## Layout
 
 ```
-main.ts             Deno.serve entry: routes + JSON API
+main.ts               Deno.serve entry: routes + JSON API + poker WebSocket
 src/
-  sanitize.mjs      shared masking logic (server + browser)
-  sanitize.test.ts  parity tests
+  sanitize.mjs        shared masking logic (server + browser)
+  sanitize.test.ts    parity tests
+  poker.mjs           shared poker-room reducer (server + browser solo mode)
+  poker-server.ts     poker rooms: WebSocket handling + isolate gossip
+  poker.test.ts       poker reducer tests
 static/
-  index.html        UI
-  styles.css        theme
-  app.js            UI logic (imports /sanitize.mjs)
+  index.html          hub / master page (lists all tools)
+  styles.css          shared theme + hub + tool styles
+  theme.js            shared dark/light toggle
+  app.js              sanitizer UI logic (imports /sanitize.mjs)
+  sanitize/
+    index.html        Sanitize JSON UI
+  poker/
+    index.html        Scrum Poker UI
+    poker.js          poker client (WebSocket + solo fallback)
 ```
+
+Each tool lives in its own `static/<tool>/` folder and is linked from the hub; shared assets
+(`styles.css`, `theme.js`) stay at the static root and are referenced with relative paths, so the
+site works both on the Deno server and as a plain static build.
 
 ## Development
 
