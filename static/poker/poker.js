@@ -378,8 +378,7 @@ function polar(angle, radius) {
 function buildWheelSvg(names) {
   wheelRotation = 0;
   if (names.length === 0) {
-    els.wheel.innerHTML =
-      `<circle cx="100" cy="100" r="96" class="wheel-empty"></circle>` +
+    els.wheel.innerHTML = `<circle cx="100" cy="100" r="96" class="wheel-empty"></circle>` +
       `<text x="100" y="104" text-anchor="middle" class="wheel-empty-label">nobody yet</text>`;
     return;
   }
@@ -502,9 +501,7 @@ function renderWheel(state) {
   renderWheelChips(names);
 
   if (!wheelSpinning) {
-    els.wheelStatus.textContent = names.length
-      ? `${names.length} on the wheel`
-      : "wheel is empty";
+    els.wheelStatus.textContent = names.length ? `${names.length} on the wheel` : "wheel is empty";
     els.spin.disabled = names.length < 2;
   }
 

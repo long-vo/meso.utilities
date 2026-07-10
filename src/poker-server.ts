@@ -29,7 +29,8 @@ interface LocalRoom {
   clients: Map<string, WebSocket>;
   /** Latest snapshot from each sibling isolate. */
   remotes: Map<string, { state: Room; seenAt: number }>;
-  emptyTimer?: number;
+  /** Typed via setTimeout so it works whether Deno resolves web or Node timer types. */
+  emptyTimer?: ReturnType<typeof setTimeout>;
 }
 
 interface GossipMessage {
@@ -54,9 +55,7 @@ const rooms = new Map<string, LocalRoom>();
 
 // BroadcastChannel spans isolates on Deno Deploy; locally there are no
 // siblings, so the channel is simply quiet.
-const channel = typeof BroadcastChannel === "undefined"
-  ? null
-  : new BroadcastChannel("meso-poker");
+const channel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("meso-poker");
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {

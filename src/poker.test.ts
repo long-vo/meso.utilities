@@ -195,7 +195,11 @@ Deno.test("wheel-set replaces the list; identical or empty-on-empty sets are no-
   assertEquals(applyEvent(room, { type: "wheel-set", names: [], at: 1 }), false, "empty on empty");
   assertEquals(applyEvent(room, { type: "wheel-set", names: ["Ana", "Ben"], at: 2 }), true);
   assertEquals(room.wheelNames, ["Ana", "Ben"]);
-  assertEquals(applyEvent(room, { type: "wheel-set", names: ["Ana ", "Ben"], at: 3 }), false, "same after sanitize");
+  assertEquals(
+    applyEvent(room, { type: "wheel-set", names: ["Ana ", "Ben"], at: 3 }),
+    false,
+    "same after sanitize",
+  );
   assertEquals(applyEvent(room, { type: "wheel-set", names: ["Ben"], at: 4 }), true, "remove Ana");
   assertEquals(room.wheelNamesAt, 4);
 });
@@ -222,7 +226,12 @@ Deno.test("round reset leaves the wheel alone", () => {
 
 Deno.test("publicState exposes the wheel and flips `custom` after the first edit", () => {
   const room = roomWith("Ana");
-  assertEquals(publicState(room, "p1").wheel, { names: [], custom: false, winner: null, spunAt: 0 });
+  assertEquals(publicState(room, "p1").wheel, {
+    names: [],
+    custom: false,
+    winner: null,
+    spunAt: 0,
+  });
   applyEvent(room, { type: "wheel-set", names: ["Ana", "Ben"], at: 7 });
   applyEvent(room, { type: "wheel-spin", winner: "Ana", at: 8 });
   assertEquals(publicState(room, "p1").wheel, {

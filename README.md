@@ -5,8 +5,8 @@
 A tiny [Deno](https://deno.com/) web app with small, self-contained team utilities behind a common
 master page (hub):
 
-- **Sanitize JSON** (`/sanitize/`) — mask sensitive fields inside a JSON payload or log file,
-  ported from the Slack `/sanitize-text` command.
+- **Sanitize JSON** (`/sanitize/`) — mask sensitive fields inside a JSON payload or log file, ported
+  from the Slack `/sanitize-text` command.
 - **Scrum Poker** (`/poker/`) — planning poker for team estimation: share a room code, everyone
   picks a card, reveal together.
 
@@ -107,11 +107,11 @@ UUIDs/IPs/emails/IBANs by shape anywhere). Response: `{ text, stats }` where `st
 ## Scrum Poker
 
 Open `/poker/`, enter your name and either create a room or join with a teammate's 4–8 character
-code (invite links look like `/poker/?room=QK7M`). Everyone picks a card from the classic deck
-(0 ½ 1 2 3 5 8 13 20 40 100 ? ☕); votes stay hidden until someone hits **Reveal**, which locks the
-round and shows the average, the vote distribution and a consensus banner. **New round** clears the
-cards. Anyone can edit the shared story line, reveal or reset — no host role, no accounts. Empty
-rooms evaporate after a few minutes. Every player can pick a **card theme** (ocean, violet, forest,
+code (invite links look like `/poker/?room=QK7M`). Everyone picks a card from the classic deck (0 ½
+1 2 3 5 8 13 20 40 100 ? ☕); votes stay hidden until someone hits **Reveal**, which locks the round
+and shows the average, the vote distribution and a consensus banner. **New round** clears the cards.
+Anyone can edit the shared story line, reveal or reset — no host role, no accounts. Empty rooms
+evaporate after a few minutes. Every player can pick a **card theme** (ocean, violet, forest,
 sunset, ruby) via the dots next to "Your card" — your deck and the card back other players see take
 that colour, and the choice is remembered for the next session.
 
@@ -123,8 +123,8 @@ watches the wheel land on the same name.
 Live rooms need the Deno server: sockets connect to `/api/poker/ws?room=CODE&name=NAME` and rooms
 live in memory, driven by the shared reducer in `src/poker.mjs`. On Deno Deploy, sockets for one
 room may land on different isolates; a `BroadcastChannel` gossips per-isolate snapshots (participant
-maps are disjoint, shared flags resolve last-writer-wins) so every isolate renders the full room.
-On the static GitHub Pages build there is no server — the page detects this and falls back to a
+maps are disjoint, shared flags resolve last-writer-wins) so every isolate renders the full room. On
+the static GitHub Pages build there is no server — the page detects this and falls back to a
 single-person **solo mode** using the same reducer in the browser.
 
 ## Deploy to Deno Deploy

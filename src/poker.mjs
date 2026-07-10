@@ -113,7 +113,9 @@ export function applyEvent(room, event) {
       const name = String(event.name ?? "").trim().slice(0, LIMITS.name);
       if (!id || !name || room.participants[id]) return false;
       if (Object.keys(room.participants).length >= LIMITS.participants) return false;
-      const theme = CARD_THEMES.includes(String(event.theme)) ? String(event.theme) : CARD_THEMES[0];
+      const theme = CARD_THEMES.includes(String(event.theme))
+        ? String(event.theme)
+        : CARD_THEMES[0];
       room.participants[id] = { name, vote: null, joinedAt: event.at ?? Date.now(), theme };
       return true;
     }
