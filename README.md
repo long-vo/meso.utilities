@@ -1,5 +1,7 @@
 # meso.utilities
 
+[![CI](https://github.com/long-vo/meso.utilities/actions/workflows/ci.yml/badge.svg)](https://github.com/long-vo/meso.utilities/actions/workflows/ci.yml)
+
 A tiny [Deno](https://deno.com/) web app that ports the Slack `/sanitize-text` command to the
 browser: **mask sensitive fields inside a JSON payload**.
 
@@ -89,8 +91,10 @@ static/
 
 ## Development
 
-Trunk-based: `main` is always deployable and protected — no direct pushes, all
-changes go through a PR with green CI. Branch with `feature/…`, `bugfix/…` or
-`chore/…`; commit messages use an imperative title (e.g. `Add minify toggle`).
-Run `deno task check`, `deno task lint`, `deno task fmt` and `deno task test`
-before opening a PR.
+Trunk-based: `main` is always deployable and protected — no direct pushes, all changes go through a
+PR with green CI. Branch with `feature/…`, `bugfix/…` or `chore/…`; commit messages use an
+imperative title (e.g. `Add minify toggle`). Run `deno task check`, `deno task lint`,
+`deno task fmt` and `deno task test` before opening a PR.
+
+CI (`.github/workflows/ci.yml`) runs the format check, lint, type check and tests on every push to
+`main` and every pull request.
