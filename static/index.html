@@ -6,7 +6,7 @@
   <title>Sanitize JSON — meso.utilities</title>
   <meta name="description" content="Mask sensitive fields inside a JSON payload. Runs entirely in your browser." />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%94%92%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
   <header class="topbar">
@@ -81,7 +81,7 @@
   <section class="panel api" aria-label="API">
     <details>
       <summary>Use it as an API</summary>
-      <p class="hint">The same masking is available as a JSON endpoint — handy for scripts and CI.</p>
+      <p class="hint">The same masking is available as a JSON endpoint when you run the Deno server (locally or on Deno Deploy). The static GitHub Pages build has no backend — the UI above still works fully, since masking runs in your browser.</p>
       <pre class="code-out code-api"><code>curl -s http://localhost:8000/api/sanitize \
   -H 'content-type: application/json' \
   -d '{
@@ -99,6 +99,6 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script type="module" src="/app.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>

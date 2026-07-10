@@ -1,7 +1,7 @@
 // meso.utilities — browser UI for the JSON sanitizer.
 // Imports the SAME masking module the server uses, so results are identical and
 // the payload never has to leave the page.
-import { parseFields, runSanitize } from "/sanitize.mjs";
+import { parseFields, runSanitize } from "./sanitize.mjs";
 
 const $ = (id) => document.getElementById(id);
 

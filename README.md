@@ -5,6 +5,8 @@
 A tiny [Deno](https://deno.com/) web app that ports the Slack `/sanitize-text` command to the
 browser: **mask sensitive fields inside a JSON payload**.
 
+**Live:** <https://long-vo.github.io/meso.utilities/> — masking runs entirely in your browser.
+
 The masking logic (`src/sanitize.mjs`) is lifted verbatim — semantics-wise — from
 `slack-slash-app/src/commands/sanitizeText.js`, so a payload is masked here exactly the way the
 Slack modal masked it. The browser and the server import the **same** module, so what you see in the
@@ -75,6 +77,18 @@ No build step. Point a Deno Deploy project at this repo with:
 
 The static assets and `src/sanitize.mjs` are read relative to the module URL, so they resolve the
 same on Deploy as they do locally. Deno Deploy supplies the port automatically.
+
+## Deploy to GitHub Pages
+
+Because masking runs entirely client-side, the UI also works as a pure static site — no backend.
+`.github/workflows/pages.yml` assembles `_site/` (the `static/` files plus `src/sanitize.mjs`) and
+publishes it on every push to `main`.
+
+One-time setup: in the repo, go to **Settings → Pages → Build and deployment → Source** and choose
+**GitHub Actions**. The site then publishes to <https://long-vo.github.io/meso.utilities/>.
+
+The only feature not available on Pages is the `/api/sanitize` endpoint (it needs the Deno server);
+the interactive page is fully functional without it.
 
 ## Layout
 
