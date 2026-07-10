@@ -1,0 +1,96 @@
+# meso.utilities
+
+A tiny [Deno](https://deno.com/) web app that ports the Slack `/sanitize-text` command to the
+browser: **mask sensitive fields inside a JSON payload**.
+
+The masking logic (`src/sanitize.mjs`) is lifted verbatim — semantics-wise — from
+`slack-slash-app/src/commands/sanitizeText.js`, so a payload is masked here exactly the way the
+Slack modal masked it. The browser and the server import the **same** module, so what you see in the
+UI is what the API returns.
+
+> Masking runs entirely in your browser. Your JSON is never uploaded — the `/api/sanitize` endpoint
+> exists only for scripts and CI that want it.
+
+## How masking works
+
+- Any value whose **key** matches one of the field names is masked — at any depth, inside objects
+  and arrays, case-insensitively.
+- Masking reveals the last **N** characters and replaces the rest with `*`. Strings no longer than N
+  are masked entirely (short secrets never leak).
+- Strings and numbers are masked; booleans and `null` are left untouched.
+- If a matched key's value is a container, every leaf inside it is masked.
+
+## Run locally
+
+Requires Deno 2.x.
+
+```sh
+deno task start      # http://localhost:8000
+deno task dev        # same, with --watch auto-reload
+```
+
+Other tasks:
+
+```sh
+deno task test       # run the parity tests
+deno task check      # type-check
+deno task fmt        # format
+deno task lint       # lint
+```
+
+Set `PORT` to change the port locally (e.g. `PORT=3000 deno task start`).
+
+## API
+
+```sh
+curl -s http://localhost:8000/api/sanitize \
+  -H 'content-type: application/json' \
+  -d '{
+    "json": { "user": { "email": "a@b.com" }, "token": "sk_live_abc123" },
+    "fields": "email, token",
+    "keepLast": 4
+  }'
+```
+
+Request body:
+
+| Field      | Type                | Notes                                              |
+| ---------- | ------------------- | -------------------------------------------------- |
+| `json`     | string \| object    | The payload to sanitize (raw JSON string or value) |
+| `fields`   | string \| string\[] | Field names to mask (comma/space/newline or array) |
+| `keepLast` | number \| string    | Trailing characters to keep visible (default `0`)  |
+
+Response: `{ sanitized, pretty, fields, keepLast, stats }`, where `stats` is
+`{ maskedValues, matchedKeys, fieldCount }`. Invalid JSON returns HTTP 400 with `{ error }`.
+
+`GET /health` returns a liveness JSON payload.
+
+## Deploy to Deno Deploy
+
+No build step. Point a Deno Deploy project at this repo with:
+
+- **Entrypoint:** `main.ts`
+
+The static assets and `src/sanitize.mjs` are read relative to the module URL, so they resolve the
+same on Deploy as they do locally. Deno Deploy supplies the port automatically.
+
+## Layout
+
+```
+main.ts             Deno.serve entry: routes + JSON API
+src/
+  sanitize.mjs      shared masking logic (server + browser)
+  sanitize.test.ts  parity tests
+static/
+  index.html        UI
+  styles.css        theme
+  app.js            UI logic (imports /sanitize.mjs)
+```
+
+## Development
+
+Trunk-based: `main` is always deployable and protected — no direct pushes, all
+changes go through a PR with green CI. Branch with `feature/…`, `bugfix/…` or
+`chore/…`; commit messages use an imperative title (e.g. `Add minify toggle`).
+Run `deno task check`, `deno task lint`, `deno task fmt` and `deno task test`
+before opening a PR.
