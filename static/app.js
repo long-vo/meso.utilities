@@ -1,7 +1,7 @@
 // meso.utilities — browser UI for the JSON sanitizer.
 // Imports the SAME masking module the server uses, so results are identical and
 // the payload never has to leave the page.
-import { parseFields, runSanitize } from "./sanitize.mjs";
+import { parseFields, runSanitize, runSanitizeLog } from "./sanitize.mjs";
 
 const $ = (id) => document.getElementById(id);
 
@@ -23,7 +23,18 @@ const els = {
   themeToggle: $("theme-toggle"),
   themeIcon: document.querySelector(".theme-icon"),
   toast: $("toast"),
+  modeJson: $("mode-json"),
+  modeLog: $("mode-log"),
+  maskAll: $("mask-all"),
+  redact: $("redact"),
+  logfile: $("logfile"),
+  logfileName: $("logfile-name"),
 };
+
+/** "json" or "log". */
+let mode = "json";
+/** Name of the last attached log file, for the download filename. */
+let logFileName = "";
 
 const EXAMPLE = {
   fields: "lastName, email, phoneNumber, token, iban",
@@ -49,6 +60,17 @@ const EXAMPLE = {
     ],
   },
 };
+
+const LOG_EXAMPLE = [
+  "[2026-07-10 04:12:39.550][INFO ][runtimelog.baloise-id]{application=baloise-id, client=172.31.138.81, requestId=15317}",
+  "Received notification: class IdentificationNotificationRequest {",
+  "    id: a0884b97-24df-4eaf-9077-d9f6b43629ee",
+  "    tenantId: f346611c-6a34-4c32-b7d0-759f8299f8c4",
+  "    status: VERIFICATION_CONFIRMED",
+  "    language: null",
+  "}",
+  '2026-07-10 04:12:40.100 INFO request={"reqCtx":{"logonId":"L006344"},"avaloqPersId":7483881}',
+].join("\n");
 
 /** Latest rendered output text, for copy/download. */
 let lastOutput = "";
@@ -88,6 +110,20 @@ function highlightJson(jsonString) {
   );
 }
 
+/**
+ * Highlight a masked log: escape everything, then colour the masked values
+ * (quoted strings that start with one or more "*") so the redactions stand out
+ * against the untouched log text.
+ */
+function highlightLog(text) {
+  // Highlight any run of 2+ asterisks plus any revealed tail (quoted or bare),
+  // so redactions stand out against the untouched log text.
+  return escapeHtml(text).replace(
+    /\*{2,}[\w.@:+/-]*/g,
+    (match) => `<span class="j-masked">${match}</span>`,
+  );
+}
+
 function showToast(message) {
   els.toast.textContent = message;
   els.toast.classList.add("show");
@@ -124,6 +160,11 @@ function renderStats(stats, fields) {
 /* ------------------------------ core cycle ------------------------------ */
 
 function compute() {
+  if (mode === "log") {
+    computeLog();
+    return;
+  }
+
   const jsonText = els.input.value;
   const fields = parseFields(els.fields.value);
 
@@ -164,6 +205,63 @@ function compute() {
   renderStats(result.stats, result.fields);
 }
 
+/** Log mode: mask every JSON block embedded in the log text. */
+function computeLog() {
+  const text = els.input.value;
+  const maskAll = els.maskAll.checked;
+  const fields = parseFields(els.fields.value);
+
+  els.input.classList.remove("invalid");
+  els.inputError.textContent = "";
+  renderChips(maskAll ? [] : fields, null);
+
+  if (text.trim() === "") {
+    els.inputStatus.textContent = "";
+    els.inputStatus.className = "status";
+    els.output.innerHTML = `<span class="j-null">// attach or paste a log to begin</span>`;
+    els.stats.innerHTML = "";
+    lastOutput = "";
+    return;
+  }
+
+  const result = runSanitizeLog(text, {
+    keepLast: els.keepNum.value,
+    maskAll,
+    redact: els.redact.checked,
+    fields,
+  });
+  lastOutput = result.text;
+  els.output.innerHTML = highlightLog(result.text);
+
+  const { blocks, maskedValues, patternHits } = result.stats;
+  const total = maskedValues + patternHits;
+  els.inputStatus.textContent = total ? `${total} masked` : "nothing to mask";
+  els.inputStatus.className = total ? "status ok" : "status";
+  els.stats.innerHTML =
+    `<span>Masked <b>${maskedValues}</b> value${maskedValues === 1 ? "" : "s"}</span>` +
+    (blocks ? `<span><b>${blocks}</b> block${blocks === 1 ? "" : "s"}</span>` : "") +
+    (patternHits
+      ? `<span><b>${patternHits}</b> ID${patternHits === 1 ? "" : "s"} redacted</span>`
+      : "");
+}
+
+/** Switch between JSON and Log-file modes. */
+function setMode(next) {
+  mode = next;
+  document.body.setAttribute("data-mode", next);
+  const isLog = next === "log";
+  els.modeLog.classList.toggle("is-active", isLog);
+  els.modeJson.classList.toggle("is-active", !isLog);
+  els.modeLog.setAttribute("aria-selected", String(isLog));
+  els.modeJson.setAttribute("aria-selected", String(!isLog));
+  els.input.placeholder = isLog
+    ? "Paste log text, or attach a .log file above…"
+    : '{ "customer": { "lastName": "Weber", "email": "jara@example.com" } }';
+  // In log mode the field list only applies when "mask all" is off.
+  els.fields.disabled = isLog && els.maskAll.checked;
+  compute();
+}
+
 /** Debounce recompute so typing stays snappy. */
 let debounceTimer;
 function scheduleCompute() {
@@ -174,6 +272,13 @@ function scheduleCompute() {
 /* ------------------------------- actions -------------------------------- */
 
 function loadExample() {
+  if (mode === "log") {
+    els.input.value = LOG_EXAMPLE;
+    logFileName = "";
+    els.logfileName.textContent = "or paste log text below";
+    compute();
+    return;
+  }
   els.fields.value = EXAMPLE.fields;
   els.keepNum.value = String(EXAMPLE.keepLast);
   els.keepRange.value = String(Math.min(12, EXAMPLE.keepLast));
@@ -184,6 +289,8 @@ function loadExample() {
 function clearAll() {
   els.input.value = "";
   els.fields.value = "";
+  logFileName = "";
+  els.logfileName.textContent = "or paste log text below";
   compute();
   els.input.focus();
 }
@@ -200,16 +307,20 @@ async function copyResult() {
 
 function downloadResult() {
   if (!lastOutput) return;
-  const blob = new Blob([lastOutput], { type: "application/json" });
+  const isLog = mode === "log";
+  const name = isLog
+    ? (logFileName ? logFileName.replace(/\.[^.]+$/, "") + ".masked.log" : "masked.log")
+    : "sanitized.json";
+  const blob = new Blob([lastOutput], { type: isLog ? "text/plain" : "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "sanitized.json";
+  a.download = name;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  showToast("Downloaded sanitized.json");
+  showToast(`Downloaded ${name}`);
 }
 
 function applyTheme(theme) {
@@ -242,6 +353,27 @@ els.keepNum.addEventListener("input", () => {
   const n = Math.max(0, parseInt(els.keepNum.value, 10) || 0);
   els.keepRange.value = String(Math.min(12, n));
   scheduleCompute();
+});
+
+els.modeJson.addEventListener("click", () => setMode("json"));
+els.modeLog.addEventListener("click", () => setMode("log"));
+
+els.maskAll.addEventListener("change", () => {
+  els.fields.disabled = mode === "log" && els.maskAll.checked;
+  compute();
+});
+els.redact.addEventListener("change", compute);
+
+// Attaching a file reads it client-side and switches to Log mode.
+els.logfile.addEventListener("change", async () => {
+  const file = els.logfile.files && els.logfile.files[0];
+  if (!file) return;
+  logFileName = file.name;
+  els.logfileName.textContent = `${file.name} · ${(file.size / 1024).toFixed(0)} KB`;
+  els.input.value = await file.text();
+  if (mode === "log") compute();
+  else setMode("log");
+  els.logfile.value = ""; // allow re-selecting the same file
 });
 
 els.loadExample.addEventListener("click", loadExample);

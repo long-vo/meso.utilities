@@ -4,7 +4,7 @@
  *
  * Dependency-free on purpose (no remote std import) so it runs offline.
  */
-import { maskString, runSanitize, sanitize } from "./sanitize.mjs";
+import { findBalancedEnd, maskString, runSanitize, runSanitizeLog, sanitize } from "./sanitize.mjs";
 
 function assertEquals(actual: unknown, expected: unknown, msg?: string): void {
   const a = JSON.stringify(actual);
@@ -95,4 +95,123 @@ Deno.test("runSanitize: array field list is accepted", () => {
   const result = runSanitize('{"email":"a@b.com"}', ["email"], 0);
   if (!result.ok) throw new Error("expected ok result");
   assertEquals(result.sanitized, { email: "*******" });
+});
+
+Deno.test("findBalancedEnd: ignores braces inside string literals", () => {
+  const s = 'x={"a":"}{","b":1}y';
+  const end = findBalancedEnd(s, 2);
+  assertEquals(s.slice(2, end), '{"a":"}{","b":1}');
+});
+
+Deno.test("maskLog: masks every value in an embedded JSON block, keeps prose", () => {
+  const line = 'INFO Sending request={"logonId":"L006344","tenantId":8334} done';
+  const r = runSanitizeLog(line, { keepLast: 0, maskAll: true });
+  assertEquals(r.text, 'INFO Sending request={"logonId":"*******","tenantId":"****"} done');
+  assertEquals(r.stats.blocks, 1);
+  assertEquals(r.stats.maskedValues, 2);
+});
+
+Deno.test("maskLog: keepLast reveals the tail of each value", () => {
+  const r = runSanitizeLog('req={"iban":"CH9300762011","id":42}', { keepLast: 4, maskAll: true });
+  assertEquals(r.text, 'req={"iban":"********2011","id":"**"}');
+});
+
+Deno.test("maskLog: non-JSON braces are left untouched", () => {
+  const line = "2026-07-02 [-][-][-] INFO 7 --- [baloise-e-portal-api] no json here";
+  const r = runSanitizeLog(line, { maskAll: true });
+  assertEquals(r.text, line);
+  assertEquals(r.stats.blocks, 0);
+});
+
+Deno.test("maskLog: handles multiple blocks and nested objects", () => {
+  const line = 'a={"x":{"y":"secret"}} b={"z":"top"}';
+  const r = runSanitizeLog(line, { keepLast: 0, maskAll: true });
+  assertEquals(r.text, 'a={"x":{"y":"******"}} b={"z":"***"}');
+  assertEquals(r.stats.blocks, 2);
+  assertEquals(r.stats.maskedValues, 2);
+});
+
+Deno.test("maskLog: field-list mode masks only matching keys inside blocks", () => {
+  const line = 'msg={"email":"a@b.com","name":"Jara"}';
+  const r = runSanitizeLog(line, { keepLast: 0, maskAll: false, fields: "email" });
+  assertEquals(r.text, 'msg={"email":"*******","name":"Jara"}');
+  assertEquals(r.stats.maskedValues, 1);
+});
+
+Deno.test("maskLog: braces inside a string value do not break parsing", () => {
+  const line = 'x={"note":"a } b { c","n":1}';
+  const r = runSanitizeLog(line, { keepLast: 0, maskAll: true });
+  assertEquals(r.text, 'x={"note":"*********","n":"*"}');
+});
+
+Deno.test("maskLog: masks values in a Java toString map ({key=value})", () => {
+  const line = "[INFO]{application=baloise-id, client=172.31.138.81, request=, requestId=15317}";
+  const r = runSanitizeLog(line, { keepLast: 0, maskAll: true, redact: false });
+  assertEquals(r.stats.mapBlocks, 1);
+  assertEquals(r.text.includes("baloise-id"), false);
+  assertEquals(r.text.includes("172.31.138.81"), false);
+  assertEquals(r.text.includes("15317"), false);
+  assertEquals(r.text.includes("application="), true); // keys preserved
+  assertEquals(r.text.includes("request=,"), true); // empty value left as-is
+});
+
+Deno.test("maskLog: masks Java object-dump field values, keeps openers and null", () => {
+  const dump = [
+    "class Req {",
+    "    id: a0884b97-24df-4eaf-9077-d9f6b43629ee",
+    "    language: null",
+    "    signers: [class S {",
+    "        signerId: adb63f07-6e74-4769-a18a-6d0bcebb3074",
+    "    }]",
+    "}",
+  ].join("\n");
+  const r = runSanitizeLog(dump, { keepLast: 0, maskAll: true, redact: false });
+  assertEquals(r.text.includes("a0884b97-24df-4eaf-9077-d9f6b43629ee"), false);
+  assertEquals(r.text.includes("adb63f07-6e74-4769-a18a-6d0bcebb3074"), false);
+  assertEquals(r.text.includes("language: null"), true); // null preserved
+  assertEquals(r.text.includes("signers: [class S {"), true); // opener preserved
+});
+
+Deno.test("redact: masks UUIDs, IPs and emails anywhere in the text", () => {
+  const line = "user a@b.com from 10.0.0.5 id 550e8400-e29b-41d4-a716-446655440000";
+  const r = runSanitizeLog(line, { keepLast: 0, maskAll: true, redact: true });
+  assertEquals(r.text.includes("a@b.com"), false);
+  assertEquals(r.text.includes("10.0.0.5"), false);
+  assertEquals(r.text.includes("550e8400-e29b-41d4-a716-446655440000"), false);
+  assertEquals(r.stats.patternHits, 3);
+});
+
+Deno.test("maskLog: redact is opt-in — loose IDs in plain lines are kept by default", () => {
+  const line = "INFO DossierService : dossierId=12345678-1234-1234-1234-1234567890ab";
+  const kept = runSanitizeLog(line, { keepLast: 4, maskAll: true }); // redact defaults off
+  assertEquals(kept.text, line);
+  assertEquals(kept.stats.patternHits, 0);
+
+  const redacted = runSanitizeLog(line, { keepLast: 4, maskAll: true, redact: true });
+  assertEquals(redacted.text.includes("12345678-1234"), false);
+  assertEquals(redacted.stats.patternHits, 1);
+});
+
+Deno.test("redact: leaves timestamps and short version numbers intact", () => {
+  const line = "2026-07-10 04:12:39.550 Spring Boot (v4.0.7) ready";
+  const r = runSanitizeLog(line, { keepLast: 0, maskAll: true, redact: true });
+  assertEquals(r.text, line);
+  assertEquals(r.stats.patternHits, 0);
+});
+
+Deno.test("maskLog: field mode masks listed keys; redact still nukes UUIDs", () => {
+  const dump = [
+    "class R {",
+    "    tenantId: f346611c-6a34-4c32-b7d0-759f8299f8c4",
+    "    extApplication: GOB_DEV",
+    "}",
+  ].join("\n");
+  const r = runSanitizeLog(dump, {
+    keepLast: 0,
+    maskAll: false,
+    fields: "extApplication",
+    redact: true,
+  });
+  assertEquals(r.text.includes("GOB_DEV"), false); // masked by field-list pass
+  assertEquals(r.text.includes("f346611c-6a34-4c32-b7d0-759f8299f8c4"), false); // redacted by pattern pass
 });

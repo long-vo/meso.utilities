@@ -12,9 +12,10 @@
  *   GET  /app.js         -> browser UI logic
  *   GET  /sanitize.mjs   -> the shared masking module (imported by the browser)
  *   POST /api/sanitize   -> { json, fields?, keepLast? } => { sanitized, pretty, stats }
+ *   POST /api/sanitize-log -> { log, keepLast?, maskAll?, redact?, fields? } => { text, stats }
  *   GET  /health         -> liveness probe
  */
-import { runSanitize } from "./src/sanitize.mjs";
+import { runSanitize, runSanitizeLog } from "./src/sanitize.mjs";
 
 const STATIC_DIR = new URL("./static/", import.meta.url);
 const SRC_DIR = new URL("./src/", import.meta.url);
@@ -102,11 +103,41 @@ async function handleApiSanitize(req: Request): Promise<Response> {
   });
 }
 
+/** POST /api/sanitize-log — mask every JSON block embedded in log text. */
+async function handleApiSanitizeLog(req: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "Request body must be valid JSON." }, 400);
+  }
+
+  const payload = (body ?? {}) as Record<string, unknown>;
+  if (typeof payload.log !== "string") {
+    return json({ error: 'Missing "log" field (the log text to sanitize).' }, 400);
+  }
+
+  const result = runSanitizeLog(payload.log, {
+    keepLast: payload.keepLast ?? 0,
+    // maskAll defaults on (opt out with false); redact is opt-in (default off)
+    // so it never touches loose IDs in plain log lines unless asked.
+    maskAll: payload.maskAll !== false,
+    redact: payload.redact === true,
+    fields: (payload.fields ?? []) as string | string[],
+  });
+
+  return json({ text: result.text, stats: result.stats });
+}
+
 async function handler(req: Request): Promise<Response> {
   const { pathname } = new URL(req.url);
 
   if (req.method === "POST" && pathname === "/api/sanitize") {
     return await handleApiSanitize(req);
+  }
+
+  if (req.method === "POST" && pathname === "/api/sanitize-log") {
+    return await handleApiSanitizeLog(req);
   }
 
   if (req.method === "GET" || req.method === "HEAD") {

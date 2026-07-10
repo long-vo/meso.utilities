@@ -8,7 +8,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%94%92%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
-<body>
+<body data-mode="json">
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true">🔒</span>
@@ -29,6 +29,27 @@
 
   <main class="layout">
     <section class="panel controls" aria-label="Options">
+      <div class="mode-switch" role="tablist" aria-label="Input mode">
+        <button id="mode-json" class="mode-btn is-active" role="tab" aria-selected="true" type="button">JSON</button>
+        <button id="mode-log" class="mode-btn" role="tab" aria-selected="false" type="button">Log file</button>
+      </div>
+
+      <div class="field only-log">
+        <label class="switch mask-all">
+          <input id="mask-all" type="checkbox" checked /> <span>Mask all values</span>
+        </label>
+        <p class="hint">Mask every value in each JSON block, Java <code>toString</code> dump and
+          <code>key=value</code> map. Turn off to mask only the fields below.</p>
+      </div>
+
+      <div class="field only-log">
+        <label class="switch mask-all">
+          <input id="redact" type="checkbox" /> <span>Redact IDs (UUIDs, IPs, emails)</span>
+        </label>
+        <p class="hint">Off by default. When on, also masks values by shape anywhere in the log — even
+          loose IDs in plain lines like <code>dossierId=…</code>.</p>
+      </div>
+
       <div class="field">
         <label for="fields">Field names to mask</label>
         <input id="fields" type="text" spellcheck="false" autocomplete="off"
@@ -52,10 +73,17 @@
       </div>
     </section>
 
-    <section class="panel editor" aria-label="JSON payload">
+    <section class="panel editor" aria-label="Input">
       <div class="panel-head">
-        <h2>JSON payload</h2>
+        <h2><span class="only-json">JSON payload</span><span class="only-log">Log text</span></h2>
         <span id="input-status" class="status"></span>
+      </div>
+      <div class="attach only-log">
+        <label class="btn btn-small file-btn">
+          <input id="logfile" type="file" accept=".log,.txt,text/plain,application/json" hidden />
+          📎 Attach log file
+        </label>
+        <span id="logfile-name" class="file-name">or paste log text below</span>
       </div>
       <textarea id="input" class="code-area" spellcheck="false" autocomplete="off"
         placeholder='{ "customer": { "lastName": "Weber", "email": "jara@example.com" } }'></textarea>
@@ -90,6 +118,11 @@
     "keepLast": 4
   }'</code></pre>
       <p class="hint"><code>json</code> accepts a JSON string or an object. <code>fields</code> accepts a string or an array. Returns <code>{ sanitized, pretty, stats }</code>.</p>
+      <p class="hint">Mask every JSON block embedded in a log file:</p>
+      <pre class="code-out code-api"><code>curl -s http://localhost:8000/api/sanitize-log \
+  -H 'content-type: application/json' \
+  -d '{ "log": "INFO request={\"logonId\":\"L006344\",\"tenantId\":8334}", "keepLast": 0 }'</code></pre>
+      <p class="hint"><code>maskAll</code> defaults to <code>true</code> (redact every value); set it <code>false</code> and pass <code>fields</code> to mask only those keys. Returns <code>{ text, stats }</code>.</p>
     </details>
   </section>
 

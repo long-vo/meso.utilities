@@ -191,3 +191,277 @@ export function runSanitize(jsonText, fieldsText, keepLastRaw) {
     },
   };
 }
+
+/* -------------------------- log-file masking --------------------------- */
+
+/**
+ * Given the index of an opening "{" in `text`, return the index just past its
+ * matching "}", accounting for nested braces and quoted strings (so braces
+ * inside string literals don't miscount). Returns -1 if never balanced.
+ * @param {string} text
+ * @param {number} start index of the "{"
+ * @returns {number}
+ */
+export function findBalancedEnd(text, start) {
+  let depth = 0;
+  let inStr = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (inStr) {
+      if (escaped) escaped = false;
+      else if (c === "\\") escaped = true;
+      else if (c === '"') inStr = false;
+    } else if (c === '"') {
+      inStr = true;
+    } else if (c === "{") {
+      depth++;
+    } else if (c === "}") {
+      depth--;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return -1;
+}
+
+/** Value-shape patterns redacted anywhere in a log, regardless of structure. */
+export const REDACT_PATTERNS = [
+  // UUID
+  /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/g,
+  // email
+  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
+  // IPv4 (validated octets, requires all four)
+  /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g,
+  // IBAN, compact form (e.g. CH9300762011623852957)
+  /\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b/g,
+];
+
+/**
+ * Redact values by shape (UUIDs, emails, IPs, IBANs) anywhere in the text.
+ * @param {string} text
+ * @param {number} keepLast
+ * @param {RegExp[]} [patterns]
+ * @returns {{ text: string, count: number }}
+ */
+export function redactPatterns(text, keepLast, patterns = REDACT_PATTERNS) {
+  let count = 0;
+  let out = text;
+  for (const re of patterns) {
+    out = out.replace(re, (match) => {
+      count++;
+      return maskString(match, keepLast);
+    });
+  }
+  return { text: out, count };
+}
+
+/**
+ * Does the inside of a `{...}` look like a flat Java map: `key=value, ...`?
+ * @param {string} inner
+ * @returns {boolean}
+ */
+function isJavaMap(inner) {
+  return !inner.includes("{") && /^\s*[\w.$-]+\s*=/.test(inner);
+}
+
+/**
+ * Mask the values of a flat Java `toString` map body (`key=value, key2=value2`).
+ * @param {string} inner content between the braces
+ * @param {number} keepLast
+ * @param {Set<string>} fieldSet
+ * @param {boolean} maskAll
+ * @returns {{ text: string, masked: number }}
+ */
+function maskJavaMap(inner, keepLast, fieldSet, maskAll) {
+  let masked = 0;
+  const text = inner
+    .split(", ")
+    .map((segment) => {
+      const eq = segment.indexOf("=");
+      if (eq === -1) return segment;
+      const key = segment.slice(0, eq);
+      const value = segment.slice(eq + 1);
+      if (value === "") return segment;
+      if (!(maskAll || fieldSet.has(key.trim().toLowerCase()))) return segment;
+      masked++;
+      return `${key}=${maskString(value, keepLast)}`;
+    })
+    .join(", ");
+  return { text, masked };
+}
+
+/**
+ * Scan `{...}` blocks and mask each that is JSON (parsed & masked) or a flat
+ * Java map (`{key=value, ...}`). Java object dumps (`class X { ... }`) and
+ * other non-JSON braces are left for the line-based pass.
+ * @param {string} src
+ * @param {number} keepLast
+ * @param {Set<string>} fieldSet
+ * @param {boolean} maskAll
+ * @returns {{ text: string, jsonBlocks: number, mapBlocks: number, masked: number }}
+ */
+function maskBraceBlocks(src, keepLast, fieldSet, maskAll) {
+  const n = src.length;
+  let out = "";
+  let lastCut = 0;
+  let jsonBlocks = 0;
+  let mapBlocks = 0;
+  let masked = 0;
+
+  for (let i = 0; i < n; i++) {
+    if (src[i] !== "{") continue;
+    const end = findBalancedEnd(src, i);
+    if (end === -1) break;
+
+    const candidate = src.slice(i, end);
+    let parsed;
+    try {
+      parsed = JSON.parse(candidate);
+    } catch {
+      parsed = undefined;
+    }
+
+    if (parsed !== undefined && parsed !== null && typeof parsed === "object") {
+      let maskedBlock;
+      if (maskAll) {
+        maskedBlock = maskValue(parsed, keepLast);
+        masked += countMaskable(parsed);
+      } else {
+        /** @type {Stats} */
+        const stats = { maskedValues: 0, matchedKeys: new Set() };
+        maskedBlock = sanitize(parsed, fieldSet, keepLast, stats);
+        masked += stats.maskedValues;
+      }
+      out += src.slice(lastCut, i) + JSON.stringify(maskedBlock);
+      jsonBlocks++;
+      lastCut = end;
+      i = end - 1;
+      continue;
+    }
+
+    const inner = candidate.slice(1, -1);
+    if (isJavaMap(inner)) {
+      const r = maskJavaMap(inner, keepLast, fieldSet, maskAll);
+      out += src.slice(lastCut, i) + "{" + r.text + "}";
+      mapBlocks++;
+      masked += r.masked;
+      lastCut = end;
+      i = end - 1;
+    }
+    // otherwise: not JSON, not a map — leave it; keep scanning for inner blocks
+  }
+  out += src.slice(lastCut);
+  return { text: out, jsonBlocks, mapBlocks, masked };
+}
+
+/**
+ * Mask the values of Java `toString` object dumps, which print one field per
+ * line as `    field: value`. Structure openers (`class ... {`, `[`, `{`) and
+ * `null` / empty values are left alone.
+ * @param {string} src
+ * @param {number} keepLast
+ * @param {Set<string>} fieldSet
+ * @param {boolean} maskAll
+ * @returns {{ text: string, count: number }}
+ */
+function maskFieldLines(src, keepLast, fieldSet, maskAll) {
+  let count = 0;
+  const lines = src.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^(\s*)([A-Za-z_]\w*):\s(.+)$/.exec(lines[i]);
+    if (!m) continue;
+    const [, indent, key, value] = m;
+    if (value === "null") continue;
+    if (value.startsWith("{") || value.startsWith("[") || value.startsWith("class ")) {
+      continue; // nested structure opener — handled elsewhere
+    }
+    if (!(maskAll || fieldSet.has(key.toLowerCase()))) continue;
+    lines[i] = `${indent}${key}: ${maskString(value, keepLast)}`;
+    count++;
+  }
+  return { text: lines.join("\n"), count };
+}
+
+/**
+ * @typedef {Object} LogMaskOptions
+ * @property {unknown} [keepLast] trailing characters to keep visible (default 0)
+ * @property {string[] | string} [fields] field names to mask when maskAll is false
+ * @property {boolean} [maskAll] mask every value in each block (default true)
+ * @property {boolean} [redact] also redact UUIDs/IPs/emails/IBANs by shape,
+ *   anywhere in the text — even in plain log lines (default false)
+ */
+
+/**
+ * @typedef {Object} LogStats
+ * @property {number} blocks JSON + Java-map blocks masked
+ * @property {number} maskedValues total structural values masked
+ * @property {number} jsonBlocks
+ * @property {number} mapBlocks
+ * @property {number} fieldLines Java object-dump field values masked
+ * @property {number} patternHits UUID/IP/email/IBAN values redacted
+ */
+
+/**
+ * Sanitize free-form log text. Masks values inside embedded JSON blocks, flat
+ * Java `toString` maps (`{key=value, ...}`) and Java object dumps
+ * (`class X { field: value }`), then (optionally) redacts UUIDs, IPs, emails
+ * and IBANs anywhere in the text. Surrounding structure — timestamps, logger
+ * names, messages — is preserved.
+ * @param {string} text
+ * @param {LogMaskOptions} [options]
+ * @returns {{ text: string, stats: LogStats }}
+ */
+export function maskLogText(text, options = {}) {
+  const { keepLast: keepRaw = 0, fields = [], maskAll = true, redact = false } = options;
+  const keepLast = normalizeKeepLast(keepRaw);
+  const fieldList = Array.isArray(fields) ? fields : parseFields(fields);
+  const fieldSet = new Set(fieldList.map((f) => f.toLowerCase()));
+
+  let src = String(text ?? "");
+  let maskedValues = 0;
+
+  const braces = maskBraceBlocks(src, keepLast, fieldSet, maskAll);
+  src = braces.text;
+  maskedValues += braces.masked;
+
+  const lines = maskFieldLines(src, keepLast, fieldSet, maskAll);
+  src = lines.text;
+  maskedValues += lines.count;
+
+  let patternHits = 0;
+  if (redact) {
+    const red = redactPatterns(src, keepLast);
+    src = red.text;
+    patternHits = red.count;
+  }
+
+  return {
+    text: src,
+    stats: {
+      blocks: braces.jsonBlocks + braces.mapBlocks,
+      maskedValues,
+      jsonBlocks: braces.jsonBlocks,
+      mapBlocks: braces.mapBlocks,
+      fieldLines: lines.count,
+      patternHits,
+    },
+  };
+}
+
+/**
+ * @typedef {Object} LogSanitizeResult
+ * @property {true} ok
+ * @property {string} text the log with every JSON block masked
+ * @property {LogStats} stats
+ */
+
+/**
+ * Convenience wrapper mirroring {@link runSanitize} for log input.
+ * @param {string} logText
+ * @param {LogMaskOptions} [options]
+ * @returns {LogSanitizeResult}
+ */
+export function runSanitizeLog(logText, options = {}) {
+  const { text, stats } = maskLogText(String(logText ?? ""), options);
+  return { ok: true, text, stats };
+}

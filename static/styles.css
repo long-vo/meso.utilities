@@ -22,6 +22,7 @@
   --j-null: #ff7b72;
   --radius: 12px;
   --radius-sm: 8px;
+  --panel-max: 1040px;
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -153,7 +154,10 @@ body {
 /* ---- layout ---- */
 .layout {
   display: grid;
-  grid-template-columns: 320px 1fr 1fr;
+  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-areas:
+    "controls editor"
+    "controls result";
   gap: 18px;
   padding: 22px clamp(16px, 4vw, 40px);
   max-width: 1440px;
@@ -170,8 +174,21 @@ body {
 }
 
 .controls {
+  grid-area: controls;
   position: sticky;
   top: 86px;
+}
+
+.editor {
+  grid-area: editor;
+  max-width: var(--panel-max);
+}
+
+/* Editor and results share the same width cap and sit on separate rows,
+   so wide output stays readable instead of stretching across the page. */
+.result {
+  grid-area: result;
+  max-width: var(--panel-max);
 }
 
 .panel-head {
@@ -187,6 +204,70 @@ body {
   letter-spacing: 0.3px;
   text-transform: uppercase;
   color: var(--text-dim);
+}
+
+/* ---- mode switch ---- */
+.mode-switch {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 18px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.mode-btn {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  padding: 8px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s;
+}
+.mode-btn:hover {
+  color: var(--text);
+}
+.mode-btn.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* mode-scoped visibility */
+body[data-mode="json"] .only-log,
+body[data-mode="log"] .only-json {
+  display: none;
+}
+
+.mask-all {
+  font-size: 13.5px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.attach {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.file-btn {
+  cursor: pointer;
+}
+.file-name {
+  font-size: 12px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ---- fields ---- */
@@ -462,17 +543,21 @@ textarea:focus {
 /* ---- responsive ---- */
 @media (max-width: 1080px) {
   .layout {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "controls"
+      "editor"
+      "result";
   }
   .controls {
-    grid-column: 1 / -1;
     position: static;
+  }
+  .editor,
+  .result {
+    max-width: none;
   }
 }
 @media (max-width: 720px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
   .brand-sub {
     display: none;
   }

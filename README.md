@@ -24,6 +24,22 @@ UI is what the API returns.
 - Strings and numbers are masked; booleans and `null` are left untouched.
 - If a matched key's value is a container, every leaf inside it is masked.
 
+## Log files
+
+Switch to **Log file** mode to sanitize a whole log. Attach a `.log`/`.txt` file (or paste it) and
+the tool masks the structured payloads it finds, in three forms:
+
+- **JSON blocks** — `… request={"logonId":"L006344"}` → `… request={"logonId":"*******"}`.
+- **Java `toString` object dumps** — `class Req { id: a08…; tenantId: f34… }` — each `field: value`
+  is masked (structure openers and `null` are left alone).
+- **Java maps** — `{application=baloise-id, client=172.31.138.81, …}` — each `key=value` is masked.
+
+Timestamps, logger names and messages are preserved. Two toggles: **Mask all values** (default on;
+turn off to mask only the field names you list) and **Redact IDs** (default off), which — when
+enabled — additionally masks values by shape (UUIDs, IPv4 addresses, emails and IBANs) anywhere in
+the log, even outside a structured block. It's opt-in because it will also mask loose identifiers in
+plain log lines (e.g. `dossierId=<uuid>`), which you often want to keep for debugging.
+
 ## Run locally
 
 Requires Deno 2.x.
@@ -66,6 +82,19 @@ Request body:
 
 Response: `{ sanitized, pretty, fields, keepLast, stats }`, where `stats` is
 `{ maskedValues, matchedKeys, fieldCount }`. Invalid JSON returns HTTP 400 with `{ error }`.
+
+To mask JSON blocks inside a log, `POST /api/sanitize-log`:
+
+```sh
+curl -s http://localhost:8000/api/sanitize-log \
+  -H 'content-type: application/json' \
+  -d '{ "log": "INFO request={\"logonId\":\"L006344\",\"tenantId\":8334}", "keepLast": 0 }'
+```
+
+Body: `log` (string, required), `keepLast` (default `0`), `maskAll` (default `true`; set `false` and
+pass `fields` to mask only those keys), `redact` (default `false`; when `true`, mask
+UUIDs/IPs/emails/IBANs by shape anywhere). Response: `{ text, stats }` where `stats` is
+`{ blocks, maskedValues, jsonBlocks, mapBlocks, fieldLines, patternHits }`.
 
 `GET /health` returns a liveness JSON payload.
 
