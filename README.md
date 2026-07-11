@@ -7,6 +7,9 @@ everything here runs entirely in your browser and deploys to GitHub Pages.
 
 - **Sanitize JSON** (`/sanitize/`) — mask sensitive fields inside a JSON payload or log file, ported
   from the Slack `/sanitize-text` command. Runs fully client-side.
+- **Slidedown** (`/slidedown/`) — turn Markdown files, PDFs and images into navigable presentation
+  slides, with speaker view, themes and PDF export. A Vite/React app (in `slidedown/`) built in CI;
+  runs fully client-side.
 - **Scrum Poker** — planning poker for team estimation. Lives in its own repo,
   [meso.poker](https://github.com/long-vo/meso.poker), and is hosted on Render (it needs a server
   for live rooms); the hub links straight to it.
@@ -63,8 +66,9 @@ deno task lint       # lint
 
 ## Deploy to GitHub Pages
 
-The site is pure static files — `static/` is the whole app. `.github/workflows/pages.yml` copies it
-to `_site/` and publishes it on every push to `main`.
+`.github/workflows/pages.yml` publishes the site on every push to `main`: it copies `static/` into
+`_site/`, then builds the Slidedown app (`slidedown/`) with Deno and assembles its output into
+`_site/slidedown/`. The hub itself stays build-free — only the Slidedown sub-app is compiled.
 
 One-time setup: in the repo, go to **Settings → Pages → Build and deployment → Source** and choose
 **GitHub Actions**. The site then publishes to <https://long-vo.github.io/meso.utilities/>.
@@ -82,12 +86,15 @@ static/
   app.js              sanitizer UI logic (imports ./sanitize.mjs)
   sanitize/
     index.html        Sanitize JSON UI
+slidedown/            Slidedown viewer (Vite/React/TS) — built into /slidedown/ at deploy time
 ```
 
-Each tool lives in its own `static/<tool>/` folder and is linked from the hub; shared assets
-(`styles.css`, `theme.js`) stay at the static root and are referenced with relative paths. Tools
-that need a server live in their own repos (see [meso.poker](https://github.com/long-vo/meso.poker))
-and are linked from the hub with an ↗ card.
+Each no-build tool lives in its own `static/<tool>/` folder and is linked from the hub; shared
+assets (`styles.css`, `theme.js`) stay at the static root and are referenced with relative paths. A
+tool that needs a build step (like Slidedown) lives in its own top-level folder with its own
+toolchain and is compiled into the site during deploy. Tools that need a server live in their own
+repos (see [meso.poker](https://github.com/long-vo/meso.poker)) and are linked from the hub with an
+↗ card.
 
 ## Development
 

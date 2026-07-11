@@ -31,3 +31,8 @@ jobs:
 
       - name: Test
         run: deno test --allow-read
+
+      # Slidedown is a Vite/React/TS app; `deno task build` runs `tsc && vite build`,
+      # so this is its type-check gate on every PR.
+      - name: Build Slidedown
+        run: cd slidedown && deno install && deno task build
