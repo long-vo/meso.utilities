@@ -34,7 +34,7 @@
     </section>
 
     <section class="cards" aria-label="Available tools">
-      <a class="card" href="./sanitize/">
+      <a class="card" data-tool="sanitize" href="./sanitize/">
         <div class="card-head">
           <span class="card-icon" aria-hidden="true">🔒</span>
           <h2>Sanitize JSON</h2>
@@ -49,9 +49,9 @@
         </div>
       </a>
 
-      <a class="card" href="./decode/">
+      <a class="card" data-tool="decode" href="./decode/">
         <div class="card-head">
-          <span class="card-icon" aria-hidden="true">🔓</span>
+          <span class="card-icon" aria-hidden="true">🔍</span>
           <h2>Decode Anything</h2>
         </div>
         <p>Auto-detect and unwrap Base64, hex, URL-encoding, gzip, JWTs and escaped
@@ -64,7 +64,22 @@
         </div>
       </a>
 
-      <a class="card" href="./slidedown/">
+      <a class="card" data-tool="rest" href="./rest/">
+        <div class="card-head">
+          <span class="card-icon" aria-hidden="true">🛰️</span>
+          <h2>REST Client</h2>
+        </div>
+        <p>Compose and send REST requests — method, headers, auth, body — and inspect
+          status, headers and pretty-printed JSON. Copy any request as curl.</p>
+        <div class="card-meta">
+          <span class="tag">HTTP</span>
+          <span class="tag">curl</span>
+          <span class="tag">Client-side</span>
+          <span class="card-go" aria-hidden="true">→</span>
+        </div>
+      </a>
+
+      <a class="card" data-tool="slidedown" href="./slidedown/">
         <div class="card-head">
           <span class="card-icon" aria-hidden="true">📽️</span>
           <h2>Slidedown</h2>
@@ -79,7 +94,7 @@
         </div>
       </a>
 
-      <a class="card" href="https://meso-poker.onrender.com/">
+      <a class="card" data-tool="poker" href="https://meso-poker.onrender.com/">
         <div class="card-head">
           <span class="card-icon" aria-hidden="true">🃏</span>
           <h2>Scrum Poker</h2>

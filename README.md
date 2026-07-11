@@ -10,12 +10,18 @@ everything here runs entirely in your browser and deploys to GitHub Pages.
 - **Decode Anything** (`/decode/`) — auto-detect and unwrap layered encodings (Base64, hex,
   URL-encoding, gzip/zlib, JWTs, PEM, `data:` URLs, escaped JSON) until something readable comes
   out. Runs fully client-side.
+- **REST Client** (`/rest/`) — compose and send REST requests (method, headers, auth, body), inspect
+  status/headers/body, copy any request as curl, with a local request history. Runs fully
+  client-side; the target API must allow CORS.
 - **Slidedown** (`/slidedown/`) — turn Markdown files, PDFs and images into navigable presentation
   slides, with speaker view, themes and PDF export. A Vite/React app (in `slidedown/`) built in CI;
   runs fully client-side.
 - **Scrum Poker** — planning poker for team estimation. Lives in its own repo,
   [meso.poker](https://github.com/long-vo/meso.poker), and is hosted on Render (it needs a server
   for live rooms); the hub links straight to it.
+
+On the hub, the ☆ star at the top-right of each card marks a tool as a favourite — favourites float
+to the top of the grid and are remembered in your browser's `localStorage`.
 
 **Live:** <https://long-vo.github.io/meso.utilities/>
 
@@ -60,6 +66,27 @@ words, paths and IDs that merely look like an encoding are left alone. JWTs are 
 `exp` claim is summarised, but signatures are **not** verified. Everything runs in your browser;
 nothing is uploaded.
 
+## How the REST client works
+
+Requests are sent with `fetch` straight from your browser to the target API — there is no proxy, so
+nothing passes through any server of ours. The flip side: the API must allow cross-origin (CORS)
+calls from the page's origin, and an `http://` API can't be called from the `https://` site (except
+localhost). When a request can't run in the browser, **Copy as curl** exports the exact same request
+— headers, auth and body, properly shell-escaped — to run in a terminal. Bearer/Basic auth helpers
+set the `Authorization` header, JSON bodies get `Content-Type: application/json` automatically
+(explicit headers always win), and the last 20 requests are kept in `localStorage` — including auth
+values, so mind shared machines.
+
+**Environments & variables:** define named environments (dev, uat, prod, …) with variables in the
+sidebar and reference them as `{{name}}` anywhere in the URL, headers, auth fields or body. The
+active environment is switched next to the request; chips under the URL show each variable used —
+green when resolved, red when missing — and sending (or curl export, which uses the resolved values)
+is blocked while anything is red. History keeps the `{{placeholders}}` plus an environment badge, so
+one saved request replays against any environment. Typing `{{` in the URL, headers, auth fields or
+body opens an autocomplete of the active environment's variables (↑↓ to select, Enter/Tab to accept,
+Esc to close). Environments live in `localStorage` (key `meso-rest-environments`); variable values
+are masked in the editor by default.
+
 ## Run locally
 
 Requires Deno 2.x (used only as a dev toolchain — there is no server code).
@@ -96,11 +123,12 @@ One-time setup: in the repo, go to **Settings → Pages → Build and deployment
 src/
   sanitize.test.ts    parity tests (import the module from static/)
   decode.test.ts      decode-pipeline tests (import the module from static/decode/)
+  rest.test.ts        REST-client logic tests (import the module from static/rest/)
 static/
   index.html          hub / master page (lists all tools)
   styles.css          shared theme + hub + tool styles
   theme.js            shared dark/light toggle
-  hub.js              hub master-page interactions (share to Slack)
+  hub.js              hub master-page interactions (share to Slack, favourite stars)
   sanitize.mjs        masking logic (imported by the browser and the tests)
   app.js              sanitizer UI logic (imports ./sanitize.mjs)
   sanitize/
@@ -109,6 +137,10 @@ static/
     index.html        Decode Anything UI
     app.js            decode UI logic (imports ./decode.mjs)
     decode.mjs        detection + unwrap pipeline (imported by browser and tests)
+  rest/
+    index.html        REST Client UI
+    app.js            REST UI logic + fetch (imports ./rest.mjs)
+    rest.mjs          pure request/curl/format logic (imported by browser and tests)
 slidedown/            Slidedown viewer (Vite/React/TS) — built into /slidedown/ at deploy time
 ```
 
