@@ -1,6 +1,7 @@
 {
   "name": "meso.utilities",
   "version": "0.2.0",
+  "exclude": ["slidedown"],
   "tasks": {
     "dev": "deno run --allow-net --allow-read jsr:@std/http/file-server static",
     "test": "deno test --allow-read",
