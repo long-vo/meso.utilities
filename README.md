@@ -64,6 +64,10 @@ deno task fmt        # format
 deno task lint       # lint
 ```
 
+`deno task dev` serves the hub only. Slidedown is a separate Vite/React app in `slidedown/` with its
+own toolchain — run it from there (`cd slidedown && deno task dev`); see
+[slidedown/README.md](slidedown/README.md).
+
 ## Deploy to GitHub Pages
 
 `.github/workflows/pages.yml` publishes the site on every push to `main`: it copies `static/` into
@@ -103,8 +107,8 @@ PR with green CI. Branch with `feature/…`, `bugfix/…` or `chore/…`; commit
 imperative title (e.g. `Add minify toggle`). Run `deno task check`, `deno task lint`,
 `deno task fmt` and `deno task test` before opening a PR.
 
-A versioned pre-commit hook (`.githooks/pre-commit`) runs the same four checks as CI on every
-commit. Enable it once per clone:
+A versioned pre-commit hook (`.githooks/pre-commit`) runs the hub's four Deno checks (format, type
+check, lint, tests) on every commit. Enable it once per clone:
 
 ```sh
 git config core.hooksPath .githooks
@@ -113,5 +117,5 @@ git config core.hooksPath .githooks
 Formatting is verified with `--check` (the hook never rewrites files mid-commit); if it fails, run
 `deno task fmt` and re-stage. Bypass a single commit with `git commit --no-verify`.
 
-CI (`.github/workflows/ci.yml`) runs the format check, lint, type check and tests on every push to
-`main` and every pull request.
+CI (`.github/workflows/ci.yml`) runs the format check, lint, type check and tests, and builds the
+Slidedown app, on every push to `main` and every pull request.

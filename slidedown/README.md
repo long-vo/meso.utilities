@@ -40,28 +40,16 @@ deno task preview  # preview the production build
 
 The tasks live in `deno.json` and mirror the npm scripts.
 
-## Deploy to GitHub Pages
+## Deploy
 
-The workflow at `.github/workflows/deno.yml` builds the site **with Deno**
-(`denoland/setup-deno`) and publishes it to GitHub Pages on every push to
-`master`.
+Slidedown ships as a utility of [meso.utilities](../README.md) and has no
+deploy workflow of its own. That repo's `.github/workflows/pages.yml` builds it
+with Deno (`deno task build`) and publishes the output under `/slidedown/` on
+the hub's GitHub Pages site:
+<https://long-vo.github.io/meso.utilities/slidedown/>.
 
-One-time setup:
-
-1. Push the repo to GitHub with `master` as the default branch.
-2. In the repo, open **Settings → Pages → Build and deployment** and set
-   **Source** to **GitHub Actions**.
-3. Push to `master` (or trigger the workflow from the **Actions** tab).
-
-Once it finishes, the site is live at a public URL:
-
-```
-https://<your-username>.github.io/<repo-name>/
-```
-
-For example, `https://<your-username>.github.io/slider-web/`. The Vite config
-uses a relative `base`, so assets resolve correctly under the repository
-sub-path — no extra configuration required.
+Vite's relative `base` (`'./'`) is what lets the build work under that sub-path
+with no extra configuration.
 
 ## How it works
 

@@ -99,7 +99,8 @@ Data flows in one direction: **files → `Slide[]` → render**.
 
 ## Deployment
 
-`.github/workflows/deno.yml` builds with Deno (`denoland/setup-deno`) and
-publishes `dist/` to GitHub Pages on every push to `master`; enable Settings →
-Pages → Source: GitHub Actions. Vite `base` is `'./'` (relative) so the build works
-under a repository sub-path without further configuration.
+Slidedown has no deploy workflow of its own. It is a utility within the
+`meso.utilities` repo, whose `.github/workflows/pages.yml` builds it with Deno
+(`deno task build`) and assembles the output into the hub's GitHub Pages site
+under `/slidedown/`. Vite `base` is `'./'` (relative) so the build works under
+that sub-path without further configuration.
