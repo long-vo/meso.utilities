@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Decode Anything — meso.utilities</title>
+  <meta name="description" content="Auto-detect and unwrap Base64, hex, URL-encoding, gzip, JWTs and escaped JSON — layer by layer, entirely in your browser." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%94%93%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <nav class="brand" aria-label="Breadcrumb">
+      <a class="brand-link" href="../" title="All utilities">
+        <img class="brand-mark" src="../mesoneer-logo.jpg" alt="" aria-hidden="true" />
+        <span class="brand-name">meso.utilities</span>
+      </a>
+      <span class="crumb-sep" aria-hidden="true">/</span>
+      <span class="crumb-current"><span aria-hidden="true">🔓</span> Decode Anything</span>
+    </nav>
+    <div class="topbar-actions">
+      <span class="pill pill-privacy" title="Your data never leaves this page.">
+        <span aria-hidden="true">🛡️</span> Runs in your browser
+      </span>
+      <button id="theme-toggle" class="icon-btn" type="button" aria-label="Toggle colour theme">
+        <span class="theme-icon">🌙</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel controls" aria-label="About and examples">
+      <div class="field">
+        <label>What it detects</label>
+        <p class="hint">Paste any opaque value — encodings are detected and unwrapped
+          <b>layer by layer</b> until something readable comes out:</p>
+        <div class="chips" aria-hidden="true">
+          <span class="chip">Base64 / URL-safe</span>
+          <span class="chip">Hex</span>
+          <span class="chip">URL %-encoding</span>
+          <span class="chip">Gzip / zlib</span>
+          <span class="chip">JWT</span>
+          <span class="chip">Escaped JSON</span>
+          <span class="chip">data: URL</span>
+          <span class="chip">PEM</span>
+        </div>
+        <p class="hint">Detection is conservative: plain words, paths and IDs that merely
+          <i>look</i> like an encoding are left alone. JWT signatures are <b>not</b> verified.</p>
+      </div>
+
+      <div class="field">
+        <label>Examples</label>
+        <div class="btn-row example-row">
+          <button id="example-jwt" class="btn btn-ghost btn-small" type="button">JWT</button>
+          <button id="example-gzip" class="btn btn-ghost btn-small" type="button">Base64 + gzip</button>
+          <button id="example-url" class="btn btn-ghost btn-small" type="button">URL-encoded</button>
+          <button id="example-escaped" class="btn btn-ghost btn-small" type="button">Escaped log JSON</button>
+        </div>
+      </div>
+
+      <div class="field btn-row">
+        <button id="clear" class="btn btn-ghost" type="button">Clear</button>
+      </div>
+    </section>
+
+    <section class="panel editor" aria-label="Input">
+      <div class="panel-head">
+        <h2>Encoded input</h2>
+        <span id="input-status" class="status"></span>
+      </div>
+      <textarea id="input" class="code-area" spellcheck="false" autocomplete="off"
+        placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.… — or Base64, hex, %-encoded, gzip'd, escaped JSON"></textarea>
+    </section>
+
+    <section class="panel result" aria-label="Decoded steps">
+      <div class="panel-head">
+        <h2>Decoded</h2>
+        <div class="result-tools">
+          <button id="copy" class="btn btn-small" type="button">Copy result</button>
+          <button id="download" class="btn btn-small" type="button">Download</button>
+        </div>
+      </div>
+      <div id="steps" class="steps" aria-live="polite">
+        <pre class="code-out step-out"><code><span class="j-null">// paste an encoded value to begin</span></code></pre>
+      </div>
+      <div id="stats" class="stats" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    Detection and decoding run client-side, nothing is uploaded · JWT signatures are not verified.
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="../theme.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

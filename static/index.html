@@ -49,6 +49,21 @@
         </div>
       </a>
 
+      <a class="card" href="./decode/">
+        <div class="card-head">
+          <span class="card-icon" aria-hidden="true">🔓</span>
+          <h2>Decode Anything</h2>
+        </div>
+        <p>Auto-detect and unwrap Base64, hex, URL-encoding, gzip, JWTs and escaped
+          JSON — layer by layer, until something readable comes out.</p>
+        <div class="card-meta">
+          <span class="tag">Base64</span>
+          <span class="tag">JWT</span>
+          <span class="tag">Client-side</span>
+          <span class="card-go" aria-hidden="true">→</span>
+        </div>
+      </a>
+
       <a class="card" href="./slidedown/">
         <div class="card-head">
           <span class="card-icon" aria-hidden="true">📽️</span>
@@ -79,12 +94,32 @@
         </div>
       </a>
     </section>
+
+    <section class="hub-share" aria-label="Like and share">
+      <div class="hub-share-text">
+        <h2>Enjoying the toolbox?</h2>
+        <p>Give it a star on GitHub, or share it with the team.</p>
+      </div>
+      <div class="hub-share-actions">
+        <a class="btn btn-primary" href="https://github.com/long-vo/meso.utilities"
+          target="_blank" rel="noopener">
+          <span aria-hidden="true">⭐</span> Star on GitHub
+        </a>
+        <button class="btn" type="button" id="share-slack"
+          title="Copies a ready-to-paste message for Slack">
+          <span aria-hidden="true">💬</span> Share to Slack
+        </button>
+      </div>
+    </section>
   </main>
 
   <footer class="footer">
     meso.utilities · tools run client-side unless a tool says otherwise.
   </footer>
 
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
   <script type="module" src="./theme.js"></script>
+  <script type="module" src="./hub.js"></script>
 </body>
 </html>

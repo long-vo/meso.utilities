@@ -7,6 +7,9 @@ everything here runs entirely in your browser and deploys to GitHub Pages.
 
 - **Sanitize JSON** (`/sanitize/`) — mask sensitive fields inside a JSON payload or log file, ported
   from the Slack `/sanitize-text` command. Runs fully client-side.
+- **Decode Anything** (`/decode/`) — auto-detect and unwrap layered encodings (Base64, hex,
+  URL-encoding, gzip/zlib, JWTs, PEM, `data:` URLs, escaped JSON) until something readable comes
+  out. Runs fully client-side.
 - **Slidedown** (`/slidedown/`) — turn Markdown files, PDFs and images into navigable presentation
   slides, with speaker view, themes and PDF export. A Vite/React app (in `slidedown/`) built in CI;
   runs fully client-side.
@@ -47,6 +50,16 @@ enabled — additionally masks values by shape (UUIDs, IPv4 addresses, emails an
 the log, even outside a structured block. It's opt-in because it will also mask loose identifiers in
 plain log lines (e.g. `dossierId=<uuid>`), which you often want to keep for debugging.
 
+## How decoding works
+
+Decode Anything unwraps one layer at a time: each detector inspects the current value and, when it
+matches, produces the next value for the chain (e.g. Base64 → gzip → formatted JSON), up to 12
+layers. Detection is deliberately conservative — a Base64/hex decode is only accepted when the
+result is readable UTF-8 or a recognised binary format (gzip, zlib, PDF, PNG, ZIP, DER, …), so plain
+words, paths and IDs that merely look like an encoding are left alone. JWTs are decoded and their
+`exp` claim is summarised, but signatures are **not** verified. Everything runs in your browser;
+nothing is uploaded.
+
 ## Run locally
 
 Requires Deno 2.x (used only as a dev toolchain — there is no server code).
@@ -82,14 +95,20 @@ One-time setup: in the repo, go to **Settings → Pages → Build and deployment
 ```
 src/
   sanitize.test.ts    parity tests (import the module from static/)
+  decode.test.ts      decode-pipeline tests (import the module from static/decode/)
 static/
   index.html          hub / master page (lists all tools)
   styles.css          shared theme + hub + tool styles
   theme.js            shared dark/light toggle
+  hub.js              hub master-page interactions (share to Slack)
   sanitize.mjs        masking logic (imported by the browser and the tests)
   app.js              sanitizer UI logic (imports ./sanitize.mjs)
   sanitize/
     index.html        Sanitize JSON UI
+  decode/
+    index.html        Decode Anything UI
+    app.js            decode UI logic (imports ./decode.mjs)
+    decode.mjs        detection + unwrap pipeline (imported by browser and tests)
 slidedown/            Slidedown viewer (Vite/React/TS) — built into /slidedown/ at deploy time
 ```
 
