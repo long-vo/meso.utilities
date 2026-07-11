@@ -16,6 +16,7 @@ fi
 git init -b main
 git config user.name "Long Vo"
 git config user.email "long.vo@mesoneer.io"
+git config core.hooksPath .githooks  # pre-commit: fmt --check, type check, lint, tests
 git remote add origin "$REMOTE"
 
 git add -A

@@ -181,5 +181,15 @@ PR with green CI. Branch with `feature/…`, `bugfix/…` or `chore/…`; commit
 imperative title (e.g. `Add minify toggle`). Run `deno task check`, `deno task lint`,
 `deno task fmt` and `deno task test` before opening a PR.
 
+A versioned pre-commit hook (`.githooks/pre-commit`) runs the same four checks as CI on every
+commit. Enable it once per clone:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+Formatting is verified with `--check` (the hook never rewrites files mid-commit); if it fails, run
+`deno task fmt` and re-stage. Bypass a single commit with `git commit --no-verify`.
+
 CI (`.github/workflows/ci.yml`) runs the format check, lint, type check and tests on every push to
 `main` and every pull request.
