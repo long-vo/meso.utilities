@@ -26,7 +26,6 @@ jobs:
         run: |
           mkdir -p _site
           cp -R static/. _site/
-          cp src/sanitize.mjs src/poker.mjs _site/
           touch _site/.nojekyll
 
       - name: Configure Pages

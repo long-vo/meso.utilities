@@ -1,8 +1,0 @@
-.git
-.github
-.githooks
-.DS_Store
-README.md
-init-git.sh
-Dockerfile
-render.yaml

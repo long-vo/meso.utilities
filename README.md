@@ -2,24 +2,22 @@
 
 [![CI](https://github.com/long-vo/meso.utilities/actions/workflows/ci.yml/badge.svg)](https://github.com/long-vo/meso.utilities/actions/workflows/ci.yml)
 
-A tiny [Deno](https://deno.com/) web app with small, self-contained team utilities behind a common
-master page (hub):
+A static hub of small, self-contained team utilities behind a common master page. No backend —
+everything here runs entirely in your browser and deploys to GitHub Pages.
 
-- **Sanitize JSON** (`/sanitize/`) — mask sensitive fields inside a JSON payload or log file, ported
-  from the Slack `/sanitize-text` command.
-- **Scrum Poker** (`/poker/`) — planning poker for team estimation: share a room code, everyone
-  picks a card, reveal together.
+- **Sanitize JSON** (`/sanitize/`) — mask sensitive fields inside a JSON payload or log file,
+  ported from the Slack `/sanitize-text` command. Runs fully client-side.
+- **Scrum Poker** — planning poker for team estimation. Lives in its own repo,
+  [meso.poker](https://github.com/long-vo/meso.poker), and is hosted on Render (it needs a server
+  for live rooms); the hub links straight to it.
 
-**Live:** <https://long-vo.github.io/meso.utilities/> — the hub; masking runs entirely in your
-browser.
+**Live:** <https://long-vo.github.io/meso.utilities/>
 
-The masking logic (`src/sanitize.mjs`) is lifted verbatim — semantics-wise — from
+The masking logic (`static/sanitize.mjs`) is lifted verbatim — semantics-wise — from
 `slack-slash-app/src/commands/sanitizeText.js`, so a payload is masked here exactly the way the
-Slack modal masked it. The browser and the server import the **same** module, so what you see in the
-UI is what the API returns.
+Slack modal masked it.
 
-> Masking runs entirely in your browser. Your JSON is never uploaded — the `/api/sanitize` endpoint
-> exists only for scripts and CI that want it.
+> Masking runs entirely in your browser. Your JSON is never uploaded anywhere.
 
 ## How masking works
 
@@ -48,11 +46,10 @@ plain log lines (e.g. `dossierId=<uuid>`), which you often want to keep for debu
 
 ## Run locally
 
-Requires Deno 2.x.
+Requires Deno 2.x (used only as a dev toolchain — there is no server code).
 
 ```sh
-deno task start      # http://localhost:8000
-deno task dev        # same, with --watch auto-reload
+deno task dev        # static file server on http://localhost:8000
 ```
 
 Other tasks:
@@ -64,115 +61,33 @@ deno task fmt        # format
 deno task lint       # lint
 ```
 
-Set `PORT` to change the port locally (e.g. `PORT=3000 deno task start`).
-
-## API
-
-```sh
-curl -s http://localhost:8000/api/sanitize \
-  -H 'content-type: application/json' \
-  -d '{
-    "json": { "user": { "email": "a@b.com" }, "token": "sk_live_abc123" },
-    "fields": "email, token",
-    "keepLast": 4
-  }'
-```
-
-Request body:
-
-| Field      | Type                | Notes                                              |
-| ---------- | ------------------- | -------------------------------------------------- |
-| `json`     | string \| object    | The payload to sanitize (raw JSON string or value) |
-| `fields`   | string \| string\[] | Field names to mask (comma/space/newline or array) |
-| `keepLast` | number \| string    | Trailing characters to keep visible (default `0`)  |
-
-Response: `{ sanitized, pretty, fields, keepLast, stats }`, where `stats` is
-`{ maskedValues, matchedKeys, fieldCount }`. Invalid JSON returns HTTP 400 with `{ error }`.
-
-To mask JSON blocks inside a log, `POST /api/sanitize-log`:
-
-```sh
-curl -s http://localhost:8000/api/sanitize-log \
-  -H 'content-type: application/json' \
-  -d '{ "log": "INFO request={\"logonId\":\"L006344\",\"tenantId\":8334}", "keepLast": 0 }'
-```
-
-Body: `log` (string, required), `keepLast` (default `0`), `maskAll` (default `true`; set `false` and
-pass `fields` to mask only those keys), `redact` (default `false`; when `true`, mask
-UUIDs/IPs/emails/IBANs by shape anywhere). Response: `{ text, stats }` where `stats` is
-`{ blocks, maskedValues, jsonBlocks, mapBlocks, fieldLines, patternHits }`.
-
-`GET /health` returns a liveness JSON payload.
-
-## Scrum Poker
-
-Open `/poker/`, enter your name and either create a room or join with a teammate's 4–8 character
-code (invite links look like `/poker/?room=QK7M`). Everyone picks a card from the classic deck (0 ½
-1 2 3 5 8 13 20 40 100 ? ☕); votes stay hidden until someone hits **Reveal**, which locks the round
-and shows the average, the vote distribution and a consensus banner. **New round** clears the cards.
-Anyone can edit the shared story line, reveal or reset — no host role, no accounts. Empty rooms
-evaporate after a few minutes. Every player can pick a **card theme** (ocean, violet, forest,
-sunset, ruby) via the dots next to "Your card" — your deck and the card back other players see take
-that colour, and the choice is remembered for the next session.
-
-At the bottom sits a **random-name wheel** for picking who presents, breaks a tie or fetches the
-coffee. It mirrors the people in the room until someone edits it — add guests or remove names via
-the chips — after which it keeps the custom list. Spins are part of the room state, so everyone
-watches the wheel land on the same name.
-
-Live rooms need the Deno server: sockets connect to `/api/poker/ws?room=CODE&name=NAME` and rooms
-live in memory, driven by the shared reducer in `src/poker.mjs`. On Deno Deploy, sockets for one
-room may land on different isolates; a `BroadcastChannel` gossips per-isolate snapshots (participant
-maps are disjoint, shared flags resolve last-writer-wins) so every isolate renders the full room. On
-the static GitHub Pages build there is no server — the page detects this and falls back to a
-single-person **solo mode** using the same reducer in the browser.
-
-## Deploy to Deno Deploy
-
-No build step. Point a Deno Deploy project at this repo with:
-
-- **Entrypoint:** `main.ts`
-
-The static assets and `src/sanitize.mjs` are read relative to the module URL, so they resolve the
-same on Deploy as they do locally. Deno Deploy supplies the port automatically.
-
 ## Deploy to GitHub Pages
 
-Because masking runs entirely client-side, the UI also works as a pure static site — no backend.
-`.github/workflows/pages.yml` assembles `_site/` (the `static/` files plus `src/sanitize.mjs`) and
-publishes it on every push to `main`.
+The site is pure static files — `static/` is the whole app.
+`.github/workflows/pages.yml` copies it to `_site/` and publishes it on every push to `main`.
 
 One-time setup: in the repo, go to **Settings → Pages → Build and deployment → Source** and choose
 **GitHub Actions**. The site then publishes to <https://long-vo.github.io/meso.utilities/>.
 
-Not available on Pages (both need the Deno server): the `/api/sanitize` endpoints and live poker
-rooms — the sanitizer is fully functional anyway, and the poker page falls back to solo mode.
-
 ## Layout
 
 ```
-main.ts               Deno.serve entry: routes + JSON API + poker WebSocket
 src/
-  sanitize.mjs        shared masking logic (server + browser)
-  sanitize.test.ts    parity tests
-  poker.mjs           shared poker-room reducer (server + browser solo mode)
-  poker-server.ts     poker rooms: WebSocket handling + isolate gossip
-  poker.test.ts       poker reducer tests
+  sanitize.test.ts    parity tests (import the module from static/)
 static/
   index.html          hub / master page (lists all tools)
   styles.css          shared theme + hub + tool styles
   theme.js            shared dark/light toggle
-  app.js              sanitizer UI logic (imports /sanitize.mjs)
+  sanitize.mjs        masking logic (imported by the browser and the tests)
+  app.js              sanitizer UI logic (imports ./sanitize.mjs)
   sanitize/
     index.html        Sanitize JSON UI
-  poker/
-    index.html        Scrum Poker UI
-    poker.js          poker client (WebSocket + solo fallback)
 ```
 
 Each tool lives in its own `static/<tool>/` folder and is linked from the hub; shared assets
-(`styles.css`, `theme.js`) stay at the static root and are referenced with relative paths, so the
-site works both on the Deno server and as a plain static build.
+(`styles.css`, `theme.js`) stay at the static root and are referenced with relative paths. Tools
+that need a server live in their own repos (see [meso.poker](https://github.com/long-vo/meso.poker))
+and are linked from the hub with an ↗ card.
 
 ## Development
 

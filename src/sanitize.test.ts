@@ -4,7 +4,7 @@
  *
  * Dependency-free on purpose (no remote std import) so it runs offline.
  */
-import { findBalancedEnd, maskString, runSanitize, runSanitizeLog, sanitize } from "./sanitize.mjs";
+import { findBalancedEnd, maskString, runSanitize, runSanitizeLog, sanitize } from "../static/sanitize.mjs";
 
 function assertEquals(actual: unknown, expected: unknown, msg?: string): void {
   const a = JSON.stringify(actual);

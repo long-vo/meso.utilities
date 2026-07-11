@@ -1,12 +1,10 @@
 {
   "name": "meso.utilities",
-  "version": "0.1.0",
-  "exports": "./main.ts",
+  "version": "0.2.0",
   "tasks": {
-    "start": "deno run --allow-net --allow-read --allow-env main.ts",
-    "dev": "deno run --allow-net --allow-read --allow-env --watch main.ts",
+    "dev": "deno run --allow-net --allow-read jsr:@std/http/file-server static",
     "test": "deno test --allow-read",
-    "check": "deno check main.ts src/sanitize.test.ts src/poker.test.ts",
+    "check": "deno check src/sanitize.test.ts",
     "fmt": "deno fmt",
     "lint": "deno lint"
   },

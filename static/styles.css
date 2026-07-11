@@ -1081,27 +1081,6 @@ textarea:focus {
   font-weight: 600;
 }
 
-/* ---- API panel ---- */
-.api {
-  max-width: 1440px;
-  margin: 0 auto 8px;
-}
-.api {
-  margin-left: clamp(16px, 4vw, 40px);
-  margin-right: clamp(16px, 4vw, 40px);
-}
-.api summary {
-  cursor: pointer;
-  font-weight: 600;
-}
-.code-api {
-  margin-top: 12px;
-}
-.code-api code {
-  white-space: pre;
-  color: var(--text-dim);
-}
-
 .footer {
   text-align: center;
   color: var(--text-faint);

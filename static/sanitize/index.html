@@ -107,26 +107,6 @@
     </section>
   </main>
 
-  <section class="panel api" aria-label="API">
-    <details>
-      <summary>Use it as an API</summary>
-      <p class="hint">The same masking is available as a JSON endpoint when you run the Deno server (locally or on Deno Deploy). The static GitHub Pages build has no backend — the UI above still works fully, since masking runs in your browser.</p>
-      <pre class="code-out code-api"><code>curl -s http://localhost:8000/api/sanitize \
-  -H 'content-type: application/json' \
-  -d '{
-    "json": { "user": { "email": "a@b.com" }, "token": "sk_live_abc123" },
-    "fields": "email, token",
-    "keepLast": 4
-  }'</code></pre>
-      <p class="hint"><code>json</code> accepts a JSON string or an object. <code>fields</code> accepts a string or an array. Returns <code>{ sanitized, pretty, stats }</code>.</p>
-      <p class="hint">Mask every JSON block embedded in a log file:</p>
-      <pre class="code-out code-api"><code>curl -s http://localhost:8000/api/sanitize-log \
-  -H 'content-type: application/json' \
-  -d '{ "log": "INFO request={\"logonId\":\"L006344\",\"tenantId\":8334}", "keepLast": 0 }'</code></pre>
-      <p class="hint"><code>maskAll</code> defaults to <code>true</code> (redact every value); set it <code>false</code> and pass <code>fields</code> to mask only those keys. Returns <code>{ text, stats }</code>.</p>
-    </details>
-  </section>
-
   <footer class="footer">
     Ported from the <code>/sanitize-text</code> Slack command · masking runs client-side, nothing is uploaded.
   </footer>
