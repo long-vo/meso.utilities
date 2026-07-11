@@ -102,8 +102,10 @@ body {
   gap: 12px;
 }
 .brand-mark {
-  font-size: 26px;
-  filter: saturate(1.2);
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  display: block;
 }
 .brand-text {
   display: flex;
@@ -139,6 +141,22 @@ body {
   font-size: 13.5px;
   font-weight: 600;
   white-space: nowrap;
+}
+
+/* centered brand logo in the topbar (square tile with its own background) */
+.topbar-logo {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 38px;
+  width: 38px;
+  border-radius: 9px;
+  display: block;
+}
+@media (max-width: 640px) {
+  .topbar-logo {
+    display: none;
+  }
 }
 
 .topbar-actions {
