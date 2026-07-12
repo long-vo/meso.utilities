@@ -91,9 +91,11 @@ select all of them on the start screen to load them as a deck.
 | Speaker view         | `S`                               |
 | Auto-play            | `P`                               |
 | Toggle theme         | `T`                               |
+| Pen (draw on slide)  | `D` · clear with `C`              |
+| Laser pointer        | `W`                               |
 | Export to PDF        | `E`                               |
 | Fullscreen           | `F`                               |
-| Exit overview / zoom | `Esc`                             |
+| Exit pen/laser, overview or zoom | `Esc`                 |
 
 `→` reveals the next fragment before advancing to the next slide. You can also
 use the floating control bar at the bottom, or click any empty area of a slide
@@ -115,6 +117,9 @@ and sanitized with [DOMPurify](https://github.com/cure53/DOMPurify):
 - Tables and blockquotes
 - Fenced code blocks with syntax highlighting via
   [highlight.js](https://highlightjs.org)
+- **Line highlights & step-through** — add ranges to the fence:
+  ` ```ts {2,5-7} ` highlights those lines; ` ```ts {1-3|5|7-9} ` steps
+  through the groups with `→`, exactly like fragments
 - Flowcharts and diagrams in ` ```mermaid ` code blocks, rendered with
   [Mermaid](https://mermaid.js.org) (flowchart, sequence, class, state, pie,
   Gantt, …)
@@ -138,6 +143,12 @@ A single Markdown file can be more than one slide:
   when its `+++` fragment is revealed). Add timing in ms: `@up:200` sets a
   delay, `@zoom:0:800` sets delay then duration. Elements without a delay
   auto-stagger.
+- **Layout directives** — lines at the very top of a slide:
+  - `@columns` splits the slide into two columns at a `|||` line
+  - `@image-left <url>` / `@image-right <url>` put an image in one half and
+    the slide content in the other
+  - `@background <colour | gradient | image url>` gives the slide a
+    full-bleed background (also visible in thumbnails and the PDF export)
 - **Front-matter** — an optional YAML block at the very top sets deck options:
 
 ```markdown
@@ -161,6 +172,9 @@ theme: dark
   16:9 page; choose "Save as PDF".
 - **Auto-play** (`P`) — advances fragments then slides every few seconds,
   hands-free, and stops at the end.
+- **Annotations** — `D` toggles a pen to draw on the current slide (strokes
+  stick to the slide and survive flipping back and forth; `C` clears them),
+  `W` toggles a laser-pointer dot. `Esc` puts the tool away.
 
 ## Project structure
 

@@ -1,20 +1,41 @@
-import { marked } from 'marked';
-import { markedHighlight } from 'marked-highlight';
+import { marked, type Tokens } from 'marked';
 // `/lib/common` bundles ~35 popular languages instead of all ~190,
 // which keeps the production bundle much smaller.
 import hljs from 'highlight.js/lib/common';
 import DOMPurify from 'dompurify';
+import { parseCodeMeta, serializeGroups, wrapCodeLines } from './code-steps';
 
-// Syntax highlighting for fenced code blocks.
-marked.use(
-  markedHighlight({
-    langPrefix: 'hljs language-',
-    highlight(code, lang) {
-      const language = hljs.getLanguage(lang) ? lang : 'plaintext';
-      return hljs.highlight(code, { language }).value;
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Custom fenced-code renderer: syntax highlighting plus optional line
+// highlights from the info string (```js {1,3-5|2} — see code-steps.ts).
+// Mermaid blocks keep the exact `language-mermaid` shape that
+// renderMermaidInHtml() detects.
+marked.use({
+  renderer: {
+    code({ text, lang }: Tokens.Code): string {
+      const meta = parseCodeMeta(lang ?? '');
+      if (meta.lang === 'mermaid') {
+        return `<pre><code class="hljs language-mermaid">${escapeHtml(text)}</code></pre>\n`;
+      }
+      const language = meta.lang && hljs.getLanguage(meta.lang) ? meta.lang : 'plaintext';
+      const highlighted = hljs.highlight(text, { language }).value;
+      const body = meta.groups ? wrapCodeLines(highlighted, meta.groups) : highlighted;
+      const isStepped = meta.groups !== null && meta.groups.length > 1;
+      const stepsAttr = isStepped && meta.groups
+        ? ` data-code-steps="${serializeGroups(meta.groups)}"`
+        : '';
+      const classes = `hljs language-${escapeHtml(language)}`;
+      return `<pre${stepsAttr}${isStepped ? ' class="code-stepped"' : ''}><code class="${classes}">${body}</code></pre>\n`;
     },
-  }),
-);
+  },
+});
 
 marked.setOptions({ gfm: true, breaks: false });
 

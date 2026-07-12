@@ -5,7 +5,9 @@ import {
   Expand,
   Grid,
   Home,
+  Laser,
   Pause,
+  Pen,
   Play,
   Presenter,
   Printer,
@@ -14,6 +16,7 @@ import {
 } from './Icons';
 import ThemeMenu from './ThemeMenu';
 import type { ThemeName } from '../types';
+import type { AnnotationTool } from './AnnotationLayer';
 
 interface Props {
   index: number;
@@ -25,6 +28,9 @@ interface Props {
   theme: ThemeName;
   speakerActive: boolean;
   playing: boolean;
+  tool: AnnotationTool;
+  onTogglePen: () => void;
+  onToggleLaser: () => void;
   onPrev: () => void;
   onNext: () => void;
   onTogglePlay: () => void;
@@ -49,6 +55,9 @@ export default function Controls({
   theme,
   speakerActive,
   playing,
+  tool,
+  onTogglePen,
+  onToggleLaser,
   onPrev,
   onNext,
   onTogglePlay,
@@ -162,6 +171,24 @@ export default function Controls({
         aria-label="Toggle speaker view"
       >
         <Presenter />
+      </button>
+
+      <button
+        className={`ctrl-btn ${tool === 'pen' ? 'is-active' : ''}`}
+        onClick={onTogglePen}
+        title="Draw on the slide (D) · clear with C"
+        aria-label="Toggle pen annotations"
+      >
+        <Pen />
+      </button>
+
+      <button
+        className={`ctrl-btn ${tool === 'laser' ? 'is-active' : ''}`}
+        onClick={onToggleLaser}
+        title="Laser pointer (W)"
+        aria-label="Toggle laser pointer"
+      >
+        <Laser />
       </button>
 
       <ThemeMenu theme={theme} onSelect={onSetTheme} direction="up" />

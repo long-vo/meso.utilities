@@ -7,6 +7,7 @@ import {
 } from 'react';
 import type { Direction, Slide, ThemeName } from '../types';
 import SlideView from './Slide';
+import AnnotationLayer, { type AnnotationTool } from './AnnotationLayer';
 import Controls from './Controls';
 import ProgressBar from './ProgressBar';
 import Overview from './Overview';
@@ -57,6 +58,8 @@ export default function Presentation({
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const [panning, setPanning] = useState(false);
+  const [tool, setTool] = useState<AnnotationTool>('none');
+  const [clearNonce, setClearNonce] = useState(0);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const stageWrapRef = useRef<HTMLDivElement>(null);
@@ -225,6 +228,21 @@ export default function Presentation({
     };
   }, [nudgeControls]);
 
+  // Presenter annotations: pen strokes and the laser pointer.
+  const togglePen = useCallback(
+    () => setTool((t) => (t === 'pen' ? 'none' : 'pen')),
+    [],
+  );
+  const toggleLaser = useCallback(
+    () => setTool((t) => (t === 'laser' ? 'none' : 'laser')),
+    [],
+  );
+  const clearAnnotations = useCallback(() => setClearNonce((n) => n + 1), []);
+  const toolRef = useRef(tool);
+  useEffect(() => {
+    toolRef.current = tool;
+  }, [tool]);
+
   // Export to PDF via the browser print dialog.
   const exportPdf = useCallback(() => setPrinting(true), []);
 
@@ -263,7 +281,11 @@ export default function Presentation({
     onLast: goLast,
     onToggleFullscreen: toggleFullscreen,
     onToggleOverview: () => setOverview((v) => !v),
-    onEscape: () => (zoomRef.current > 1 ? resetZoom() : setOverview(false)),
+    onEscape: () => {
+      if (toolRef.current !== 'none') setTool('none');
+      else if (zoomRef.current > 1) resetZoom();
+      else setOverview(false);
+    },
     onZoomIn: zoomIn,
     onZoomOut: zoomOut,
     onZoomReset: resetZoom,
@@ -271,6 +293,9 @@ export default function Presentation({
     onToggleSpeaker: () => setSpeakerOpen((v) => !v),
     onExport: exportPdf,
     onTogglePlay: () => setPlaying((v) => !v),
+    onTogglePen: togglePen,
+    onToggleLaser: toggleLaser,
+    onClearAnnotations: clearAnnotations,
   });
 
   const onPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
@@ -310,7 +335,7 @@ export default function Presentation({
   return (
     <div
       ref={rootRef}
-      className={`presentation ${
+      className={`presentation tool-${tool} ${
         controlsVisible || overview ? 'controls-visible' : 'controls-hidden'
       }`}
       onMouseMove={nudgeControls}
@@ -343,6 +368,14 @@ export default function Presentation({
             scale={effScale}
             step={step}
           />
+          <AnnotationLayer
+            tool={tool}
+            slideId={current.id}
+            width={BASE_W}
+            height={BASE_H}
+            scale={effScale}
+            clearNonce={clearNonce}
+          />
         </div>
       </div>
 
@@ -356,6 +389,9 @@ export default function Presentation({
         theme={theme}
         speakerActive={speakerOpen}
         playing={playing}
+        tool={tool}
+        onTogglePen={togglePen}
+        onToggleLaser={toggleLaser}
         onTogglePlay={() => setPlaying((v) => !v)}
         onPrev={goPrev}
         onNext={goNext}

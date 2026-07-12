@@ -124,3 +124,16 @@ export const Upload = (p: SVGProps<SVGSVGElement>) => (
     <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
   </svg>
 );
+
+export const Pen = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 3 21l.5-4.5z" />
+  </svg>
+);
+
+export const Laser = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
+    <path d="M12 5V3M12 21v-2M5 12H3M21 12h-2M6.3 6.3 4.9 4.9M19.1 19.1l-1.4-1.4M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4" />
+  </svg>
+);

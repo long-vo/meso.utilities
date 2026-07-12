@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { Direction, Slide } from '../types';
+import { parseGroupsAttr } from '../lib/code-steps';
 
 interface Props {
   slide: Slide;
@@ -30,10 +31,30 @@ export default function SlideView({
     const root = contentRef.current;
     if (!root) return;
 
-    root.querySelectorAll<HTMLElement>('.fragment').forEach((f) => {
+    const fragments = root.querySelectorAll<HTMLElement>('.fragment');
+    fragments.forEach((f) => {
       const i = Number(f.getAttribute('data-fragment') ?? '0');
       f.classList.toggle('fragment-visible', i <= step);
     });
+
+    // Stepped code blocks continue where `+++` fragments stop: after the last
+    // fragment step, each further step activates the next highlight group of
+    // each ```lang {a|b|c} block, in document order.
+    let offset = Math.max(1, fragments.length) - 1;
+    root
+      .querySelectorAll<HTMLElement>('pre[data-code-steps]')
+      .forEach((pre) => {
+        const groups = parseGroupsAttr(pre.getAttribute('data-code-steps') ?? '');
+        if (groups.length === 0) return;
+        const active = Math.max(0, Math.min(groups.length - 1, step - offset));
+        offset += groups.length - 1;
+        const activeLines = new Set(groups[active]);
+        pre.querySelectorAll<HTMLElement>('.code-line').forEach((line) => {
+          const n = Number(line.getAttribute('data-line') ?? '0');
+          line.classList.toggle('code-line-active', activeLines.has(n));
+          line.classList.toggle('code-line-dim', !activeLines.has(n));
+        });
+      });
 
     let order = 0;
     root.querySelectorAll<HTMLElement>('.anim').forEach((el) => {

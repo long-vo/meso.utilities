@@ -848,7 +848,7 @@ button.wheel-chip:hover .chip-x {
 /* ---- layout ---- */
 .layout {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-columns: var(--controls-w, 320px) minmax(0, 1fr);
   grid-template-areas:
     "controls editor"
     "controls result";
@@ -871,6 +871,50 @@ button.wheel-chip:hover .chip-x {
   grid-area: controls;
   position: sticky;
   top: 86px;
+}
+
+/* Drag handle injected by resize.js, straddling the sidebar's right edge.
+   The wide transparent hit area carries a thin centred grip via ::before. */
+.controls-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -8px;
+  width: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none; /* pointer drag, never a scroll gesture */
+  z-index: 2;
+}
+.controls-resizer::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 50%;
+  width: 3px;
+  transform: translateX(-50%);
+  border-radius: 3px;
+  background: var(--accent);
+  opacity: 0; /* hidden until the resize edge itself is hovered/focused */
+  transition: opacity 0.15s ease;
+}
+/* Reveal only over the resize edge — or while the handle is focused or a
+   drag is in progress (a fast drag can carry the pointer off the edge). */
+.controls-resizer:hover::before,
+.controls-resizer:focus-visible::before,
+.is-resizing .controls-resizer::before {
+  opacity: 1;
+}
+.controls-resizer:focus-visible {
+  outline: none; /* the grip itself lights up; a boxy outline in the gap looks off */
+}
+/* While dragging, keep the resize cursor everywhere and suppress text selection. */
+body.is-resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .editor {
@@ -1261,6 +1305,11 @@ select:focus {
   }
   .controls {
     position: static;
+  }
+  /* Sidebar is full-width and stacked here, so `--controls-w` is unused —
+     the drag handle has nothing meaningful to control. */
+  .controls-resizer {
+    display: none;
   }
   .editor,
   .result {

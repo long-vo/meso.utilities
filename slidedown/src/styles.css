@@ -1153,3 +1153,115 @@ body {
     box-sizing: border-box;
   }
 }
+
+/* ------------------------------ code step-through ------------------------- */
+/* Lines of a ```lang {…} block; groups activate like fragments. */
+.code-line {
+  display: block;
+  border-radius: 4px;
+  transition: background 0.18s ease, opacity 0.18s ease;
+}
+
+.code-line-active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.code-stepped .code-line-dim {
+  opacity: 0.35;
+}
+
+/* ------------------------------- slide layouts ---------------------------- */
+.slide-content {
+  position: relative; /* anchors .slide-bg and layout stacking */
+}
+
+.slide-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.slide-content > :not(.slide-bg) {
+  position: relative;
+  z-index: 1;
+}
+
+.cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  align-items: start;
+  height: 100%;
+}
+
+.col > :first-child {
+  margin-top: 0;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  align-items: center;
+  height: 100%;
+}
+
+.split-media img {
+  width: 100%;
+  max-height: 560px;
+  object-fit: contain;
+  border-radius: 10px;
+  display: block;
+}
+
+.split-right .split-media {
+  order: 2;
+}
+
+.split-body > :first-child {
+  margin-top: 0;
+}
+
+/* --------------------------- presenter annotations ------------------------ */
+.pan-layer {
+  position: relative;
+}
+
+.annotation-layer {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  pointer-events: none;
+  z-index: 5;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.annotation-layer canvas {
+  display: block;
+  pointer-events: none;
+}
+
+.annotation-layer.tool-pen canvas {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
+.laser-dot {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ff4b4b 0%, #ff4b4b 55%, rgba(255, 75, 75, 0) 75%);
+  box-shadow: 0 0 12px 4px rgba(255, 75, 75, 0.55);
+  pointer-events: none;
+  opacity: 0;
+}
+
+/* While the laser is on, the dot replaces the system cursor over the slide
+   area (the control bar below keeps a normal cursor). */
+.presentation.tool-laser .stage-wrap,
+.presentation.tool-laser .stage-wrap * {
+  cursor: none !important;
+}

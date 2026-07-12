@@ -15,6 +15,9 @@ export interface NavHandlers {
   onToggleSpeaker: () => void;
   onExport: () => void;
   onTogglePlay: () => void;
+  onTogglePen: () => void;
+  onToggleLaser: () => void;
+  onClearAnnotations: () => void;
 }
 
 /**
@@ -98,6 +101,21 @@ export function useKeyboardNav(handlers: NavHandlers): void {
         case 'P':
           e.preventDefault();
           h.onTogglePlay();
+          break;
+        case 'd':
+        case 'D':
+          e.preventDefault();
+          h.onTogglePen();
+          break;
+        case 'w':
+        case 'W':
+          e.preventDefault();
+          h.onToggleLaser();
+          break;
+        case 'c':
+        case 'C':
+          e.preventDefault();
+          h.onClearAnnotations();
           break;
         case 'Escape':
           h.onEscape();

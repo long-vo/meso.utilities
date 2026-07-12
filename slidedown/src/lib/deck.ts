@@ -2,6 +2,7 @@ import type { Deck, DeckMeta, ProtoSlide, ThemeName } from '../types';
 import { THEMES } from '../types';
 import { renderMarkdown } from './markdown';
 import { applyAnimations } from './animate';
+import { countExtraSteps } from './code-steps';
 
 /**
  * Natural, case-insensitive filename compare so that
@@ -74,6 +75,59 @@ function asTheme(value: string | undefined): ThemeName | undefined {
 const SLIDE_BREAK = /^[ \t]*---[ \t]*$/m;
 const NOTES_BREAK = /^[ \t]*\?\?\?[ \t]*$/m;
 const FRAGMENT_BREAK = /^[ \t]*\+\+\+[ \t]*$/m;
+// `|||` splits the two halves of an `@columns` slide.
+const COLUMN_BREAK = /^[ \t]*\|\|\|[ \t]*$/m;
+
+// ------------------------------------------------------------ slide layout
+// Slide-level directives on their own lines at the top of a slide chunk:
+//   @background <css colour | image url>
+//   @columns                (split the slide at a ||| line into two columns)
+//   @image-left <url>       (media half + content half; also @image-right)
+const LAYOUT_DIRECTIVE = /^[ \t]*@(background|columns|image-left|image-right)(?:[ \t]+(\S.*?))?[ \t]*$/;
+
+interface SlideLayout {
+  background?: string;
+  columns?: boolean;
+  image?: { src: string; side: 'left' | 'right' };
+}
+
+/** Strip leading layout directives off a slide chunk. */
+function extractLayout(body: string): { body: string; layout: SlideLayout } {
+  const lines = body.split(/\r?\n/);
+  const layout: SlideLayout = {};
+  let i = 0;
+  while (i < lines.length) {
+    if (lines[i].trim() === '') {
+      i++;
+      continue;
+    }
+    const match = lines[i].match(LAYOUT_DIRECTIVE);
+    if (!match) break;
+    const [, name, value] = match;
+    if (name === 'background' && value) layout.background = value.trim();
+    else if (name === 'columns') layout.columns = true;
+    else if ((name === 'image-left' || name === 'image-right') && value) {
+      layout.image = { src: value.trim(), side: name === 'image-left' ? 'left' : 'right' };
+    }
+    i++;
+  }
+  return { body: lines.slice(i).join('\n'), layout };
+}
+
+/**
+ * A full-bleed background layer, baked into the slide HTML so the live view,
+ * thumbnails, speaker view and PDF export all get it for free. The value is
+ * restricted to harmless CSS characters; anything else is dropped.
+ */
+function backgroundDiv(value: string): string {
+  if (!/^[-\w#%(),./: ]+$/.test(value)) return '';
+  const isColor = /^(#|rgb|hsl|linear-gradient|var\()/i.test(value) ||
+    /^[a-z]+$/i.test(value);
+  const style = isColor
+    ? `background:${value}`
+    : `background-image:url('${value}');background-size:cover;background-position:center`;
+  return `<div class="slide-bg" style="${style}"></div>`;
+}
 
 // Lazily-loaded Mermaid helper, imported only when a slide uses a diagram.
 let mermaidMod: typeof import('./mermaid') | null = null;
@@ -84,36 +138,55 @@ async function enhanceDiagrams(html: string): Promise<string> {
   return mermaidMod.renderMermaidInHtml(html);
 }
 
-/** Render one slide chunk (body + optional notes + optional fragments). */
+/** Render one slide chunk (directives + body + optional notes/fragments). */
 async function chunkToProto(
   chunk: string,
   filename: string,
   fallbackTitle: string,
 ): Promise<ProtoSlide> {
   const [rawBody, ...noteParts] = chunk.split(NOTES_BREAK);
-  const body = rawBody.trim();
+  const { body: stripped, layout } = extractLayout(rawBody.trim());
+  const body = stripped.trim();
   const notesSrc = noteParts.join('\n\n').trim();
-
-  const fragments = body
-    .split(FRAGMENT_BREAK)
-    .map((f) => f.trim())
-    .filter(Boolean);
 
   let html: string;
   let fragmentCount = 1;
-  if (fragments.length > 1) {
-    fragmentCount = fragments.length;
-    html = fragments
-      .map(
-        (f, i) =>
-          `<div class="fragment" data-fragment="${i}">${renderMarkdown(f)}</div>`,
-      )
-      .join('\n');
+  if (layout.columns) {
+    // Columns take the whole body; `+++` fragments are not split inside them.
+    const [left, right = ''] = body.split(COLUMN_BREAK);
+    html = `<div class="cols"><div class="col">${renderMarkdown(left)}</div>` +
+      `<div class="col">${renderMarkdown(right)}</div></div>`;
   } else {
-    html = renderMarkdown(body);
+    const fragments = body
+      .split(FRAGMENT_BREAK)
+      .map((f) => f.trim())
+      .filter(Boolean);
+    if (fragments.length > 1) {
+      fragmentCount = fragments.length;
+      html = fragments
+        .map(
+          (f, i) =>
+            `<div class="fragment" data-fragment="${i}">${renderMarkdown(f)}</div>`,
+        )
+        .join('\n');
+    } else {
+      html = renderMarkdown(body);
+    }
   }
+
+  if (layout.image) {
+    // Rendering the image through markdown keeps DOMPurify in charge of it.
+    const media = renderMarkdown(`![](${layout.image.src})`);
+    html = `<div class="split split-${layout.image.side}">` +
+      `<div class="split-media">${media}</div>` +
+      `<div class="split-body">${html}</div></div>`;
+  }
+  if (layout.background) html = backgroundDiv(layout.background) + html;
+
   html = await enhanceDiagrams(html);
   html = applyAnimations(html);
+  // Stepped code blocks (```js {1|2-3}) advance like extra fragments.
+  fragmentCount += countExtraSteps(html);
 
   const notes = notesSrc
     ? await enhanceDiagrams(renderMarkdown(notesSrc))
