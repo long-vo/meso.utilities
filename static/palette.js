@@ -33,7 +33,8 @@ const TOOL_LINKS = [
     href: "decode/",
     keywords: ["base64", "jwt", "hex", "gzip", "url"],
   },
-  { icon: "🛰️", title: "REST Client", href: "rest/", keywords: ["http", "api", "curl", "request"] },
+  // REST hidden — restore this entry to re-list the REST Client in the palette.
+  // { icon: "🛰️", title: "REST Client", href: "rest/", keywords: ["http", "api", "curl", "request"] },
   {
     icon: "📽️",
     title: "Slidedown",

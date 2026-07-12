@@ -35,7 +35,8 @@ const els = {
   logfile: $("logfile"),
   logfileName: $("logfile-name"),
   sendDecode: $("send-decode"),
-  sendRest: $("send-rest"),
+  // REST hidden — restore alongside the send-rest button and its listener/command.
+  // sendRest: $("send-rest"),
 };
 
 /** "json" or "log". */
@@ -436,7 +437,7 @@ els.clear.addEventListener("click", clearAll);
 els.copy.addEventListener("click", copyResult);
 els.download.addEventListener("click", downloadResult);
 els.sendDecode.addEventListener("click", () => sendResultTo("decode"));
-els.sendRest.addEventListener("click", () => sendResultTo("rest"));
+// REST hidden — els.sendRest.addEventListener("click", () => sendResultTo("rest"));
 // (theme toggle is wired by the shared theme.js module)
 
 registerCommands([
@@ -466,12 +467,13 @@ registerCommands([
     hint: "action",
     run: () => sendResultTo("decode"),
   },
-  {
-    icon: "🛰️",
-    title: "Send result to REST Client",
-    hint: "action",
-    run: () => sendResultTo("rest"),
-  },
+  // REST hidden — restore to re-list "Send result to REST Client" in the palette.
+  // {
+  //   icon: "🛰️",
+  //   title: "Send result to REST Client",
+  //   hint: "action",
+  //   run: () => sendResultTo("rest"),
+  // },
 ]);
 
 // An incoming handoff from another tool wins over the default example. The

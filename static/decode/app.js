@@ -18,7 +18,8 @@ const els = {
   download: $("download"),
   clear: $("clear"),
   sendSanitize: $("send-sanitize"),
-  sendRest: $("send-rest"),
+  // REST hidden — restore alongside the send-rest button and its listener/command.
+  // sendRest: $("send-rest"),
   toast: $("toast"),
   exampleJwt: $("example-jwt"),
   exampleGzip: $("example-gzip"),
@@ -377,7 +378,7 @@ els.exampleGzip.addEventListener("click", () => setExample(EXAMPLES.gzip));
 els.exampleUrl.addEventListener("click", () => setExample(EXAMPLES.url));
 els.exampleEscaped.addEventListener("click", () => setExample(EXAMPLES.escaped));
 els.sendSanitize.addEventListener("click", () => sendResultTo("sanitize"));
-els.sendRest.addEventListener("click", () => sendResultTo("rest"));
+// REST hidden — els.sendRest.addEventListener("click", () => sendResultTo("rest"));
 els.modeDecode.addEventListener("click", () => setPageMode("decode"));
 els.modeEncode.addEventListener("click", () => setPageMode("encode"));
 els.layerUndo.addEventListener("click", () => {
@@ -429,12 +430,13 @@ registerCommands([
     hint: "action",
     run: () => sendResultTo("sanitize"),
   },
-  {
-    icon: "🛰️",
-    title: "Send result to REST Client",
-    hint: "action",
-    run: () => sendResultTo("rest"),
-  },
+  // REST hidden — restore to re-list "Send result to REST Client" in the palette.
+  // {
+  //   icon: "🛰️",
+  //   title: "Send result to REST Client",
+  //   hint: "action",
+  //   run: () => sendResultTo("rest"),
+  // },
 ]);
 
 // An incoming handoff from another tool wins over the default example.
