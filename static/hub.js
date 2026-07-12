@@ -119,30 +119,10 @@ function writeFavOnly(on) {
   }
 }
 
-// Toggle pill, in its own toolbar row just above the cards grid.
-const favFilterBtn = document.createElement("button");
-favFilterBtn.type = "button";
-favFilterBtn.id = "fav-filter";
-favFilterBtn.className = "pill pill-toggle";
-const favFilterStar = document.createElement("span");
-favFilterStar.setAttribute("aria-hidden", "true");
-favFilterStar.textContent = "★";
-favFilterBtn.append(favFilterStar, " Favourites only");
-
-// Hint shown in place of the grid when the filter is on but nothing is starred.
-const favEmptyState = document.createElement("p");
-favEmptyState.className = "cards-empty";
-favEmptyState.hidden = true;
-favEmptyState.textContent = "No favourites yet — tap ☆ on a tool to pin it here.";
-
-if (cardsSection) {
-  const toolbar = document.createElement("div");
-  toolbar.className = "cards-toolbar";
-  toolbar.appendChild(favFilterBtn);
-  cardsSection.before(toolbar);
-  cardsSection.after(favEmptyState);
-  cardsSection.classList.add("has-toolbar");
-}
+// The toggle pill and empty-state hint live in the static HTML (so the grid
+// doesn't shift when this deferred module runs); here we just wire them up.
+const favFilterBtn = document.getElementById("fav-filter");
+const favEmptyState = document.querySelector(".cards-empty");
 
 /** Hide non-favourites when the filter is on; show the hint if none remain. */
 function applyFilter() {

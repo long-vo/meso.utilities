@@ -6,6 +6,13 @@
   <title>meso.utilities — small tools for the team</title>
   <meta name="description" content="A collection of small, self-contained team utilities: JSON sanitizer, scrum poker and more." />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%A7%B0%3C/text%3E%3C/svg%3E" />
+  <!-- Apply the saved theme before first paint so the deferred theme.js can't cause a flash. -->
+  <script>
+    try {
+      var t = localStorage.getItem("meso-theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) { /* storage unavailable; keep the default dark theme */ }
+  </script>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body class="page-hub">
@@ -36,7 +43,13 @@
         or press <kbd>Ctrl/⌘</kbd> <kbd>K</kbd> to jump between tools from anywhere.</p>
     </section>
 
-    <section class="cards" aria-label="Available tools">
+    <div class="cards-toolbar">
+      <button type="button" id="fav-filter" class="pill pill-toggle">
+        <span aria-hidden="true">★</span> Favourites only
+      </button>
+    </div>
+
+    <section class="cards has-toolbar" aria-label="Available tools">
       <a class="card" data-tool="sanitize" href="./sanitize/">
         <div class="card-head">
           <span class="card-icon" aria-hidden="true">🔒</span>
@@ -112,6 +125,8 @@
         </div>
       </a>
     </section>
+
+    <p class="cards-empty" hidden>No favourites yet — tap ☆ on a tool to pin it here.</p>
 
     <section class="hub-share" aria-label="Like and share">
       <div class="hub-share-text">
