@@ -3,6 +3,7 @@ import type { Deck, ThemeName } from '../types';
 import { isSupportedFile, sampleSlides, slidesFromFiles } from '../lib/deck';
 import { Upload } from './Icons';
 import ThemeMenu from './ThemeMenu';
+import logoUrl from '../assets/mesoneer-logo.jpg';
 
 interface Props {
   onLoad: (deck: Deck) => void;
@@ -68,6 +69,19 @@ export default function StartScreen({ onLoad, theme, onSetTheme }: Props) {
 
   return (
     <div className="start">
+      <nav className="start-brand" aria-label="Breadcrumb">
+        <a className="start-brand-link" href="../" title="All utilities">
+          <img className="start-brand-mark" src={logoUrl} alt="" aria-hidden="true" />
+          <span className="start-brand-name">meso.utilities</span>
+        </a>
+        <span className="start-crumb-sep" aria-hidden="true">
+          /
+        </span>
+        <span className="start-crumb-current">
+          <span aria-hidden="true">📽️</span> Slidedown
+        </span>
+      </nav>
+
       <div className="start-theme">
         <ThemeMenu theme={theme} onSelect={onSetTheme} direction="down" />
       </div>

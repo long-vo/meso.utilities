@@ -1265,3 +1265,60 @@ body {
 .presentation.tool-laser .stage-wrap * {
   cursor: none !important;
 }
+
+/* --------------------------- start-screen breadcrumb ---------------------- */
+/* Mirrors the hub tools' top-left brand: logo + name linking back to the
+   utilities hub, with the current tool as the crumb. */
+.start-brand {
+  position: fixed;
+  top: 18px;
+  left: 18px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.start-brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.start-brand-link:hover .start-brand-name {
+  color: var(--accent);
+}
+
+.start-brand-mark {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  display: block;
+}
+
+.start-brand-name {
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  font-size: 15px;
+}
+
+.start-crumb-sep {
+  color: var(--ink-soft);
+}
+
+.start-crumb-current {
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .start-brand-name,
+  .start-crumb-sep,
+  .start-crumb-current {
+    display: none; /* keep just the logo on small screens */
+  }
+}
