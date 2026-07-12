@@ -25,6 +25,8 @@ import {
   toVariableMap,
   validateUrl,
 } from "./rest.mjs";
+import { parseCurlCommand } from "./curl.mjs";
+import { extractJsonPath, variableStringFor } from "./jsonpath.mjs";
 import { sendHandoff, takeHandoff } from "../handoff.mjs";
 import { registerCommands } from "../palette.js";
 
@@ -63,6 +65,22 @@ const els = {
   copyBody: $("copy-body"),
   sendSanitize: $("send-sanitize"),
   sendDecode: $("send-decode"),
+  importCurl: $("import-curl"),
+  curlBox: $("curl-box"),
+  curlInput: $("curl-input"),
+  curlApply: $("curl-apply"),
+  curlCancel: $("curl-cancel"),
+  curlError: $("curl-error"),
+  respTools: $("resp-tools"),
+  viewTree: $("view-tree"),
+  viewRaw: $("view-raw"),
+  respSearch: $("resp-search"),
+  respTree: $("resp-tree"),
+  respRaw: $("resp-raw"),
+  capturePath: $("capture-path"),
+  capturePreview: $("capture-preview"),
+  captureName: $("capture-name"),
+  captureSave: $("capture-save"),
   toast: $("toast"),
   envEmpty: $("env-empty"),
   envEditor: $("env-editor"),
@@ -92,6 +110,10 @@ const EXAMPLE = {
 
 /** Latest response body text, for the copy button. */
 let lastBodyText = "";
+/** Parsed JSON of the latest response (undefined when not JSON). */
+let lastJsonValue;
+/** "tree" or "raw" — which body view is active for JSON responses. */
+let respView = "tree";
 /** AbortController of the in-flight request, if any. */
 let inflight;
 
@@ -699,6 +721,208 @@ function resetResponse() {
   els.respError.textContent = "";
   els.respBody.innerHTML = `<span class="j-null">// sending…</span>`;
   lastBodyText = "";
+  hideResponseTools();
+}
+
+/** Hide the JSON tree/capture tooling and fall back to the raw body view. */
+function hideResponseTools() {
+  lastJsonValue = undefined;
+  els.respTools.hidden = true;
+  els.respTree.hidden = true;
+  els.respRaw.hidden = false;
+}
+
+/* --------------------------- response JSON tree --------------------------- */
+
+/** Build the path of a child node, e.g. `$.items[0].id`. */
+function childPath(parentPath, key) {
+  if (typeof key === "number") return `${parentPath}[${key}]`;
+  return /^[A-Za-z_$][\w$-]*$/.test(key) ? `${parentPath}.${key}` : `${parentPath}['${key}']`;
+}
+
+/** One-line preview of a value for tree meta / capture feedback. */
+function shortPreview(value) {
+  const text = variableStringFor(value);
+  return text.length > 60 ? `${text.slice(0, 57)}…` : text;
+}
+
+/** Does this key/primitive match the tree search query? */
+function matchesQuery(query, key, value) {
+  if (String(key).toLowerCase().includes(query)) return true;
+  return value !== undefined && !isContainer(value) &&
+    variableStringFor(value).toLowerCase().includes(query);
+}
+
+function isContainer(value) {
+  return value !== null && typeof value === "object";
+}
+
+/** Class used by the raw highlighter for a primitive, reused in the tree. */
+function primitiveClass(value) {
+  if (typeof value === "string") return "j-str";
+  if (typeof value === "boolean") return "j-bool";
+  if (value === null) return "j-null";
+  return "j-num";
+}
+
+/**
+ * Build one tree node. Returns undefined when a search query is active and
+ * nothing in this branch matches. Containers render as <details>, leaves as
+ * clickable rows that fill the capture-path input.
+ */
+function buildTreeNode(key, value, path, query, depth) {
+  if (!isContainer(value)) {
+    const isHit = query !== "" && matchesQuery(query, key, value);
+    if (query !== "" && !isHit) return undefined;
+    const row = document.createElement("div");
+    row.className = "tree-row" + (isHit ? " hit" : "");
+    row.title = `${path} — click to use this path`;
+    const keySpan = document.createElement("span");
+    keySpan.className = "tree-key";
+    keySpan.textContent = String(key);
+    const valueSpan = document.createElement("span");
+    valueSpan.className = primitiveClass(value);
+    valueSpan.textContent = typeof value === "string" ? `"${value}"` : String(value);
+    row.append(keySpan, document.createTextNode(": "), valueSpan);
+    row.addEventListener("click", () => {
+      els.capturePath.value = path;
+      refreshCapturePreview();
+    });
+    return row;
+  }
+
+  const entries = Array.isArray(value)
+    ? value.map((item, index) => [index, item])
+    : Object.entries(value);
+  const children = [];
+  for (const [childKey, childValue] of entries) {
+    const child = buildTreeNode(
+      childKey,
+      childValue,
+      childPath(path, childKey),
+      query,
+      depth + 1,
+    );
+    if (child) children.push(child);
+  }
+  const keyMatches = query !== "" && String(key).toLowerCase().includes(query);
+  if (query !== "" && children.length === 0 && !keyMatches) return undefined;
+
+  const node = document.createElement("details");
+  node.className = "tree-node";
+  node.open = query !== "" || depth < 2;
+  const summary = document.createElement("summary");
+  const keySpan = document.createElement("span");
+  keySpan.className = "tree-key" + (keyMatches ? " hit" : "");
+  keySpan.textContent = String(key);
+  const meta = document.createElement("span");
+  meta.className = "tree-meta";
+  meta.textContent = Array.isArray(value) ? `[${value.length}]` : `{${entries.length}}`;
+  summary.append(keySpan, document.createTextNode(" "), meta);
+  summary.title = path;
+  node.appendChild(summary);
+  const box = document.createElement("div");
+  box.className = "tree-children";
+  if (children.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "tree-row";
+    empty.innerHTML = `<span class="j-null">${Array.isArray(value) ? "[]" : "{}"}</span>`;
+    box.appendChild(empty);
+  }
+  for (const child of children) box.appendChild(child);
+  node.appendChild(box);
+  return node;
+}
+
+function renderJsonTree() {
+  els.respTree.innerHTML = "";
+  const query = els.respSearch.value.trim().toLowerCase();
+  const root = buildTreeNode("$", lastJsonValue, "$", query, 0);
+  if (!root) {
+    els.respTree.innerHTML = `<span class="j-null">// nothing matches the search</span>`;
+    return;
+  }
+  els.respTree.appendChild(root);
+}
+
+/** Show tree or raw body according to the toggle and response type. */
+function syncBodyView() {
+  const hasJson = lastJsonValue !== undefined;
+  const showTree = hasJson && respView === "tree";
+  els.viewTree.classList.toggle("is-active", showTree);
+  els.viewRaw.classList.toggle("is-active", !showTree);
+  els.viewTree.setAttribute("aria-selected", String(showTree));
+  els.viewRaw.setAttribute("aria-selected", String(!showTree));
+  els.respTree.hidden = !showTree;
+  els.respRaw.hidden = showTree;
+  els.respSearch.disabled = !showTree;
+  if (showTree) renderJsonTree();
+}
+
+/* --------------------------- capture into variable ------------------------ */
+
+function refreshCapturePreview() {
+  const path = els.capturePath.value.trim();
+  if (path === "" || lastJsonValue === undefined) {
+    els.capturePreview.textContent = "";
+    els.capturePreview.className = "capture-preview";
+    els.captureSave.disabled = true;
+    return;
+  }
+  const result = extractJsonPath(lastJsonValue, path);
+  els.capturePreview.textContent = result.ok
+    ? `= ${shortPreview(result.value)}`
+    : `✗ ${result.error}`;
+  els.capturePreview.className = "capture-preview " + (result.ok ? "ok" : "bad");
+  els.captureSave.disabled = !result.ok;
+}
+
+/** Save the extracted value as a variable in the active environment. */
+function captureVariable() {
+  const path = els.capturePath.value.trim();
+  const name = els.captureName.value.trim();
+  if (!/^[A-Za-z_][\w-]*$/.test(name)) {
+    showToast("Give the variable a name (letters, digits, _ or -)");
+    els.captureName.focus();
+    return;
+  }
+  const result = extractJsonPath(lastJsonValue, path);
+  if (!result.ok) {
+    showToast(`Nothing to capture — ${result.error}`);
+    return;
+  }
+  const state = readEnvironmentsState();
+  let active = activeEnvironment(state);
+  if (!active) {
+    active = { id: crypto.randomUUID(), name: "dev", variables: [] };
+    state.environments.push(active);
+    state.activeId = active.id;
+  }
+  const value = variableStringFor(result.value);
+  const existing = active.variables.find((variable) => variable.name === name);
+  if (existing) existing.value = value;
+  else active.variables.push({ name, value });
+  writeEnvironmentsState(state);
+  renderEnvironments();
+  showToast(`Captured {{${name}}} into "${active.name}"`);
+}
+
+/* ------------------------------- curl import ------------------------------ */
+
+function applyCurlImport(text) {
+  const parsed = parseCurlCommand(text);
+  if (!parsed.ok) {
+    els.curlError.textContent = parsed.error;
+    return false;
+  }
+  restoreRequest(parsed.request);
+  els.curlError.textContent = "";
+  els.curlBox.hidden = true;
+  els.curlInput.value = "";
+  showToast(
+    parsed.notes.length > 0 ? `curl imported · ${parsed.notes.join(", ")}` : "curl imported",
+  );
+  return true;
 }
 
 function renderResponse(response, bodyBuffer, durationMs) {
@@ -732,10 +956,13 @@ function renderResponse(response, bodyBuffer, durationMs) {
   }
 
   lastBodyText = text;
+  lastJsonValue = undefined;
   if (isJsonContentType(contentType)) {
     try {
-      const pretty = JSON.stringify(JSON.parse(text), null, 2);
+      const parsed = JSON.parse(text);
+      const pretty = JSON.stringify(parsed, null, 2);
       lastBodyText = pretty;
+      lastJsonValue = parsed;
       els.respBody.innerHTML = highlightJson(pretty);
     } catch {
       els.respBody.textContent = text; // declared JSON but isn't — show raw
@@ -746,6 +973,9 @@ function renderResponse(response, bodyBuffer, durationMs) {
   if (isTruncated) {
     els.respBody.innerHTML += `\n<span class="j-null">// … truncated for display</span>`;
   }
+  els.respTools.hidden = lastJsonValue === undefined;
+  refreshCapturePreview();
+  syncBodyView();
 }
 
 /* --------------------------------- send ---------------------------------- */
@@ -795,6 +1025,7 @@ async function send() {
     els.respBody.innerHTML = `<span class="j-null">// no response</span>`;
     els.respError.textContent = describeSendError(error);
     lastBodyText = "";
+    hideResponseTools();
   } finally {
     inflight = undefined;
     els.send.disabled = false;
@@ -909,6 +1140,49 @@ els.copyBody.addEventListener("click", () => {
 });
 els.sendSanitize.addEventListener("click", () => sendResponseTo("sanitize"));
 els.sendDecode.addEventListener("click", () => sendResponseTo("decode"));
+
+// curl import — via the toggle box, or by pasting a curl command into the URL
+els.importCurl.addEventListener("click", () => {
+  els.curlBox.hidden = !els.curlBox.hidden;
+  if (!els.curlBox.hidden) els.curlInput.focus();
+});
+els.curlApply.addEventListener("click", () => applyCurlImport(els.curlInput.value));
+els.curlCancel.addEventListener("click", () => {
+  els.curlBox.hidden = true;
+  els.curlError.textContent = "";
+});
+els.url.addEventListener("paste", (event) => {
+  const pasted = event.clipboardData?.getData("text") ?? "";
+  if (!/^\s*curl(\.exe)?\s/i.test(pasted)) return;
+  if (!parseCurlCommand(pasted).ok) return; // let a broken command paste normally
+  event.preventDefault();
+  applyCurlImport(pasted);
+});
+
+// response tooling — tree/raw toggle, tree search, capture into a variable
+els.viewTree.addEventListener("click", () => {
+  respView = "tree";
+  syncBodyView();
+});
+els.viewRaw.addEventListener("click", () => {
+  respView = "raw";
+  syncBodyView();
+});
+let searchTimer;
+els.respSearch.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    if (!els.respTree.hidden) renderJsonTree();
+  }, 150);
+});
+els.capturePath.addEventListener("input", refreshCapturePreview);
+els.captureSave.addEventListener("click", captureVariable);
+els.captureName.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") captureVariable();
+});
+els.capturePath.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") els.captureName.focus();
+});
 els.addHeader.addEventListener("click", () => addHeaderRow());
 els.beautifyBody.addEventListener("click", beautifyBody);
 els.loadExample.addEventListener("click", loadExample);
@@ -976,6 +1250,23 @@ registerCommands([
     },
   },
   { icon: "✨", title: "Load example request", hint: "action", run: loadExample },
+  {
+    icon: "⤵️",
+    title: "Import curl command",
+    hint: "action",
+    keywords: ["curl", "paste", "import"],
+    run: () => {
+      els.curlBox.hidden = false;
+      els.curlInput.focus();
+    },
+  },
+  {
+    icon: "🧲",
+    title: "Capture response value into a variable",
+    hint: "action",
+    keywords: ["capture", "extract", "token", "variable", "jsonpath"],
+    run: () => els.capturePath.focus(),
+  },
   {
     icon: "🔒",
     title: "Send response to Sanitize JSON",

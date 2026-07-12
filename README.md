@@ -99,6 +99,20 @@ body opens an autocomplete of the active environment's variables (↑↓ to sele
 Esc to close). Environments live in `localStorage` (key `meso-rest-environments`); variable values
 are masked in the editor by default.
 
+**Import curl:** the inverse of the export — click **Import curl** (or just paste a curl command
+into the URL field) and the method, URL, headers, auth and body fill themselves in.
+`Authorization:
+Bearer/Basic` headers land in the auth fields, multiple `-d` parts join like curl
+joins them, `-G` moves data into the query string, and anything that can't be imported (`-o`,
+`--retry`, …) is listed in the toast rather than silently dropped.
+
+**Response tooling & capture:** JSON responses get a **Tree** view — collapsible nodes with a search
+box that prunes the tree to matching keys/values — next to the raw pretty-print. Clicking any leaf
+fills the JSON-path box (`$.data.items[0].id`); the extracted value previews live, and **Capture**
+saves it as a `{{variable}}` in the active environment (one is created if none exists). That closes
+the login-then-call loop: send the login request, capture `$.access_token` as `{{token}}`, reference
+it in the next request.
+
 ## Palette & handoff
 
 Press **Ctrl/⌘ K** on any page (or the `⌘K` button in the top bar) to open the command palette: it
@@ -153,6 +167,8 @@ src/
   suggest.test.ts     sensitive-field suggestion tests (import the module from static/)
   encode.test.ts      encode-chain parity tests (roundtrip through decode.mjs)
   jwt.test.ts         JWT verification tests (import the module from static/decode/)
+  curl.test.ts        curl-import tests (roundtrip through buildCurlCommand)
+  jsonpath.test.ts    JSON-path extraction tests (import the module from static/rest/)
 static/
   index.html          hub / master page (lists all tools)
   styles.css          shared theme + hub + tool styles
@@ -177,6 +193,8 @@ static/
     index.html        REST Client UI
     app.js            REST UI logic + fetch (imports ./rest.mjs)
     rest.mjs          pure request/curl/format logic (imported by browser and tests)
+    curl.mjs          curl-command import parser (imported by browser and tests)
+    jsonpath.mjs      JSON-path extraction for capture (imported by browser and tests)
 slidedown/            Slidedown viewer (Vite/React/TS) — built into /slidedown/ at deploy time
 ```
 
