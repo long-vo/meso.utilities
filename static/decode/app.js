@@ -2,6 +2,8 @@
 // Imports the same detection module the tests exercise; input never leaves
 // the page.
 import { decodeAll } from "./decode.mjs";
+import { sendHandoff, takeHandoff } from "../handoff.mjs";
+import { registerCommands } from "../palette.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -13,6 +15,8 @@ const els = {
   copy: $("copy"),
   download: $("download"),
   clear: $("clear"),
+  sendSanitize: $("send-sanitize"),
+  sendRest: $("send-rest"),
   toast: $("toast"),
   exampleJwt: $("example-jwt"),
   exampleGzip: $("example-gzip"),
@@ -186,6 +190,16 @@ function downloadResult() {
   showToast(`Downloaded ${name}`);
 }
 
+/** Hand the final decoded text to another tool — consumed on its page load. */
+function sendResultTo(target) {
+  if (!lastFinal) return;
+  if (!sendHandoff(sessionStorage, target, lastFinal.text, "Decode Anything")) {
+    showToast("Result too large to hand off — use Copy instead");
+    return;
+  }
+  location.href = `../${target}/`;
+}
+
 function setExample(text) {
   els.input.value = text;
   compute();
@@ -207,7 +221,50 @@ els.exampleJwt.addEventListener("click", () => setExample(EXAMPLES.jwt));
 els.exampleGzip.addEventListener("click", () => setExample(EXAMPLES.gzip));
 els.exampleUrl.addEventListener("click", () => setExample(EXAMPLES.url));
 els.exampleEscaped.addEventListener("click", () => setExample(EXAMPLES.escaped));
+els.sendSanitize.addEventListener("click", () => sendResultTo("sanitize"));
+els.sendRest.addEventListener("click", () => sendResultTo("rest"));
 // (theme toggle is wired by the shared theme.js module)
 
-// Start with the JWT example so the page looks alive.
-setExample(EXAMPLES.jwt);
+registerCommands([
+  { icon: "📋", title: "Copy result", hint: "action", run: copyResult },
+  { icon: "⬇️", title: "Download result", hint: "action", run: downloadResult },
+  {
+    icon: "✨",
+    title: "Load JWT example",
+    hint: "action",
+    keywords: ["jwt", "example"],
+    run: () => setExample(EXAMPLES.jwt),
+  },
+  {
+    icon: "🔒",
+    title: "Send result to Sanitize JSON",
+    hint: "action",
+    run: () => sendResultTo("sanitize"),
+  },
+  {
+    icon: "🛰️",
+    title: "Send result to REST Client",
+    hint: "action",
+    run: () => sendResultTo("rest"),
+  },
+]);
+
+// An incoming handoff from another tool wins over the default example.
+function receiveHandoff() {
+  const handoff = takeHandoff(sessionStorage, "decode");
+  if (!handoff) return false;
+  setExample(handoff.text);
+  showToast(`Received from ${handoff.from || "another tool"}`);
+  return true;
+}
+
+// Re-check on back/forward-cache restores too (Send to → Back → Send to again
+// revives this page without re-running the script).
+globalThis.addEventListener("pageshow", (event) => {
+  if (event.persisted) receiveHandoff();
+});
+
+if (!receiveHandoff()) {
+  // Start with the JWT example so the page looks alive.
+  setExample(EXAMPLES.jwt);
+}

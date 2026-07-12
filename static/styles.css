@@ -1701,3 +1701,142 @@ select:focus {
     -webkit-text-fill-color: transparent;
   }
 }
+
+/* ---- command palette (Ctrl/⌘ K, all pages) ---- */
+kbd {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  padding: 2px 6px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--bg-inset);
+  color: var(--text);
+}
+/* The hub-intro shortcut hint gets the accent so it stands out. */
+.hub-intro kbd {
+  color: var(--accent);
+  font-weight: 600;
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-inset));
+}
+
+.palette-hint {
+  width: auto;
+  padding: 0 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  backdrop-filter: blur(3px);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12vh 16px 16px;
+}
+
+.palette {
+  width: min(560px, 100%);
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.palette-input {
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  padding: 14px 16px;
+  font-size: 15px;
+  font-family: var(--sans);
+  outline: none;
+}
+
+.palette-list {
+  max-height: 320px;
+  overflow: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13.5px;
+  font-family: var(--sans);
+  text-align: left;
+}
+.palette-item:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.palette-item.is-active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.palette-icon {
+  width: 1.4em;
+  text-align: center;
+}
+.palette-title {
+  flex: 1;
+}
+.palette-hint-text {
+  color: var(--text-faint);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.palette-empty {
+  color: var(--text-dim);
+  padding: 14px 12px;
+  font-size: 13.5px;
+  text-align: center;
+}
+
+.palette-foot {
+  border-top: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 11.5px;
+  padding: 8px 14px;
+}
+
+/* ---- cross-tool handoff (send-to buttons in the result panels) ---- */
+.result-tools {
+  flex-wrap: wrap;
+}
+
+.send-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 2px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+
+.send-label {
+  color: var(--text-faint);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

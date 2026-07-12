@@ -15,7 +15,7 @@ no server code.
 ```sh
 deno task dev     # static file server on http://localhost:8000 (serves static/ only — NOT slidedown)
 deno task test    # run all parity tests
-deno task check   # type-check (only the three src/*.test.ts files — see gotcha below)
+deno task check   # type-check (only the src/*.test.ts files listed in deno.json — see gotcha below)
 deno task fmt     # format
 deno task lint    # lint
 ```
@@ -65,7 +65,10 @@ interactions (share-to-Slack, favourite stars, favourites-only filter — all pe
 need one. Shared assets live at the `static/` root and are referenced by every tool with relative
 paths: a **single** `styles.css` covers the hub and all tools (scope page-specific rules — the hub
 page uses `<main class="hub">`/`<body class="page-hub">`, tool pages use `<main class="layout">`),
-plus `theme.js` (dark/light toggle).
+plus `theme.js` (dark/light toggle), `palette.js` + `palette.mjs` (the Ctrl/⌘ K command palette —
+pages contribute page-specific actions via `registerCommands`) and `handoff.mjs` (the cross-tool
+"Send to" handoff over `sessionStorage`). Both shared `.mjs` modules follow the dual-consumption
+pattern and have parity tests.
 
 `sanitize.mjs`'s masking is lifted verbatim (semantics-wise) from the Slack `/sanitize-text`
 command; `src/sanitize.test.ts` exists to assert that parity.

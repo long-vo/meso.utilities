@@ -2,6 +2,8 @@
 // Imports the SAME masking module the server uses, so results are identical and
 // the payload never has to leave the page.
 import { parseFields, runSanitize, runSanitizeLog } from "./sanitize.mjs";
+import { sendHandoff, takeHandoff } from "./handoff.mjs";
+import { registerCommands } from "./palette.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -27,6 +29,8 @@ const els = {
   redact: $("redact"),
   logfile: $("logfile"),
   logfileName: $("logfile-name"),
+  sendDecode: $("send-decode"),
+  sendRest: $("send-rest"),
 };
 
 /** "json" or "log". */
@@ -321,6 +325,16 @@ function downloadResult() {
   showToast(`Downloaded ${name}`);
 }
 
+/** Hand the current result to another tool — its page consumes it on load. */
+function sendResultTo(target) {
+  if (!lastOutput) return;
+  if (!sendHandoff(sessionStorage, target, lastOutput, "Sanitize JSON")) {
+    showToast("Result too large to hand off — use Copy instead");
+    return;
+  }
+  location.href = `../${target}/`;
+}
+
 /* --------------------------------- wire --------------------------------- */
 
 els.fields.addEventListener("input", scheduleCompute);
@@ -363,7 +377,61 @@ els.loadExample.addEventListener("click", loadExample);
 els.clear.addEventListener("click", clearAll);
 els.copy.addEventListener("click", copyResult);
 els.download.addEventListener("click", downloadResult);
+els.sendDecode.addEventListener("click", () => sendResultTo("decode"));
+els.sendRest.addEventListener("click", () => sendResultTo("rest"));
 // (theme toggle is wired by the shared theme.js module)
 
-// Start with the example so the page looks alive.
-loadExample();
+registerCommands([
+  { icon: "📋", title: "Copy result", hint: "action", run: copyResult },
+  { icon: "⬇️", title: "Download result", hint: "action", run: downloadResult },
+  {
+    icon: "🔁",
+    title: "Switch JSON / Log mode",
+    hint: "action",
+    keywords: ["mode", "log", "json"],
+    run: () => setMode(mode === "log" ? "json" : "log"),
+  },
+  { icon: "✨", title: "Load example", hint: "action", run: loadExample },
+  {
+    icon: "🔍",
+    title: "Send result to Decode Anything",
+    hint: "action",
+    run: () => sendResultTo("decode"),
+  },
+  {
+    icon: "🛰️",
+    title: "Send result to REST Client",
+    hint: "action",
+    run: () => sendResultTo("rest"),
+  },
+]);
+
+// An incoming handoff from another tool wins over the default example. The
+// mode follows the payload: parseable JSON → JSON mode, anything else → Log.
+function receiveHandoff() {
+  const handoff = takeHandoff(sessionStorage, "sanitize");
+  if (!handoff) return false;
+  els.input.value = handoff.text;
+  let isJson = true;
+  try {
+    JSON.parse(handoff.text);
+  } catch {
+    isJson = false;
+  }
+  const nextMode = isJson ? "json" : "log";
+  if (mode !== nextMode) setMode(nextMode); // setMode recomputes
+  else compute();
+  showToast(`Received from ${handoff.from || "another tool"}`);
+  return true;
+}
+
+// Re-check on back/forward-cache restores too (Send to → Back → Send to again
+// revives this page without re-running the script).
+globalThis.addEventListener("pageshow", (event) => {
+  if (event.persisted) receiveHandoff();
+});
+
+if (!receiveHandoff()) {
+  // Start with the example so the page looks alive.
+  loadExample();
+}

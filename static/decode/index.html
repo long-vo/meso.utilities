@@ -22,6 +22,8 @@
       <span class="pill pill-privacy" title="Your data never leaves this page.">
         <span aria-hidden="true">🛡️</span> Runs in your browser
       </span>
+      <button id="palette-open" class="icon-btn palette-hint" type="button"
+        title="Command palette (Ctrl/⌘ K)" aria-label="Open command palette">⌘K</button>
       <button id="theme-toggle" class="icon-btn" type="button" aria-label="Toggle colour theme">
         <span class="theme-icon">🌙</span>
       </button>
@@ -78,6 +80,13 @@
         <div class="result-tools">
           <button id="copy" class="btn btn-small" type="button">Copy result</button>
           <button id="download" class="btn btn-small" type="button">Download</button>
+          <span class="send-group" role="group" aria-label="Send the result to another tool">
+            <span class="send-label" aria-hidden="true">Send to</span>
+            <button id="send-sanitize" class="btn btn-small" type="button"
+              title="Mask the decoded result in Sanitize JSON">🔒 Sanitize</button>
+            <button id="send-rest" class="btn btn-small" type="button"
+              title="Use the decoded result as the REST Client request body">🛰️ REST</button>
+          </span>
         </div>
       </div>
       <div id="steps" class="steps" aria-live="polite">

@@ -25,6 +25,8 @@ import {
   toVariableMap,
   validateUrl,
 } from "./rest.mjs";
+import { sendHandoff, takeHandoff } from "../handoff.mjs";
+import { registerCommands } from "../palette.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -59,6 +61,8 @@ const els = {
   respBody: $("resp-body"),
   respError: $("resp-error"),
   copyBody: $("copy-body"),
+  sendSanitize: $("send-sanitize"),
+  sendDecode: $("send-decode"),
   toast: $("toast"),
   envEmpty: $("env-empty"),
   envEditor: $("env-editor"),
@@ -834,6 +838,16 @@ function copyCurl() {
   );
 }
 
+/** Hand the response body to another tool — consumed on its page load. */
+function sendResponseTo(target) {
+  if (lastBodyText === "") return;
+  if (!sendHandoff(sessionStorage, target, lastBodyText, "REST Client")) {
+    showToast("Response too large to hand off — use Copy instead");
+    return;
+  }
+  location.href = `../${target}/`;
+}
+
 function beautifyBody() {
   const result = formatJsonBody(els.body.value);
   if (!result.ok) {
@@ -893,6 +907,8 @@ els.copyCurl.addEventListener("click", copyCurl);
 els.copyBody.addEventListener("click", () => {
   if (lastBodyText !== "") copyText(lastBodyText, "Response body");
 });
+els.sendSanitize.addEventListener("click", () => sendResponseTo("sanitize"));
+els.sendDecode.addEventListener("click", () => sendResponseTo("decode"));
 els.addHeader.addEventListener("click", () => addHeaderRow());
 els.beautifyBody.addEventListener("click", beautifyBody);
 els.loadExample.addEventListener("click", loadExample);
@@ -948,8 +964,54 @@ for (const field of [els.url, els.body, els.authToken, els.authUser, els.authPas
 }
 // (theme toggle is wired by the shared theme.js module)
 
+registerCommands([
+  { icon: "🚀", title: "Send request", hint: "action", keywords: ["fetch", "go"], run: send },
+  { icon: "📋", title: "Copy as curl", hint: "action", keywords: ["export"], run: copyCurl },
+  {
+    icon: "📄",
+    title: "Copy response body",
+    hint: "action",
+    run: () => {
+      if (lastBodyText !== "") copyText(lastBodyText, "Response body");
+    },
+  },
+  { icon: "✨", title: "Load example request", hint: "action", run: loadExample },
+  {
+    icon: "🔒",
+    title: "Send response to Sanitize JSON",
+    hint: "action",
+    run: () => sendResponseTo("sanitize"),
+  },
+  {
+    icon: "🔍",
+    title: "Send response to Decode Anything",
+    hint: "action",
+    run: () => sendResponseTo("decode"),
+  },
+]);
+
 setHeadersFromText("");
 syncAuthInputs();
 syncBodyState();
 renderEnvironments();
 renderHistory();
+
+// An incoming handoff from another tool becomes the request body. GET/HEAD
+// would ignore it, so a bodyless method is bumped to POST.
+function receiveHandoff() {
+  const handoff = takeHandoff(sessionStorage, "rest");
+  if (!handoff) return;
+  els.body.value = handoff.text;
+  if (BODYLESS_METHODS.has(els.method.value)) els.method.value = "POST";
+  syncBodyState();
+  refreshVariableChips();
+  showToast(`Received from ${handoff.from || "another tool"} — set as request body`);
+}
+
+// Re-check on back/forward-cache restores too (Send to → Back → Send to again
+// revives this page without re-running the script).
+globalThis.addEventListener("pageshow", (event) => {
+  if (event.persisted) receiveHandoff();
+});
+
+receiveHandoff();

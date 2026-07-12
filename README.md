@@ -21,7 +21,8 @@ everything here runs entirely in your browser and deploys to GitHub Pages.
   for live rooms); the hub links straight to it.
 
 On the hub, the ☆ star at the top-right of each card marks a tool as a favourite — favourites float
-to the top of the grid and are remembered in your browser's `localStorage`.
+to the top of the grid and are remembered in your browser's `localStorage`. Every page also has a
+command palette — press **Ctrl/⌘ K** to jump between tools or run the current page's main actions.
 
 **Live:** <https://long-vo.github.io/meso.utilities/>
 
@@ -87,6 +88,17 @@ body opens an autocomplete of the active environment's variables (↑↓ to sele
 Esc to close). Environments live in `localStorage` (key `meso-rest-environments`); variable values
 are masked in the editor by default.
 
+## Palette & handoff
+
+Press **Ctrl/⌘ K** on any page (or the `⌘K` button in the top bar) to open the command palette: it
+jumps to any tool and runs the current page's main actions — copy result, send request, switch mode,
+toggle the theme — from the keyboard.
+
+Tools also chain into each other. The **Send to** buttons next to a tool's result hand the output to
+another tool: decode a payload, send it to Sanitize to mask it, then send the masked JSON to the
+REST client as a request body. The handoff travels through `sessionStorage` in your browser (same
+tab only, consumed on arrival, expires after 5 minutes) — nothing is uploaded.
+
 ## Run locally
 
 Requires Deno 2.x (used only as a dev toolchain — there is no server code).
@@ -124,10 +136,15 @@ src/
   sanitize.test.ts    parity tests (import the module from static/)
   decode.test.ts      decode-pipeline tests (import the module from static/decode/)
   rest.test.ts        REST-client logic tests (import the module from static/rest/)
+  handoff.test.ts     cross-tool handoff tests (import the module from static/)
+  palette.test.ts     command-palette filtering tests (import the module from static/)
 static/
   index.html          hub / master page (lists all tools)
   styles.css          shared theme + hub + tool styles
   theme.js            shared dark/light toggle
+  palette.js          shared command palette (Ctrl/⌘ K) overlay, on every page
+  palette.mjs         palette filtering/ranking (imported by the browser and the tests)
+  handoff.mjs         cross-tool "Send to" handoff (imported by the browser and the tests)
   hub.js              hub master-page interactions (share to Slack, favourite stars)
   sanitize.mjs        masking logic (imported by the browser and the tests)
   app.js              sanitizer UI logic (imports ./sanitize.mjs)
