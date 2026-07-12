@@ -203,6 +203,26 @@ body {
   margin: 0 auto;
   padding: 40px clamp(16px, 4vw, 40px) 24px;
 }
+
+/* Sticky footer: on short pages (e.g. a filtered/sparse grid) push the share
+   panel and footer to the bottom instead of leaving them floating mid-page. */
+body.page-hub {
+  display: flex;
+  flex-direction: column;
+}
+body.page-hub .hub {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+/* margin-top:auto pushes the share panel down and collapses to 0 when the grid
+   fills the page, so keep the cards' breathing room on a bottom margin instead. */
+body.page-hub .cards:has(.card:not(.card--hidden)) {
+  margin-bottom: 18px;
+}
+body.page-hub .hub-share {
+  margin-top: auto;
+}
 .hub-intro h1 {
   margin: 0 0 6px;
   font-size: 26px;
@@ -1346,6 +1366,45 @@ select:focus {
 }
 .fav-btn.is-fav {
   color: var(--warn);
+}
+
+/* ---- hub favourites filter ---- */
+
+.cards-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 28px;
+}
+.cards.has-toolbar {
+  margin-top: 14px;
+}
+
+.pill-toggle {
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.pill-toggle:hover {
+  border-color: var(--border-strong);
+}
+.pill-toggle.is-active {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
+  background: color-mix(in srgb, var(--warn) 12%, var(--bg-elev));
+}
+
+.card--hidden {
+  display: none;
+}
+
+.cards-empty {
+  margin: 8px 0 0;
+  padding: 28px 20px;
+  text-align: center;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
 }
 
 /* ---- REST Client tool ---- */

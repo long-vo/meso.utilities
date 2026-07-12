@@ -7,3 +7,6 @@ deno.lock
 .idea/
 .vscode/
 *.log
+
+# Plan
+docs/
