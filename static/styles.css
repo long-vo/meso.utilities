@@ -943,7 +943,9 @@ button.wheel-chip:hover .chip-x {
 
 /* mode-scoped visibility */
 body[data-mode="json"] .only-log,
-body[data-mode="log"] .only-json {
+body[data-mode="log"] .only-json,
+body[data-mode="decode"] .only-encode,
+body[data-mode="encode"] .only-decode {
   display: none;
 }
 
@@ -1869,4 +1871,32 @@ kbd {
 .chip-add:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* ---- decode: encode mode + JWT verification ---- */
+.layer-actions {
+  margin-top: 8px;
+}
+
+.jwt-verify {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.jwt-verify-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.jwt-verify-row .jwt-key {
+  flex: 1;
+  min-width: 180px;
+  font-family: var(--mono);
+  font-size: 12.5px;
 }

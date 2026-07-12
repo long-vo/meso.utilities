@@ -68,9 +68,15 @@ Decode Anything unwraps one layer at a time: each detector inspects the current 
 matches, produces the next value for the chain (e.g. Base64 → gzip → formatted JSON), up to 12
 layers. Detection is deliberately conservative — a Base64/hex decode is only accepted when the
 result is readable UTF-8 or a recognised binary format (gzip, zlib, PDF, PNG, ZIP, DER, …), so plain
-words, paths and IDs that merely look like an encoding are left alone. JWTs are decoded and their
-`exp` claim is summarised, but signatures are **not** verified. Everything runs in your browser;
-nothing is uploaded.
+words, paths and IDs that merely look like an encoding are left alone. JWTs are decoded, their time
+claims (`exp` / `nbf` / `iat`) are explained in human terms, and the signature can be verified in
+place — paste the HMAC secret or the JWK/JWKS JSON into the token card (HS/RS/PS/ES families, via
+WebCrypto). Everything runs in your browser; nothing is uploaded.
+
+**Encode mode** flips the pipeline: type plain text and stack layers — Base64 (standard or
+URL-safe), hex, URL percent-encoding, gzip+Base64, JSON escaping — in any order. Each click wraps
+the current result in one more layer, mirroring how the decoder unwraps them, so building a test
+payload is the same motion as reading one.
 
 ## How the REST client works
 
@@ -145,6 +151,8 @@ src/
   palette.test.ts     command-palette filtering tests (import the module from static/)
   diff.test.ts        diff-view line-pairing tests (import the module from static/)
   suggest.test.ts     sensitive-field suggestion tests (import the module from static/)
+  encode.test.ts      encode-chain parity tests (roundtrip through decode.mjs)
+  jwt.test.ts         JWT verification tests (import the module from static/decode/)
 static/
   index.html          hub / master page (lists all tools)
   styles.css          shared theme + hub + tool styles
@@ -163,6 +171,8 @@ static/
     index.html        Decode Anything UI
     app.js            decode UI logic (imports ./decode.mjs)
     decode.mjs        detection + unwrap pipeline (imported by browser and tests)
+    encode.mjs        encode-mode layer stacking (imported by browser and tests)
+    jwt.mjs           JWT verification + time claims (imported by browser and tests)
   rest/
     index.html        REST Client UI
     app.js            REST UI logic + fetch (imports ./rest.mjs)
