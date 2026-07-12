@@ -889,6 +889,7 @@ button.wheel-chip:hover .chip-x {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap; /* tight fit → the tools drop below the heading as one row */
   margin-bottom: 12px;
   gap: 10px;
 }
@@ -1159,6 +1160,7 @@ select:focus {
   font-size: 12.5px;
   color: var(--text-dim);
   cursor: pointer;
+  white-space: nowrap;
 }
 .switch input {
   accent-color: var(--accent);
@@ -1823,14 +1825,15 @@ kbd {
 /* ---- cross-tool handoff (send-to buttons in the result panels) ---- */
 .result-tools {
   flex-wrap: wrap;
+  row-gap: 8px;
 }
 
 .send-group {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-left: 2px;
-  padding-left: 12px;
+  padding-left: 10px;
   border-left: 1px solid var(--border);
 }
 
@@ -1839,4 +1842,31 @@ kbd {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+/* ---- sanitize: diff view + suggested-field chips ---- */
+.d-del,
+.d-add {
+  display: inline-block;
+  width: 100%;
+}
+.d-del {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
+}
+.d-add {
+  color: var(--good);
+  background: color-mix(in srgb, var(--good) 9%, transparent);
+}
+
+.chip-add {
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  border-style: dashed;
+  background: transparent;
+}
+.chip-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }

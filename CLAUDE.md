@@ -54,7 +54,7 @@ Tools come in three tiers:
 
 - **No-build, client-side** — live in `static/<tool>/` as ES modules + HTML, served as-is
   (`sanitize`, `decode`, `rest`). `sanitize` is the odd one out: its files sit at the `static/` root
-  (`app.js`, `sanitize.mjs`, `sanitize/index.html`).
+  (`app.js`, `sanitize.mjs`, `diff.mjs`, `suggest.mjs`, `sanitize/index.html`).
 - **Build-required** — `slidedown/`, compiled into `_site/slidedown/` only at deploy time.
 - **External/hosted** — Scrum Poker lives in its own repo (`meso.poker`) and is just linked from the
   hub with an ↗ card.

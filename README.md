@@ -40,6 +40,11 @@ Slack modal masked it.
   are masked entirely (short secrets never leak).
 - Strings and numbers are masked; booleans and `null` are left untouched.
 - If a matched key's value is a container, every leaf inside it is masked.
+- The **Diff** toggle shows the original next to the masked output, line by line — verify at a
+  glance that everything sensitive was caught, and nothing else was changed.
+- In JSON mode, **Suggested fields** scans the payload for keys that look sensitive — by name
+  (`password`, `…Name`, `phone…`) or by value shape (emails, IBANs, JWTs, card numbers, tokens) —
+  and offers anything missing from your mask list as a one-click chip.
 
 ## Log files
 
@@ -138,6 +143,8 @@ src/
   rest.test.ts        REST-client logic tests (import the module from static/rest/)
   handoff.test.ts     cross-tool handoff tests (import the module from static/)
   palette.test.ts     command-palette filtering tests (import the module from static/)
+  diff.test.ts        diff-view line-pairing tests (import the module from static/)
+  suggest.test.ts     sensitive-field suggestion tests (import the module from static/)
 static/
   index.html          hub / master page (lists all tools)
   styles.css          shared theme + hub + tool styles
@@ -147,6 +154,8 @@ static/
   handoff.mjs         cross-tool "Send to" handoff (imported by the browser and the tests)
   hub.js              hub master-page interactions (share to Slack, favourite stars)
   sanitize.mjs        masking logic (imported by the browser and the tests)
+  diff.mjs            line-pair diff for the sanitizer's Diff view (browser and tests)
+  suggest.mjs         sensitive-field suggestions (browser and tests)
   app.js              sanitizer UI logic (imports ./sanitize.mjs)
   sanitize/
     index.html        Sanitize JSON UI

@@ -2,6 +2,8 @@
 // Imports the SAME masking module the server uses, so results are identical and
 // the payload never has to leave the page.
 import { parseFields, runSanitize, runSanitizeLog } from "./sanitize.mjs";
+import { changedCount, pairLineDiff } from "./diff.mjs";
+import { suggestSensitiveFields } from "./suggest.mjs";
 import { sendHandoff, takeHandoff } from "./handoff.mjs";
 import { registerCommands } from "./palette.js";
 
@@ -17,7 +19,10 @@ const els = {
   output: $("output"),
   stats: $("stats"),
   chips: $("field-chips"),
+  suggestBox: $("suggest-box"),
+  suggestChips: $("suggest-chips"),
   minify: $("minify"),
+  diff: $("diff"),
   copy: $("copy"),
   download: $("download"),
   loadExample: $("load-example"),
@@ -159,6 +164,45 @@ function renderStats(stats, fields) {
       : "");
 }
 
+/**
+ * Render a before/after line diff into the output — masking changes values in
+ * place, so line N pairs with line N — and append a changed-line count to the
+ * stats row (call after the stats are rendered).
+ */
+function renderDiff(beforeText, afterText) {
+  const rows = pairLineDiff(beforeText, afterText);
+  els.output.innerHTML = rows
+    .map((row) =>
+      row.changed
+        ? `<span class="d-del">- ${escapeHtml(row.before)}</span>\n<span class="d-add">+ ${
+          escapeHtml(row.after)
+        }</span>`
+        : `  ${escapeHtml(row.after)}`
+    )
+    .join("\n");
+  const changed = changedCount(rows);
+  els.stats.innerHTML += `<span><b>${changed}</b> line${changed === 1 ? "" : "s"} changed</span>`;
+}
+
+/** Chips for keys that look sensitive but aren't masked yet — click to add. */
+function renderSuggestions(suggestions) {
+  els.suggestBox.hidden = suggestions.length === 0;
+  els.suggestChips.innerHTML = "";
+  for (const { name, reason } of suggestions) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip chip-add";
+    chip.textContent = `+ ${name}`;
+    chip.title = `${reason} — click to add it to the mask list`;
+    chip.addEventListener("click", () => {
+      const current = els.fields.value.trim().replace(/[,\s]+$/, "");
+      els.fields.value = current === "" ? name : `${current}, ${name}`;
+      compute();
+    });
+    els.suggestChips.appendChild(chip);
+  }
+}
+
 /* ------------------------------ core cycle ------------------------------ */
 
 function compute() {
@@ -172,6 +216,7 @@ function compute() {
 
   if (jsonText.trim() === "") {
     renderChips(fields, null);
+    renderSuggestions([]);
     els.input.classList.remove("invalid");
     els.inputError.textContent = "";
     els.inputStatus.textContent = "";
@@ -186,6 +231,7 @@ function compute() {
 
   if (!result.ok) {
     renderChips(fields, null);
+    renderSuggestions([]);
     els.input.classList.add("invalid");
     els.inputError.textContent = `Invalid JSON: ${result.error}`;
     els.inputStatus.textContent = "invalid";
@@ -203,8 +249,16 @@ function compute() {
 
   const pretty = els.minify.checked ? JSON.stringify(result.sanitized) : result.pretty;
   lastOutput = pretty;
-  els.output.innerHTML = highlightJson(pretty);
   renderStats(result.stats, result.fields);
+  const parsed = JSON.parse(jsonText);
+  if (els.diff.checked) {
+    // The diff always compares pretty vs pretty so lines pair up; Minify
+    // still applies to Copy/Download.
+    renderDiff(JSON.stringify(parsed, null, 2), result.pretty);
+  } else {
+    els.output.innerHTML = highlightJson(pretty);
+  }
+  renderSuggestions(suggestSensitiveFields(parsed, result.fields));
 }
 
 /** Log mode: mask every JSON block embedded in the log text. */
@@ -216,6 +270,7 @@ function computeLog() {
   els.input.classList.remove("invalid");
   els.inputError.textContent = "";
   renderChips(maskAll ? [] : fields, null);
+  renderSuggestions([]);
 
   if (text.trim() === "") {
     els.inputStatus.textContent = "";
@@ -233,7 +288,6 @@ function computeLog() {
     fields,
   });
   lastOutput = result.text;
-  els.output.innerHTML = highlightLog(result.text);
 
   const { blocks, maskedValues, patternHits } = result.stats;
   const total = maskedValues + patternHits;
@@ -245,6 +299,9 @@ function computeLog() {
     (patternHits
       ? `<span><b>${patternHits}</b> ID${patternHits === 1 ? "" : "s"} redacted</span>`
       : "");
+
+  if (els.diff.checked) renderDiff(text, result.text);
+  else els.output.innerHTML = highlightLog(result.text);
 }
 
 /** Switch between JSON and Log-file modes. */
@@ -340,6 +397,7 @@ function sendResultTo(target) {
 els.fields.addEventListener("input", scheduleCompute);
 els.input.addEventListener("input", scheduleCompute);
 els.minify.addEventListener("change", compute);
+els.diff.addEventListener("change", compute);
 
 // Keep the slider and number input in sync, both trigger a recompute.
 els.keepRange.addEventListener("input", () => {
@@ -390,6 +448,16 @@ registerCommands([
     hint: "action",
     keywords: ["mode", "log", "json"],
     run: () => setMode(mode === "log" ? "json" : "log"),
+  },
+  {
+    icon: "🔀",
+    title: "Toggle diff view",
+    hint: "action",
+    keywords: ["diff", "changes", "compare", "before", "after"],
+    run: () => {
+      els.diff.checked = !els.diff.checked;
+      compute();
+    },
   },
   { icon: "✨", title: "Load example", hint: "action", run: loadExample },
   {

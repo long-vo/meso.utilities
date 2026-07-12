@@ -61,6 +61,13 @@
         <div id="field-chips" class="chips" aria-live="polite"></div>
       </div>
 
+      <div class="field only-json" id="suggest-box" hidden>
+        <label>Suggested fields</label>
+        <div id="suggest-chips" class="chips" aria-live="polite"></div>
+        <p class="hint">Keys in your payload that look sensitive — by name or value shape — but
+          aren't masked yet. Click one to add it.</p>
+      </div>
+
       <div class="field">
         <label for="keep-num">Keep last N characters</label>
         <div class="keep-row">
@@ -97,6 +104,9 @@
       <div class="panel-head">
         <h2>Result</h2>
         <div class="result-tools">
+          <label class="switch" title="Show the original next to the masked output, line by line">
+            <input id="diff" type="checkbox" /> <span>Diff</span>
+          </label>
           <label class="switch" title="Collapse to a single line">
             <input id="minify" type="checkbox" /> <span>Minify</span>
           </label>
