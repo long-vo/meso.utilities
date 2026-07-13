@@ -146,6 +146,10 @@ favFilterBtn.addEventListener("click", () => {
 
 applyFilter();
 
+// The grid starts hidden (see the html.js .cards opacity rule) so the initial
+// favourite sort above isn't seen as a reshuffle; reveal it now that it's arranged.
+cardsSection?.classList.add("is-ready");
+
 /* ---------------------------- command palette ---------------------------- */
 
 registerCommands([

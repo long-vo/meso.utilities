@@ -1432,6 +1432,18 @@ select:focus {
   margin-top: 14px;
 }
 
+/* Favourite ordering and the filter run in the deferred hub.js, after first
+   paint — keep the grid hidden until it has arranged itself so the cards don't
+   visibly reshuffle. Gated on html.js so the cards still show without scripting;
+   hub.js (or the inline <head> failsafe) adds .is-ready to reveal them. */
+html.js body.page-hub .cards {
+  opacity: 0;
+}
+html.js body.page-hub .cards.is-ready {
+  opacity: 1;
+  transition: opacity 0.12s ease-out;
+}
+
 .pill-toggle {
   color: var(--text);
   cursor: pointer;
