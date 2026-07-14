@@ -10,6 +10,7 @@ import {
   TYPES,
 } from "./leave.mjs";
 import { registerCommands } from "../palette.js";
+import { makeToast } from "../ui.mjs";
 
 const $ = (id) => document.getElementById(id);
 
@@ -78,12 +79,19 @@ const ACTION_BUTTONS = [
   els.copyRecipients,
 ];
 
-function showToast(message) {
-  els.toast.textContent = message;
-  els.toast.classList.add("show");
-  clearTimeout(showToast.timer);
-  showToast.timer = setTimeout(() => els.toast.classList.remove("show"), 1600);
-}
+/** Optional email fields that must be blank or well-formed before actions fire.
+ *  Each gets an inline error slot injected right after it (reusing .error-line). */
+const EMAIL_FIELDS = [els.lead, els.recipients].map((input) => {
+  const error = document.createElement("p");
+  error.className = "error-line";
+  error.id = `${input.id}-error`;
+  error.hidden = true;
+  input.setAttribute("aria-describedby", error.id);
+  input.insertAdjacentElement("afterend", error);
+  return { input, error };
+});
+
+const showToast = makeToast(els.toast);
 
 function readInput() {
   return {
@@ -141,9 +149,6 @@ function render() {
   }
 
   current = result;
-  els.formStatus.textContent =
-    "Ready — copy the parts you need, or open the email in your mail app.";
-  els.formStatus.className = "status ok";
 
   els.emailSubject.textContent = result.email.subject;
   if (!bodyDirty) els.emailBody.value = result.email.body;
@@ -154,11 +159,42 @@ function render() {
   els.eventSubject.textContent = result.event.subject;
   els.eventRecipients.textContent = result.event.recipients;
 
-  setActionsEnabled(true);
+  // A malformed (but optional) email must not reach the mailto/event. setActionsEnabled
+  // validates the address fields; if one is off, null `current` too so the palette
+  // commands can't bypass the now-disabled buttons.
+  if (setActionsEnabled(true)) {
+    els.formStatus.textContent =
+      "Ready — copy the parts you need, or open the email in your mail app.";
+    els.formStatus.className = "status ok";
+  } else {
+    current = null;
+    els.formStatus.textContent = "Fix the highlighted email address to enable the actions.";
+    els.formStatus.className = "status bad";
+  }
 }
 
 function setActionsEnabled(on) {
-  for (const button of ACTION_BUTTONS) button.disabled = !on;
+  const emailsOk = validateEmails();
+  const enabled = on && emailsOk;
+  for (const button of ACTION_BUTTONS) button.disabled = !enabled;
+  return enabled;
+}
+
+/**
+ * Validate the optional email fields, show or clear their inline errors, and
+ * return whether all are acceptable (blank or well-formed). `type=email` alone
+ * doesn't block the actions, so without this a typo would reach the mailto/event.
+ */
+function validateEmails() {
+  let allValid = true;
+  for (const { input, error } of EMAIL_FIELDS) {
+    const valid = input.validity.valid; // no `required`, so empty counts as valid
+    error.textContent = valid ? "" : "Enter a valid email address, or leave it blank.";
+    error.hidden = valid;
+    input.setAttribute("aria-invalid", valid ? "false" : "true");
+    if (!valid) allValid = false;
+  }
+  return allValid;
 }
 
 async function copy(text, label) {

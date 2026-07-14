@@ -6,6 +6,7 @@ import { changedCount, pairLineDiff } from "./diff.mjs";
 import { suggestSensitiveFields } from "./suggest.mjs";
 import { sendHandoff, takeHandoff } from "./handoff.mjs";
 import { registerCommands } from "./palette.js";
+import { escapeHtml, highlightJson, makeToast } from "./ui.mjs";
 
 const $ = (id) => document.getElementById(id);
 
@@ -43,6 +44,13 @@ const els = {
 let mode = "json";
 /** Name of the last attached log file, for the download filename. */
 let logFileName = "";
+
+/** Shared max for the "keep last N" slider and number input — must match the
+ *  `max` on #keep-range / #keep-num in index.html. */
+const KEEP_MAX = 12;
+/** Input length (~1 MB) above which masking gets a busy hint and a longer
+ *  debounce, since it runs synchronously on the main thread. */
+const LARGE_INPUT = 1_000_000;
 
 const EXAMPLE = {
   fields: "lastName, email, phoneNumber, token, iban",
@@ -85,39 +93,6 @@ let lastOutput = "";
 
 /* --------------------------- rendering helpers --------------------------- */
 
-/** Escape HTML so arbitrary JSON text is safe to inject. */
-function escapeHtml(s) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-/**
- * Lightweight JSON syntax highlighter. Masked string values (those starting
- * with one or more "*") get a distinct colour so you can see what was hidden.
- */
-function highlightJson(jsonString) {
-  const esc = escapeHtml(jsonString);
-  return esc.replace(
-    /("(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(?:true|false)\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)/g,
-    (match) => {
-      let cls = "j-num";
-      if (match.startsWith("&quot;") || match.startsWith('"')) {
-        if (/:\s*$/.test(match)) {
-          cls = "j-key";
-        } else if (/^(?:&quot;|")\*+/.test(match)) {
-          cls = "j-masked";
-        } else {
-          cls = "j-str";
-        }
-      } else if (match === "true" || match === "false") {
-        cls = "j-bool";
-      } else if (match === "null") {
-        cls = "j-null";
-      }
-      return `<span class="${cls}">${match}</span>`;
-    },
-  );
-}
-
 /**
  * Highlight a masked log: escape everything, then colour the masked values
  * (quoted strings that start with one or more "*") so the redactions stand out
@@ -132,12 +107,7 @@ function highlightLog(text) {
   );
 }
 
-function showToast(message) {
-  els.toast.textContent = message;
-  els.toast.classList.add("show");
-  clearTimeout(showToast.timer);
-  showToast.timer = setTimeout(() => els.toast.classList.remove("show"), 1600);
-}
+const showToast = makeToast(els.toast);
 
 function renderChips(fields, matchedLower) {
   els.chips.innerHTML = "";
@@ -322,11 +292,20 @@ function setMode(next) {
   compute();
 }
 
-/** Debounce recompute so typing stays snappy. */
+/**
+ * Debounce recompute so typing stays snappy. Masking is synchronous, so for
+ * large inputs (~1 MB+) lengthen the debounce and show a "processing…" hint —
+ * the recompute still blocks briefly, but it no longer fires on every keystroke.
+ */
 let debounceTimer;
 function scheduleCompute() {
   clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(compute, 110);
+  const large = els.input.value.length >= LARGE_INPUT;
+  if (large) {
+    els.inputStatus.textContent = "processing…";
+    els.inputStatus.className = "status";
+  }
+  debounceTimer = setTimeout(compute, large ? 500 : 110);
 }
 
 /* ------------------------------- actions -------------------------------- */
@@ -341,7 +320,7 @@ function loadExample() {
   }
   els.fields.value = EXAMPLE.fields;
   els.keepNum.value = String(EXAMPLE.keepLast);
-  els.keepRange.value = String(Math.min(12, EXAMPLE.keepLast));
+  els.keepRange.value = String(Math.min(KEEP_MAX, EXAMPLE.keepLast));
   els.input.value = JSON.stringify(EXAMPLE.json, null, 2);
   compute();
 }
@@ -383,6 +362,15 @@ function downloadResult() {
   showToast(`Downloaded ${name}`);
 }
 
+/** Read a log file client-side (from the picker or a drop) and switch to Log mode. */
+async function loadLogFile(file) {
+  logFileName = file.name;
+  els.logfileName.textContent = `${file.name} · ${(file.size / 1024).toFixed(0)} KB`;
+  els.input.value = await file.text();
+  if (mode === "log") compute();
+  else setMode("log");
+}
+
 /** Hand the current result to another tool — its page consumes it on load. */
 function sendResultTo(target) {
   if (!lastOutput) return;
@@ -406,8 +394,16 @@ els.keepRange.addEventListener("input", () => {
   scheduleCompute();
 });
 els.keepNum.addEventListener("input", () => {
-  const n = Math.max(0, parseInt(els.keepNum.value, 10) || 0);
-  els.keepRange.value = String(Math.min(12, n));
+  const n = parseInt(els.keepNum.value, 10);
+  if (Number.isNaN(n)) {
+    // Empty or partial entry — don't fight the typist; the slider rests at 0.
+    els.keepRange.value = "0";
+    scheduleCompute();
+    return;
+  }
+  const clamped = Math.max(0, Math.min(KEEP_MAX, n));
+  if (clamped !== n) els.keepNum.value = String(clamped); // show the clamp, don't silently pin
+  els.keepRange.value = String(clamped);
   scheduleCompute();
 });
 
@@ -420,16 +416,31 @@ els.maskAll.addEventListener("change", () => {
 });
 els.redact.addEventListener("change", compute);
 
-// Attaching a file reads it client-side and switches to Log mode.
+// Attaching a file via the picker reads it client-side and switches to Log mode.
 els.logfile.addEventListener("change", async () => {
   const file = els.logfile.files && els.logfile.files[0];
   if (!file) return;
-  logFileName = file.name;
-  els.logfileName.textContent = `${file.name} · ${(file.size / 1024).toFixed(0)} KB`;
-  els.input.value = await file.text();
-  if (mode === "log") compute();
-  else setMode("log");
+  await loadLogFile(file);
   els.logfile.value = ""; // allow re-selecting the same file
+});
+
+// Drop a log file anywhere on the editor panel, not just via the picker. Only
+// intercept file drags, so dragging selected text into the textarea still works.
+const editorPanel = document.querySelector(".panel.editor");
+editorPanel.addEventListener("dragover", (e) => {
+  if (!e.dataTransfer.types.includes("Files")) return;
+  e.preventDefault();
+  editorPanel.classList.add("drag-over");
+});
+editorPanel.addEventListener("dragleave", (e) => {
+  if (!editorPanel.contains(e.relatedTarget)) editorPanel.classList.remove("drag-over");
+});
+editorPanel.addEventListener("drop", (e) => {
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!file) return;
+  e.preventDefault();
+  editorPanel.classList.remove("drag-over");
+  loadLogFile(file);
 });
 
 els.loadExample.addEventListener("click", loadExample);

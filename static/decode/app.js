@@ -6,6 +6,7 @@ import { encodeChain, encoderFor, ENCODERS } from "./encode.mjs";
 import { decodeJwtParts, describeJwtTimes, verifyJwtSignature } from "./jwt.mjs";
 import { sendHandoff, takeHandoff } from "../handoff.mjs";
 import { registerCommands } from "../palette.js";
+import { escapeHtml, highlightJson, makeToast } from "../ui.mjs";
 
 const $ = (id) => document.getElementById(id);
 
@@ -56,38 +57,7 @@ let layers = [];
 
 /* --------------------------- rendering helpers --------------------------- */
 
-/** Escape HTML so arbitrary decoded text is safe to inject. */
-function escapeHtml(s) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-/**
- * Lightweight JSON syntax highlighter (same approach as the sanitizer UI).
- */
-function highlightJson(jsonString) {
-  const esc = escapeHtml(jsonString);
-  return esc.replace(
-    /("(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(?:true|false)\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)/g,
-    (match) => {
-      let cls = "j-num";
-      if (match.startsWith("&quot;") || match.startsWith('"')) {
-        cls = /:\s*$/.test(match) ? "j-key" : "j-str";
-      } else if (match === "true" || match === "false") {
-        cls = "j-bool";
-      } else if (match === "null") {
-        cls = "j-null";
-      }
-      return `<span class="${cls}">${match}</span>`;
-    },
-  );
-}
-
-function showToast(message) {
-  els.toast.textContent = message;
-  els.toast.classList.add("show");
-  clearTimeout(showToast.timer);
-  showToast.timer = setTimeout(() => els.toast.classList.remove("show"), 1600);
-}
+const showToast = makeToast(els.toast);
 
 /** Kinds whose output is JSON and worth syntax-highlighting. */
 const JSON_KINDS = new Set(["json", "jwt"]);

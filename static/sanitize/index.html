@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="../styles.css" />
 </head>
 <body data-mode="json">
+  <a class="skip-link" href="#main">Skip to content</a>
   <header class="topbar">
     <nav class="brand" aria-label="Breadcrumb">
       <a class="brand-link" href="../" title="All utilities">
@@ -37,7 +38,7 @@
     </div>
   </header>
 
-  <main class="layout">
+  <main class="layout" id="main" tabindex="-1">
     <section class="panel controls" aria-label="Options">
       <div class="mode-switch" role="tablist" aria-label="Input mode">
         <button id="mode-json" class="mode-btn is-active" role="tab" aria-selected="true" type="button">JSON</button>
@@ -79,7 +80,7 @@
         <label for="keep-num">Keep last N characters</label>
         <div class="keep-row">
           <input id="keep-range" type="range" min="0" max="12" value="4" />
-          <input id="keep-num" type="number" min="0" max="64" value="4" inputmode="numeric" />
+          <input id="keep-num" type="number" min="0" max="12" value="4" inputmode="numeric" />
         </div>
         <p class="hint">Characters left visible at the end of each masked value. <code>0</code> hides everything.</p>
       </div>
@@ -130,7 +131,7 @@
           </span>
         </div>
       </div>
-      <pre class="code-out"><code id="output" aria-live="polite"></code></pre>
+      <pre class="code-out" role="region" aria-label="Sanitized output"><code id="output"></code></pre>
       <div id="stats" class="stats" aria-live="polite"></div>
     </section>
   </main>

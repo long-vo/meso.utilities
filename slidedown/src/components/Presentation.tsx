@@ -23,6 +23,7 @@ const MIN_ZOOM = 0.9;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 1.25;
 const AUTO_MS = 4000;
+const SWIPE_MIN = 45;
 
 interface Props {
   slides: Slide[];
@@ -71,6 +72,7 @@ export default function Presentation({
   const zoomRef = useRef(1);
   const panRef = useRef<Point>({ x: 0, y: 0 });
   const drag = useRef({ active: false, startX: 0, startY: 0, panX: 0, panY: 0 });
+  const swipe = useRef({ x: 0, y: 0, type: '' });
 
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(rootRef);
 
@@ -328,6 +330,45 @@ export default function Presentation({
     e.currentTarget.releasePointerCapture?.(e.pointerId);
   }, []);
 
+  // Record the gesture start, then defer to the pan handler (a no-op at 1×).
+  const onStageDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      swipe.current = { x: e.clientX, y: e.clientY, type: e.pointerType };
+      onPointerDown(e);
+    },
+    [onPointerDown],
+  );
+
+  // Resolve the gesture on release: a horizontal touch swipe changes slides, a
+  // touch tap toggles the controls, and a mouse click on the backdrop advances.
+  const onStageUp = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      const wasPanning = drag.current.active;
+      endPan(e);
+      if (zoomRef.current > 1 || wasPanning) return;
+      const s = swipe.current;
+      const dx = e.clientX - s.x;
+      const dy = e.clientY - s.y;
+      const ax = Math.abs(dx);
+      const ay = Math.abs(dy);
+      if (s.type === 'touch') {
+        if (ax > SWIPE_MIN && ax > ay * 1.5) {
+          if (dx < 0) goNext();
+          else goPrev();
+        } else if (
+          ax < 10 &&
+          ay < 10 &&
+          !(e.target as HTMLElement).closest('a, button')
+        ) {
+          setControlsVisible((v) => !v);
+        }
+      } else if (ax < 6 && ay < 6 && e.target === e.currentTarget) {
+        goNext();
+      }
+    },
+    [endPan, goNext, goPrev],
+  );
+
   const current = slides[Math.min(index, count - 1)];
   const effScale = fitScale * zoom;
   const canPan = zoom > 1;
@@ -342,18 +383,20 @@ export default function Presentation({
     >
       <ProgressBar index={index} count={count} />
 
+      {/* Positional feedback for assistive tech (the progress bar is aria-hidden). */}
+      <div className="sr-only" aria-live="polite">
+        Slide {index + 1} of {count}
+      </div>
+
       <div
         ref={stageWrapRef}
         className={`stage-wrap ${canPan ? 'can-pan' : ''} ${
           panning ? 'is-panning' : ''
         }`}
-        onPointerDown={onPointerDown}
+        onPointerDown={onStageDown}
         onPointerMove={onPointerMove}
-        onPointerUp={endPan}
+        onPointerUp={onStageUp}
         onPointerCancel={endPan}
-        onClick={(e) => {
-          if (zoom <= 1 && e.target === e.currentTarget) goNext();
-        }}
       >
         <div
           className={`pan-layer ${panning ? 'no-transition' : ''}`}

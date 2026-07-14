@@ -67,6 +67,8 @@ export default function SpeakerView({
 }: Props) {
   const [container, setContainer] = useState<HTMLElement | null>(null);
   const [seconds, setSeconds] = useState(0);
+  const [blocked, setBlocked] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const startRef = useRef<number>(Date.now());
   const navRef = useRef({ onNext, onPrev, onClose });
   navRef.current = { onNext, onPrev, onClose };
@@ -75,9 +77,10 @@ export default function SpeakerView({
   useEffect(() => {
     const win = window.open('', 'slidedown-speaker', 'width=1100,height=760');
     if (!win) {
-      onClose();
+      setBlocked(true); // popup blocked — surface a retry instead of silently closing
       return;
     }
+    setBlocked(false);
     win.document.title = 'Slidedown — Speaker view';
     win.document.body.innerHTML = '';
     win.document.body.style.margin = '0';
@@ -108,7 +111,7 @@ export default function SpeakerView({
       win.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [attempt]);
 
   // Keep the popup theme in sync.
   useEffect(() => {
@@ -124,6 +127,24 @@ export default function SpeakerView({
     return () => window.clearInterval(id);
   }, []);
 
+  if (blocked) {
+    return (
+      <div className="sv-blocked" role="alert">
+        <p className="sv-blocked-msg">
+          Speaker view was blocked by your browser's popup blocker. Allow popups
+          for this site, then retry.
+        </p>
+        <div className="sv-blocked-actions">
+          <button className="link-btn" onClick={() => setAttempt((a) => a + 1)}>
+            Retry
+          </button>
+          <button className="link-btn" onClick={onClose}>
+            Dismiss
+          </button>
+        </div>
+      </div>
+    );
+  }
   if (!container) return null;
 
   const current = slides[index];

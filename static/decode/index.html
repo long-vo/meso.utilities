@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="../styles.css" />
 </head>
 <body data-mode="decode">
+  <a class="skip-link" href="#main">Skip to content</a>
   <header class="topbar">
     <nav class="brand" aria-label="Breadcrumb">
       <a class="brand-link" href="../" title="All utilities">
@@ -37,7 +38,7 @@
     </div>
   </header>
 
-  <main class="layout">
+  <main class="layout" id="main" tabindex="-1">
     <section class="panel controls" aria-label="Mode, about and examples">
       <div class="mode-switch" role="tablist" aria-label="Direction">
         <button id="mode-decode" class="mode-btn is-active" role="tab" aria-selected="true" type="button">Decode</button>
@@ -120,7 +121,7 @@
           </span>
         </div>
       </div>
-      <div id="steps" class="steps" aria-live="polite">
+      <div id="steps" class="steps" role="region" aria-label="Decoded output">
         <pre class="code-out step-out"><code><span class="j-null">// paste an encoded value to begin</span></code></pre>
       </div>
       <div id="stats" class="stats" aria-live="polite"></div>

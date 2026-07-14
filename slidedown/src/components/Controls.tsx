@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -75,8 +76,40 @@ export default function Controls({
   const atMax = zoom >= maxZoom - 1e-3;
   const atActualSize = Math.abs(zoom - 1) < 1e-3;
 
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const barRef = useRef<HTMLDivElement>(null);
+
+  // Close the ⋯ overflow menu on an outside tap, Escape, or when the viewport
+  // grows back past the compact breakpoint (where the menu no longer applies).
+  useEffect(() => {
+    if (!overflowOpen) return;
+    const onDown = (e: PointerEvent): void => {
+      if (barRef.current && !barRef.current.contains(e.target as Node)) {
+        setOverflowOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setOverflowOpen(false);
+      }
+    };
+    const wide = window.matchMedia('(min-width: 641px)');
+    const onWide = (e: MediaQueryListEvent): void => {
+      if (e.matches) setOverflowOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('keydown', onKey, true);
+    wide.addEventListener('change', onWide);
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('keydown', onKey, true);
+      wide.removeEventListener('change', onWide);
+    };
+  }, [overflowOpen]);
+
   return (
-    <div className="controls" role="toolbar" aria-label="Slide controls">
+    <div className="controls" role="toolbar" aria-label="Slide controls" ref={barRef}>
       <button
         className="ctrl-btn"
         onClick={onExit}
@@ -112,103 +145,125 @@ export default function Controls({
         <ChevronRight />
       </button>
 
-      <span className="ctrl-divider" />
+      {/* Inline on desktop; a popup toggled by the ⋯ button ≤640px. */}
+      <div
+        className={`ctrl-overflow ${overflowOpen ? 'is-open' : ''}`}
+        role="group"
+        aria-label="More controls"
+      >
+        <span className="ctrl-divider" />
+
+        <button
+          className="ctrl-btn"
+          onClick={onZoomOut}
+          disabled={atMin}
+          title="Zoom out (−)"
+          aria-label="Zoom out"
+        >
+          <ZoomOut />
+        </button>
+
+        <button
+          className="ctrl-zoom"
+          onClick={onZoomReset}
+          disabled={atActualSize}
+          title="Reset zoom to 100% (0)"
+          aria-label="Reset zoom"
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+
+        <button
+          className="ctrl-btn"
+          onClick={onZoomIn}
+          disabled={atMax}
+          title="Zoom in (+)"
+          aria-label="Zoom in"
+        >
+          <ZoomIn />
+        </button>
+
+        <span className="ctrl-divider" />
+
+        <button
+          className={`ctrl-btn ${playing ? 'is-active' : ''}`}
+          onClick={onTogglePlay}
+          title={playing ? 'Pause auto-play (P)' : 'Auto-play (P)'}
+          aria-label={playing ? 'Pause auto-play' : 'Start auto-play'}
+        >
+          {playing ? <Pause /> : <Play />}
+        </button>
+
+        <button
+          className="ctrl-btn"
+          onClick={onToggleOverview}
+          title="Overview (O)"
+          aria-label="Toggle overview"
+        >
+          <Grid />
+        </button>
+
+        <button
+          className={`ctrl-btn ${speakerActive ? 'is-active' : ''}`}
+          onClick={onToggleSpeaker}
+          title="Speaker view (S)"
+          aria-label="Toggle speaker view"
+        >
+          <Presenter />
+        </button>
+
+        <button
+          className={`ctrl-btn ${tool === 'pen' ? 'is-active' : ''}`}
+          onClick={onTogglePen}
+          title="Draw on the slide (D) · clear with C"
+          aria-label="Toggle pen annotations"
+        >
+          <Pen />
+        </button>
+
+        <button
+          className={`ctrl-btn ${tool === 'laser' ? 'is-active' : ''}`}
+          onClick={onToggleLaser}
+          title="Laser pointer (W)"
+          aria-label="Toggle laser pointer"
+        >
+          <Laser />
+        </button>
+
+        <ThemeMenu theme={theme} onSelect={onSetTheme} direction="up" />
+
+        <button
+          className="ctrl-btn"
+          onClick={onExport}
+          title="Export to PDF (E)"
+          aria-label="Export to PDF"
+        >
+          <Printer />
+        </button>
+
+        <button
+          className="ctrl-btn"
+          onClick={onToggleFullscreen}
+          title="Fullscreen (F)"
+          aria-label="Toggle fullscreen"
+        >
+          {isFullscreen ? <Compress /> : <Expand />}
+        </button>
+      </div>
 
       <button
-        className="ctrl-btn"
-        onClick={onZoomOut}
-        disabled={atMin}
-        title="Zoom out (−)"
-        aria-label="Zoom out"
+        className="ctrl-btn ctrl-more"
+        onClick={() => setOverflowOpen((o) => !o)}
+        aria-expanded={overflowOpen}
+        aria-haspopup="true"
+        title="More controls"
+        aria-label="More controls"
       >
-        <ZoomOut />
-      </button>
-
-      <button
-        className="ctrl-zoom"
-        onClick={onZoomReset}
-        disabled={atActualSize}
-        title="Reset zoom to 100% (0)"
-        aria-label="Reset zoom"
-      >
-        {Math.round(zoom * 100)}%
-      </button>
-
-      <button
-        className="ctrl-btn"
-        onClick={onZoomIn}
-        disabled={atMax}
-        title="Zoom in (+)"
-        aria-label="Zoom in"
-      >
-        <ZoomIn />
-      </button>
-
-      <span className="ctrl-divider" />
-
-      <button
-        className={`ctrl-btn ${playing ? 'is-active' : ''}`}
-        onClick={onTogglePlay}
-        title={playing ? 'Pause auto-play (P)' : 'Auto-play (P)'}
-        aria-label={playing ? 'Pause auto-play' : 'Start auto-play'}
-      >
-        {playing ? <Pause /> : <Play />}
-      </button>
-
-      <button
-        className="ctrl-btn"
-        onClick={onToggleOverview}
-        title="Overview (O)"
-        aria-label="Toggle overview"
-      >
-        <Grid />
-      </button>
-
-      <button
-        className={`ctrl-btn ${speakerActive ? 'is-active' : ''}`}
-        onClick={onToggleSpeaker}
-        title="Speaker view (S)"
-        aria-label="Toggle speaker view"
-      >
-        <Presenter />
-      </button>
-
-      <button
-        className={`ctrl-btn ${tool === 'pen' ? 'is-active' : ''}`}
-        onClick={onTogglePen}
-        title="Draw on the slide (D) · clear with C"
-        aria-label="Toggle pen annotations"
-      >
-        <Pen />
-      </button>
-
-      <button
-        className={`ctrl-btn ${tool === 'laser' ? 'is-active' : ''}`}
-        onClick={onToggleLaser}
-        title="Laser pointer (W)"
-        aria-label="Toggle laser pointer"
-      >
-        <Laser />
-      </button>
-
-      <ThemeMenu theme={theme} onSelect={onSetTheme} direction="up" />
-
-      <button
-        className="ctrl-btn"
-        onClick={onExport}
-        title="Export to PDF (E)"
-        aria-label="Export to PDF"
-      >
-        <Printer />
-      </button>
-
-      <button
-        className="ctrl-btn"
-        onClick={onToggleFullscreen}
-        title="Fullscreen (F)"
-        aria-label="Toggle fullscreen"
-      >
-        {isFullscreen ? <Compress /> : <Expand />}
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+          <circle cx="5" cy="12" r="2" />
+          <circle cx="12" cy="12" r="2" />
+          <circle cx="19" cy="12" r="2" />
+        </svg>
       </button>
     </div>
   );

@@ -198,6 +198,19 @@ body {
   cursor: none;
 }
 
+/* Visually hidden, still announced by screen readers. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .progress {
   position: absolute;
   top: 0;
@@ -563,6 +576,42 @@ body {
   margin: 0 4px;
 }
 
+/* Secondary controls: inline in the bar on desktop, a ⋯ popup on narrow screens. */
+.ctrl-overflow {
+  display: contents;
+}
+.ctrl-more {
+  display: none;
+}
+
+/* Popup-blocked notice for the speaker view (rendered in the main window). */
+.sv-blocked {
+  position: absolute;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  z-index: 45;
+  max-width: min(92vw, 440px);
+  padding: 14px 18px;
+  background: rgba(20, 20, 28, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
+  color: #e6e8f0;
+  text-align: center;
+}
+.sv-blocked-msg {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.sv-blocked-actions {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+}
+
 /* ============================ Overview ============================ */
 .overview {
   position: absolute;
@@ -699,6 +748,33 @@ body {
 @media (max-width: 640px) {
   .stage-wrap {
     padding: 16px;
+  }
+  /* Collapse the toolbar: keep prev/counter/next, move the rest into a ⋯ popup. */
+  .ctrl-more {
+    display: grid;
+  }
+  .ctrl-overflow {
+    display: none;
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 10px);
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    width: max-content;
+    max-width: 78vw;
+    gap: 4px;
+    padding: 8px;
+    background: rgba(20, 20, 28, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 18px;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
+  }
+  .ctrl-overflow.is-open {
+    display: flex;
+  }
+  .ctrl-overflow .ctrl-divider {
+    display: none;
   }
 }
 

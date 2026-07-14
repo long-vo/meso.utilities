@@ -5,6 +5,10 @@ import StartScreen from './components/StartScreen';
 import Presentation from './components/Presentation';
 
 const THEME_KEY = 'slidedown.theme';
+// The hub (meso.utilities) persists its light/dark choice under this key; on
+// first run Slidedown seeds from it so opening a deck doesn't silently reset the
+// theme. Once Slidedown writes THEME_KEY, that wins.
+const HUB_THEME_KEY = 'meso-theme';
 
 function isTheme(v: unknown): v is ThemeName {
   return typeof v === 'string' && (THEMES as readonly string[]).includes(v);
@@ -13,7 +17,11 @@ function isTheme(v: unknown): v is ThemeName {
 function storedTheme(): ThemeName {
   try {
     const v = localStorage.getItem(THEME_KEY);
-    return isTheme(v) ? v : 'light';
+    if (isTheme(v)) return v;
+    // No Slidedown preference yet — inherit the hub's light/dark choice.
+    const hub = localStorage.getItem(HUB_THEME_KEY);
+    if (hub === 'dark' || hub === 'light') return hub;
+    return 'light';
   } catch {
     return 'light';
   }
