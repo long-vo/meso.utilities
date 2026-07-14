@@ -129,9 +129,6 @@
         aria-label="HR email body"></textarea>
       <button type="button" id="body-reset" class="body-reset" hidden>↺ Reset to generated
         text</button>
-      <p class="leave-note" id="email-note" hidden>
-        Remote / WFH usually don't need an HR email — the calendar event is enough.
-      </p>
       <details class="mail-help">
         <summary><b>Open in mail</b> button not opening Outlook? Make Outlook your default mail app</summary>
         <ul>
@@ -150,7 +147,7 @@
 
     <section class="panel result" aria-label="Outlook calendar event">
       <div class="panel-head">
-        <h2>Outlook Event · step 2</h2>
+        <h2 id="event-heading">Outlook Event · step 2</h2>
         <div class="result-tools">
           <button id="add-event-outlook" class="btn btn-small" type="button"
             title="Open a pre-filled event in Outlook on the web">Add to Outlook (web)</button>
