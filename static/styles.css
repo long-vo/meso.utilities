@@ -322,6 +322,12 @@ a.card:hover {
   color: var(--text-dim);
   background: var(--bg-inset);
 }
+/* Highlighted tag — draws the eye to a standout capability (accent-tinted). */
+.tag-hl {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-inset));
+}
 .card-go {
   margin-left: auto;
   color: var(--accent);
@@ -1322,8 +1328,14 @@ select:focus {
   .brand-sub {
     display: none;
   }
-  .pill-privacy span:last-child {
-    display: none;
+  /* On a phone the breadcrumb + actions are wider than the viewport; let the bar
+     wrap so the actions drop to their own row instead of being pushed off-screen
+     (the privacy pill was clipped and ⌘K / theme toggle were unreachable). */
+  .topbar {
+    flex-wrap: wrap;
+  }
+  .topbar-actions {
+    margin-left: auto; /* keep the actions right-aligned once wrapped */
   }
 }
 
@@ -2085,6 +2097,19 @@ kbd {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 12px;
+}
+/* iOS/iPadOS Safari renders its native date control wider than the grid cell and
+   won't shrink it (grid items are min-width:auto by default), so the "To" field
+   spilled past the panel edge. Letting the control shrink to its cell keeps it in. */
+.field-row input[type="date"] {
+  min-width: 0;
+}
+/* On phone-width screens, give each date field its own full-width row — two ~155px
+   columns leave the native picker too little room. Wider layouts keep them paired. */
+@media (max-width: 480px) {
+  .field-row {
+    grid-template-columns: 1fr;
+  }
 }
 /* Small From/To markers above the date inputs (shown only for a full-day range). */
 .date-sub {
