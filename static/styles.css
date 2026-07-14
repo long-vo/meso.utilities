@@ -2134,6 +2134,14 @@ kbd {
       "controls result templates";
     grid-template-rows: auto 1fr;
   }
+  /* Remote/WFH hides the HR-email (editor) card; give the event card the whole
+     middle column so it aligns with the form's top instead of sitting below the
+     collapsed editor row's gap. */
+  .page-leave .layout:has(> .editor[hidden]) {
+    grid-template-areas:
+      "controls result templates"
+      "controls result templates";
+  }
   .templates {
     position: sticky;
     top: 86px;
@@ -2145,6 +2153,13 @@ kbd {
     grid-template-areas:
       "controls"
       "editor"
+      "result"
+      "templates";
+  }
+  /* Hidden editor card (Remote/WFH): drop its row so no empty gap remains. */
+  .page-leave .layout:has(> .editor[hidden]) {
+    grid-template-areas:
+      "controls"
       "result"
       "templates";
   }
@@ -2279,10 +2294,6 @@ kbd {
 }
 .body-reset:hover {
   text-decoration: underline;
-}
-/* Dimmed email card when the type (Remote/WFH) doesn't usually need an email. */
-.panel.is-muted {
-  opacity: 0.62;
 }
 .leave-note {
   margin: 12px 0 0;

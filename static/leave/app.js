@@ -33,11 +33,11 @@ const els = {
   emailSubject: $("email-subject"),
   emailBody: $("email-body"),
   bodyReset: $("body-reset"),
-  emailNote: $("email-note"),
   openMail: $("open-mail"),
   openOutlook: $("open-outlook"),
   copySubject: $("copy-subject"),
   copyBody: $("copy-body"),
+  eventHeading: $("event-heading"),
   eventSubject: $("event-subject"),
   eventRecipients: $("event-recipients"),
   addEventOutlook: $("add-event-outlook"),
@@ -117,6 +117,12 @@ function render() {
   els.fromSub.hidden = isHalfDay;
   els.dateLabel.textContent = isHalfDay ? "Date" : "Dates";
 
+  // Remote/WFH aren't leave, so no HR email is expected: hide that step. The Outlook
+  // event is then the only step, so drop its "· step 2" suffix.
+  const needsEmail = Boolean(TYPES[els.type.value]?.emailApplicable);
+  els.emailCard.hidden = !needsEmail;
+  els.eventHeading.textContent = needsEmail ? "Outlook Event · step 2" : "Outlook Event";
+
   const result = buildLeaveRequest(readInput());
 
   if (!result.ok) {
@@ -130,8 +136,6 @@ function render() {
     if (!bodyDirty) els.emailBody.value = "";
     els.bodyReset.hidden = !bodyDirty;
     els.emailCcBlock.hidden = true;
-    els.emailCard.classList.remove("is-muted");
-    els.emailNote.hidden = true;
     setActionsEnabled(false);
     return;
   }
@@ -146,8 +150,6 @@ function render() {
   els.bodyReset.hidden = !bodyDirty;
   els.emailCcBlock.hidden = result.email.cc === "";
   els.emailCc.textContent = result.email.cc;
-  els.emailCard.classList.toggle("is-muted", !result.email.applicable);
-  els.emailNote.hidden = result.email.applicable;
 
   els.eventSubject.textContent = result.event.subject;
   els.eventRecipients.textContent = result.event.recipients;
