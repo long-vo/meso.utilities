@@ -1039,6 +1039,8 @@ label {
 input[type="text"],
 input[type="number"],
 input[type="password"],
+input[type="email"],
+input[type="date"],
 select,
 textarea {
   width: 100%;
@@ -1817,15 +1819,22 @@ kbd {
   flex-direction: column;
 }
 
-.palette-input {
+/* Scoped under .palette so it outranks the shared input[type="text"] rule
+   (which would otherwise give this a full border, radius and inset background). */
+.palette .palette-input {
   border: none;
   border-bottom: 1px solid var(--border);
+  border-radius: 0;
   background: transparent;
   color: var(--text);
   padding: 14px 16px;
   font-size: 15px;
   font-family: var(--sans);
   outline: none;
+}
+.palette .palette-input:focus {
+  border-bottom-color: var(--accent);
+  box-shadow: none;
 }
 
 .palette-list {
@@ -2061,4 +2070,235 @@ kbd {
 .tree-key.hit {
   background: color-mix(in srgb, var(--warn) 25%, transparent);
   border-radius: 3px;
+}
+
+/* ---- leave request ---- */
+/* Native date picker follows the manual theme (only date inputs use this). */
+:root[data-theme="dark"] input[type="date"] {
+  color-scheme: dark;
+}
+/* Two form fields sharing a row (e.g. start + end date). auto-fit + minmax keeps
+   them side by side while the sidebar is wide enough, then stacks to one column
+   when it's dragged narrow — so a fixed-width date input never overflows the
+   sidebar's right edge (bare 1fr can't shrink below the input's intrinsic width). */
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+/* Small From/To markers above the date inputs (shown only for a full-day range). */
+.date-sub {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-faint);
+}
+/* The form (left column, spanning both rows) is often taller than the two short
+   output cards; with plain auto rows the leftover height splits between them and
+   pushes STEP 2 far below STEP 1. Let the lower row absorb the slack so the cards
+   stay together. Two-column layout only — below 1080px the layout is stacked. */
+@media (min-width: 1081px) {
+  .page-leave .layout {
+    /* 100px wider than the shared 1440 cap so the flexible editor column
+       (the only non-fixed track) gains the extra width on wide screens. */
+    max-width: 1540px;
+    grid-template-columns: var(--controls-w, 320px) minmax(0, 1fr) 260px;
+    grid-template-areas:
+      "controls editor templates"
+      "controls result templates";
+    grid-template-rows: auto 1fr;
+  }
+  .templates {
+    position: sticky;
+    top: 86px;
+  }
+}
+/* Stacked (single-column) layout keeps the templates panel last. */
+@media (max-width: 1080px) {
+  .page-leave .layout {
+    grid-template-areas:
+      "controls"
+      "editor"
+      "result"
+      "templates";
+  }
+}
+/* ---- templates panel ---- */
+.templates {
+  grid-area: templates;
+}
+.tpl-save {
+  margin-bottom: 12px;
+}
+.tpl-save-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tpl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* Saved templates read as bookmarked cards (leading icon + name/summary),
+   deliberately unlike the action buttons: no button border/pill, soft hover tint. */
+.tpl-item {
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: background 0.15s, border-color 0.15s;
+}
+.tpl-item:hover {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-inset));
+}
+.tpl-apply {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 9px 10px;
+  cursor: pointer;
+  color: var(--text);
+}
+.tpl-icon {
+  display: flex;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--accent);
+}
+.tpl-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tpl-title {
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.tpl-sub {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
+.tpl-del {
+  flex-shrink: 0;
+  width: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+}
+.tpl-del:hover {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+.tpl-empty {
+  margin-top: 0;
+}
+/* A compact, selectable output value — sizes to its content, unlike .code-out. */
+.out-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 16px 0 5px;
+}
+.out-label:first-child {
+  margin-top: 0;
+}
+.out {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  color: var(--text);
+}
+/* Editable HR email body — same look as .out, but a resizable textarea. */
+.out-area {
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.body-reset {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+.body-reset:hover {
+  text-decoration: underline;
+}
+/* Dimmed email card when the type (Remote/WFH) doesn't usually need an email. */
+.panel.is-muted {
+  opacity: 0.62;
+}
+.leave-note {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+/* Event settings that are prefilled or default correctly — highlighted so they
+   read as "no action needed". */
+.chip-ok {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  font-weight: 600;
+}
+/* The one setting no URL can set and that isn't the default — a warning to act on. */
+.chip-warn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 60%, transparent);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  font-weight: 600;
+}
+/* Collapsible "how to make Outlook your default mail app" help under the email card. */
+.mail-help {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.mail-help summary {
+  cursor: pointer;
+  color: var(--text-dim);
+}
+.mail-help ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.mail-help li {
+  margin: 3px 0;
+}
+.mail-help p {
+  margin: 8px 0 0;
+}
+.mail-help b {
+  color: var(--text-dim);
 }
