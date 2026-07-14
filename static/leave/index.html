@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Leave Request — meso.utilities</title>
+  <meta name="description" content="Fill one form and get the exact HR leave-request email and Outlook calendar event the team's leave process requires — formatted for you, entirely in your browser." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%8C%B4%3C/text%3E%3C/svg%3E" />
+  <!-- Apply the saved theme before first paint so the deferred theme.js can't cause a flash. -->
+  <script>
+    try {
+      var t = localStorage.getItem("meso-theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) { /* storage unavailable; keep the default dark theme */ }
+  </script>
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body class="page-leave">
+  <header class="topbar">
+    <nav class="brand" aria-label="Breadcrumb">
+      <a class="brand-link" href="../" title="All utilities">
+        <img class="brand-mark" src="../mesoneer-logo.jpg" alt="" aria-hidden="true" />
+        <span class="brand-name">meso.utilities</span>
+      </a>
+      <span class="crumb-sep" aria-hidden="true">/</span>
+      <span class="crumb-current"><span aria-hidden="true">🌴</span> Leave Request</span>
+    </nav>
+    <div class="topbar-actions">
+      <span class="pill pill-privacy" title="Your details never leave this page.">
+        <span aria-hidden="true">🛡️</span> Runs in your browser
+      </span>
+      <button id="palette-open" class="icon-btn palette-hint" type="button"
+        title="Command palette (Ctrl/⌘ K)" aria-label="Open command palette">⌘K</button>
+      <button id="theme-toggle" class="icon-btn" type="button" aria-label="Toggle colour theme">
+        <span class="theme-icon">🌙</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel controls" aria-label="Leave details">
+      <div class="field">
+        <label for="name">Your name</label>
+        <input type="text" id="name" placeholder="John Doe" autocomplete="name"
+          spellcheck="false" />
+      </div>
+
+      <div class="field">
+        <label for="type">Type</label>
+        <select id="type">
+          <option value="annual">Annual leave</option>
+          <option value="sick">Sick leave</option>
+          <option value="core">Core leave</option>
+          <option value="remote">Remote</option>
+          <option value="wfh">WFH</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="duration">Duration</label>
+        <select id="duration">
+          <option value="full">Full day</option>
+          <option value="morning">Half day — Morning</option>
+          <option value="afternoon">Half day — Afternoon</option>
+        </select>
+        <p class="hint" id="duration-hint" hidden>Annual &amp; Core leave are full-day only.</p>
+      </div>
+
+      <div class="field">
+        <label for="start" id="date-label">Dates</label>
+        <div class="field-row">
+          <div>
+            <span class="date-sub" id="from-sub" aria-hidden="true">From</span>
+            <input type="date" id="start" />
+          </div>
+          <!-- To/end date drives a multi-day range; app.js hides it for a half day. -->
+          <div id="end-field">
+            <label for="end" class="date-sub">To</label>
+            <input type="date" id="end" />
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="reason">Reason <span class="hint" style="display:inline">— optional, HR email only</span></label>
+        <input type="text" id="reason" placeholder="Family trip" />
+      </div>
+
+      <div class="field">
+        <label for="lead">Team lead email <span class="hint" style="display:inline">— optional, added as Cc</span></label>
+        <input type="email" id="lead" placeholder="lead@mesoneer.io" spellcheck="false"
+          autocomplete="off" />
+      </div>
+
+      <div class="field">
+        <label for="recipients">PO / extra recipients <span class="hint" style="display:inline">— optional, for the event</span></label>
+        <input type="email" id="recipients" placeholder="po@mesoneer.io" spellcheck="false"
+          autocomplete="off" />
+      </div>
+
+      <div class="field">
+        <span id="form-status" class="status" aria-live="polite"></span>
+      </div>
+    </section>
+
+    <section class="panel editor" id="email-card" aria-label="HR leave-request email">
+      <div class="panel-head">
+        <h2>HR Email · step 1</h2>
+        <div class="result-tools">
+          <button id="open-mail" class="btn btn-small" type="button"
+            title="Open your default mail app with this pre-filled">Open in mail</button>
+          <button id="open-outlook" class="btn btn-small" type="button"
+            title="Open a pre-filled compose window in Outlook on the web">Open in Outlook (web)</button>
+          <button id="copy-subject" class="btn btn-small" type="button">Copy subject</button>
+          <button id="copy-body" class="btn btn-small" type="button">Copy body</button>
+        </div>
+      </div>
+
+      <div class="out-label">To</div>
+      <p class="out" id="email-to">hr.vn@mesoneer.io</p>
+      <div id="email-cc-block" hidden>
+        <div class="out-label">Cc</div>
+        <p class="out" id="email-cc"></p>
+      </div>
+      <div class="out-label">Subject</div>
+      <p class="out" id="email-subject">—</p>
+      <div class="out-label">Body</div>
+      <textarea class="out-area" id="email-body" spellcheck="false"
+        aria-label="HR email body"></textarea>
+      <button type="button" id="body-reset" class="body-reset" hidden>↺ Reset to generated
+        text</button>
+      <p class="leave-note" id="email-note" hidden>
+        Remote / WFH usually don't need an HR email — the calendar event is enough.
+      </p>
+      <details class="mail-help">
+        <summary><b>Open in mail</b> button not opening Outlook? Make Outlook your default mail app</summary>
+        <ul>
+          <li><b>Windows:</b> Settings → Apps → Default apps → set <b>Outlook</b> for email / mailto.</li>
+          <li><b>macOS:</b> Apple Mail → Settings → General → <b>Default email reader</b> → Microsoft
+            Outlook (the default is Apple Mail).</li>
+        </ul>
+        <p>Or just use <b>Open in Outlook (web)</b> above — it opens a pre-filled compose tab.</p>
+      </details>
+    </section>
+
+    <section class="panel result" aria-label="Outlook calendar event">
+      <div class="panel-head">
+        <h2>Outlook Event · step 2</h2>
+        <div class="result-tools">
+          <button id="add-event-outlook" class="btn btn-small" type="button"
+            title="Open a pre-filled event in Outlook on the web">Add to Outlook (web)</button>
+          <button id="copy-event-subject" class="btn btn-small" type="button">Copy subject</button>
+          <button id="copy-recipients" class="btn btn-small" type="button">Copy recipients</button>
+        </div>
+      </div>
+
+      <div class="out-label">Subject</div>
+      <p class="out" id="event-subject">—</p>
+      <div class="out-label">Recipients</div>
+      <p class="out" id="event-recipients">—</p>
+      <div class="out-label">Event settings</div>
+      <div class="chips">
+        <span class="chip chip-ok" title="Set for you by ‘Add to Outlook (web)’">All day</span>
+        <span class="chip chip-ok" title="Usually the default for all-day events">Status = Free</span>
+        <span class="chip chip-warn"
+          title="No URL can set this — uncheck it by hand after the event opens">⚠️ Uncheck “Request Response”</span>
+      </div>
+      <p class="leave-note">
+        <b>Add to Outlook (web)</b> prefills the subject, dates, all-day and attendees.
+        <b>Status = Free</b> is usually the default for all-day events — the one thing to do by
+        hand is uncheck <b>Request Response</b>.
+      </p>
+    </section>
+
+    <section class="panel templates" aria-label="Saved templates">
+      <div class="panel-head">
+        <h2>Templates</h2>
+      </div>
+      <div class="tpl-save">
+        <button id="tpl-save" class="btn btn-small" type="button">＋ Save current</button>
+        <form id="tpl-save-form" class="tpl-save-form" hidden>
+          <input type="text" id="tpl-title" placeholder="Template name" spellcheck="false"
+            autocomplete="off" />
+          <div class="btn-row">
+            <button class="btn btn-small" type="submit">Save</button>
+            <button id="tpl-save-cancel" class="btn btn-ghost btn-small" type="button">Cancel</button>
+          </div>
+        </form>
+      </div>
+      <div id="tpl-list" class="tpl-list"></div>
+      <p id="tpl-empty" class="hint tpl-empty">No templates yet. Fill the form and save it to reuse
+        later.</p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    Formats follow the team's “How to Submit a Leave Request” page. Nothing is sent —
+    <b>Open in mail</b> hands off to your own mail app, and the calendar event is copied
+    for you to paste into a new Outlook event.
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="../theme.js"></script>
+  <script type="module" src="../resize.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

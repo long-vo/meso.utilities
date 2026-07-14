@@ -43,18 +43,18 @@ on :5173, `deno task build`). It is excluded from the root `deno.json` and has i
 ## Architecture
 
 **The dual-consumption module pattern is the central idea.** Each no-build tool's pure logic lives
-in a plain ES module (`static/sanitize.mjs`, `static/decode/decode.mjs`, `static/rest/rest.mjs`).
-That module is imported _unchanged_ by both the browser UI (`app.js`) and the Deno tests
-(`src/*.test.ts` import straight from `static/`). There is no bundler, no build step, and no
-separate test copy — the logic under test is byte-for-byte the logic that ships to the browser. This
-is why the tests are called "parity tests." When you touch a tool, keep pure/testable logic in the
-`.mjs` module and confine DOM wiring to `app.js`.
+in a plain ES module (`static/sanitize.mjs`, `static/decode/decode.mjs`, `static/rest/rest.mjs`,
+`static/leave/leave.mjs`). That module is imported _unchanged_ by both the browser UI (`app.js`) and
+the Deno tests (`src/*.test.ts` import straight from `static/`). There is no bundler, no build step,
+and no separate test copy — the logic under test is byte-for-byte the logic that ships to the
+browser. This is why the tests are called "parity tests." When you touch a tool, keep pure/testable
+logic in the `.mjs` module and confine DOM wiring to `app.js`.
 
 Tools come in three tiers:
 
 - **No-build, client-side** — live in `static/<tool>/` as ES modules + HTML, served as-is
-  (`sanitize`, `decode`, `rest`). `sanitize` is the odd one out: its files sit at the `static/` root
-  (`app.js`, `sanitize.mjs`, `diff.mjs`, `suggest.mjs`, `sanitize/index.html`).
+  (`sanitize`, `decode`, `rest`, `leave`). `sanitize` is the odd one out: its files sit at the
+  `static/` root (`app.js`, `sanitize.mjs`, `diff.mjs`, `suggest.mjs`, `sanitize/index.html`).
 - **Build-required** — `slidedown/`, compiled into `_site/slidedown/` only at deploy time.
 - **External/hosted** — Scrum Poker lives in its own repo (`meso.poker`) and is just linked from the
   hub with an ↗ card.
@@ -83,6 +83,8 @@ Deploy is `.github/workflows/pages.yml`: it copies `static/` → `_site/`, then 
 3. **Add `src/<tool>.test.ts` to the `check` task's file list in `deno.json`** — that task names
    test files explicitly, so a new one won't be type-checked otherwise.
 4. Add a card with a unique `data-tool` to `static/index.html`.
+5. **Register the tool in the ⌘K palette** — add an entry to `TOOL_LINKS` in `static/palette.js` so
+   it's reachable from every page (no test catches a missing one).
 
 ## Conventions
 
