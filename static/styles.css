@@ -2149,6 +2149,16 @@ kbd {
   .field-row {
     grid-template-columns: 1fr;
   }
+  /* iOS/WebKit renders the native date control as an inline-flex box that sizes
+     itself and ignores width:100%, so on a phone it spilled past the panel's right
+     edge. appearance:none makes WebKit respect the box model; the picker still opens
+     on tap. (Documented WebKit date-input fix.) */
+  .field-row input[type="date"] {
+    -webkit-appearance: none;
+    appearance: none;
+    max-width: 100%;
+    overflow: hidden;
+  }
 }
 /* Small From/To markers above the date inputs (shown only for a full-day range). */
 .date-sub {
