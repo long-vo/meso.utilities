@@ -10,6 +10,9 @@ everything here runs entirely in your browser and deploys to GitHub Pages.
 - **Decode Anything** (`/decode/`) — auto-detect and unwrap layered encodings (Base64, hex,
   URL-encoding, gzip/zlib, JWTs, PEM, `data:` URLs, escaped JSON) until something readable comes
   out. Runs fully client-side.
+- **Leave Request** (`/leave/`) — fill one small form and get the two artifacts the team's leave
+  process needs: the pre-formatted HR leave-request email (step 1) and the Outlook calendar event
+  (step 2), with one-click hand-offs to your mail app and to Outlook. Runs fully client-side.
 - **Slidedown** (`/slidedown/`) — turn Markdown files, PDFs and images into navigable presentation
   slides, with speaker view, themes and PDF export. A Vite/React app (in `slidedown/`) built in CI;
   runs fully client-side.
@@ -74,6 +77,35 @@ WebCrypto). Everything runs in your browser; nothing is uploaded.
 URL-safe), hex, URL percent-encoding, gzip+Base64, JSON escaping — in any order. Each click wraps
 the current result in one more layer, mirroring how the decoder unwraps them, so building a test
 payload is the same motion as reading one.
+
+## How the leave request works
+
+Leave Request turns one small form into the two artifacts the team's "How to Submit a Leave Request"
+page mandates: the **HR leave-request email** (step 1) and the **Outlook calendar event** (step 2).
+Nothing is sent — the buttons hand off to your own mail app and to Outlook on the web.
+
+- **Leave types.** Annual, Sick and Core leave produce both artifacts. **Remote** and **WFH** aren't
+  leave, so the HR-email step is hidden and only the calendar event remains. Annual and Core leave
+  are full-day only; Sick leave (and Remote/WFH) can be taken as a **Morning** or **Afternoon** half
+  day.
+- **Dates.** A full day takes a **From/To** range for a multi-day period; a half day collapses to a
+  single date tagged with the time of day.
+- **HR email.** Addressed to `hr.vn@mesoneer.io`, with an optional **team-lead Cc**; the subject and
+  body (`Date off`, `Leave type`, `Reason`) are generated for you. The body is editable — tweak it
+  and the hand-offs use your version, or hit **Reset** to return to the generated text. **Open in
+  mail** uses a `mailto:` link to your default mail app; **Open in Outlook (web)** opens a
+  pre-filled compose tab (a help note covers making Outlook your default mail app).
+- **Calendar event.** Subject `[OFF] - Name` — the bracket follows the leave type (`OFF`,
+  `Sick Leave`, `Core Leave`, `Remote`, `WFH`, prefixed with the half-day time) — sent to
+  `mesoneer_vn@mesoneer.io` plus any optional PO/extra recipients. **Add to Outlook (web)** prefills
+  the subject, dates, all-day flag and attendees; reminder chips flag what a URL can't set — the one
+  manual step is to **uncheck "Request Response"**.
+- **Templates.** Save the reusable fields (everything except the dates) as a named preset — one
+  click refills the form for the next request. Templates and your name persist in `localStorage`;
+  the dates always start fresh.
+
+> Everything runs in your browser. Your details are never uploaded — the mail and calendar buttons
+> just hand off to your own apps.
 
 **Environments & variables:** define named environments (dev, uat, prod, …) with variables in the
 sidebar and reference them as `{{name}}` anywhere in the URL, headers, auth fields or body. The
@@ -153,6 +185,7 @@ src/
   encode.test.ts      encode-chain parity tests (roundtrip through decode.mjs)
   jwt.test.ts         JWT verification tests (import the module from static/decode/)
   curl.test.ts        curl-import tests (roundtrip through buildCurlCommand)
+  leave.test.ts       leave-request builder tests (import the module from static/leave/)
 static/
   index.html          hub / master page (lists all tools)
   styles.css          shared theme + hub + tool styles
@@ -173,6 +206,10 @@ static/
     decode.mjs        detection + unwrap pipeline (imported by browser and tests)
     encode.mjs        encode-mode layer stacking (imported by browser and tests)
     jwt.mjs           JWT verification + time claims (imported by browser and tests)
+  leave/
+    index.html        Leave Request UI
+    app.js            leave UI logic (imports ./leave.mjs)
+    leave.mjs         HR-email + Outlook-event builder (imported by browser and tests)
 slidedown/            Slidedown viewer (Vite/React/TS) — built into /slidedown/ at deploy time
 ```
 

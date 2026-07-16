@@ -85,6 +85,7 @@ Deploy is `.github/workflows/pages.yml`: it copies `static/` → `_site/`, then 
 4. Add a card with a unique `data-tool` to `static/index.html`.
 5. **Register the tool in the ⌘K palette** — add an entry to `TOOL_LINKS` in `static/palette.js` so
    it's reachable from every page (no test catches a missing one).
+6. Update README.md
 
 ## Conventions
 
