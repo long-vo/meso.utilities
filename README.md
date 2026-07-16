@@ -13,6 +13,9 @@ everything here runs entirely in your browser and deploys to GitHub Pages.
 - **Leave Request** (`/leave/`) — fill one small form and get the two artifacts the team's leave
   process needs: the pre-formatted HR leave-request email (step 1) and the Outlook calendar event
   (step 2), with one-click hand-offs to your mail app and to Outlook. Runs fully client-side.
+- **Compare Files** (`/compare/`) — compare two or three files side by side with highlighted
+  differences (down to the character), drag & drop, and a per-difference pick-and-merge that builds
+  a merged result you can copy or download. Runs fully client-side.
 - **Slidedown** (`/slidedown/`) — turn Markdown files, PDFs and images into navigable presentation
   slides, with speaker view, themes and PDF export. A Vite/React app (in `slidedown/`) built in CI;
   runs fully client-side.
@@ -131,6 +134,19 @@ saves it as a `{{variable}}` in the active environment (one is created if none e
 the login-then-call loop: send the login request, capture `$.access_token` as `{{token}}`, reference
 it in the next request.
 
+## How comparing works
+
+Compare Files aligns the files with a Myers line diff and shows them side by side: removed lines in
+red, added lines in green, and character-level marks inside changed lines. Drop a file onto each
+pane (or paste text) — dropping several files at once fills the panes in order. In **3-file mode**
+the middle file (B) is the anchor: A and C are each compared against it, which suits config drift
+checks like dev / uat / prod.
+
+Consecutive changed lines group into numbered **differences**, and each difference carries **Keep A
+/ Keep B (/ Keep C)** buttons — pick which file's version survives (unpicked differences keep File
+A) and the merged result updates live, ready to **copy** or **download**. Everything runs in your
+browser; the files are never uploaded.
+
 ## Palette & handoff
 
 Press **Ctrl/⌘ K** on any page (or the `⌘K` button in the top bar) to open the command palette: it
@@ -186,6 +202,7 @@ src/
   jwt.test.ts         JWT verification tests (import the module from static/decode/)
   curl.test.ts        curl-import tests (roundtrip through buildCurlCommand)
   leave.test.ts       leave-request builder tests (import the module from static/leave/)
+  compare.test.ts     file diff/merge engine tests (import the module from static/compare/)
 static/
   index.html          hub / master page (lists all tools)
   styles.css          shared theme + hub + tool styles
@@ -206,6 +223,10 @@ static/
     decode.mjs        detection + unwrap pipeline (imported by browser and tests)
     encode.mjs        encode-mode layer stacking (imported by browser and tests)
     jwt.mjs           JWT verification + time claims (imported by browser and tests)
+  compare/
+    index.html        Compare Files UI
+    app.js            compare UI logic (imports ./compare.mjs)
+    compare.mjs       diff/merge engine — Myers line diff, char diff, hunks (browser and tests)
   leave/
     index.html        Leave Request UI
     app.js            leave UI logic (imports ./leave.mjs)

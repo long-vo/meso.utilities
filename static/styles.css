@@ -2387,3 +2387,184 @@ kbd {
 .mail-help b {
   color: var(--text-dim);
 }
+
+/* ---- compare: input panes, side-by-side diff view + merge picks ---- */
+/* Elements only relevant in 3-file mode (third pane, sidebar hint). */
+.page-compare[data-files="2"] .only-cmp-3 {
+  display: none !important;
+}
+
+.cmp-inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.page-compare[data-files="3"] .cmp-inputs {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.cmp-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.cmp-pane.drag-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: -4px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border-radius: var(--radius-sm);
+}
+
+.cmp-pane-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+.cmp-pane-name {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.cmp-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--text-faint);
+}
+
+.cmp-input {
+  min-height: 220px;
+  width: 100%;
+}
+
+/* The diff view: one grid row per line pair/triple — number + cell per side. */
+.cmp-view {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: auto;
+  max-height: 560px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.cmp-view .code-out {
+  border: 0;
+  min-height: 340px;
+}
+
+.cmp-row {
+  display: grid;
+}
+.cmp-view.cmp-2 .cmp-row {
+  grid-template-columns: 3.2em minmax(0, 1fr) 3.2em minmax(0, 1fr);
+}
+.cmp-view.cmp-3 .cmp-row {
+  grid-template-columns: 2.8em minmax(0, 1fr) 2.8em minmax(0, 1fr) 2.8em minmax(0, 1fr);
+}
+
+.cmp-num {
+  padding: 0 8px 0 4px;
+  text-align: right;
+  color: var(--text-faint);
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+  border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-elev) 55%, transparent);
+}
+.cmp-cell {
+  padding: 0 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.cmp-cell.c-del {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
+}
+.cmp-cell.c-add {
+  color: var(--good);
+  background: color-mix(in srgb, var(--good) 9%, transparent);
+}
+/* 3-file mode: the middle file is the anchor the outer files diff against. */
+.cmp-cell.c-base {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.cmp-cell.c-empty {
+  background:
+    repeating-linear-gradient(45deg, transparent, transparent 5px,
+    color-mix(in srgb, var(--border) 55%, transparent) 5px,
+    color-mix(in srgb, var(--border) 55%, transparent) 6px);
+}
+/* Character-level highlight inside a changed line. */
+.cmp-seg {
+  border-radius: 3px;
+  background: color-mix(in srgb, currentColor 22%, transparent);
+}
+
+/* Hunk header: difference label + the per-hunk "Keep A/B/C" merge picks. */
+.cmp-hunk {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 4px 10px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  font-family: var(--sans);
+}
+.cmp-row + .cmp-hunk,
+.cmp-hunk:first-child {
+  border-top-width: 0;
+}
+.cmp-hunk-label {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+.cmp-hunk-keep {
+  display: inline-flex;
+  gap: 6px;
+}
+.cmp-keep.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  font-weight: 600;
+}
+
+/* Merged-result preview under the diff. */
+.cmp-merged {
+  margin-top: 12px;
+  font-size: 12.5px;
+}
+.cmp-merged summary {
+  cursor: pointer;
+  color: var(--text-dim);
+}
+.cmp-merged .code-out {
+  margin-top: 8px;
+  min-height: 0;
+  max-height: 300px;
+}
+
+@media (max-width: 900px) {
+  .cmp-inputs,
+  .page-compare[data-files="3"] .cmp-inputs {
+    grid-template-columns: 1fr;
+  }
+  .cmp-input {
+    min-height: 140px;
+  }
+}

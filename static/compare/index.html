@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Compare Files — meso.utilities</title>
+  <meta name="description" content="Compare two or three files side by side with highlighted differences, drag & drop, and per-difference merging — entirely in your browser." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%E2%87%84%3C/text%3E%3C/svg%3E" />
+  <!-- Apply the saved theme before first paint so the deferred theme.js can't cause a flash. -->
+  <script>
+    try {
+      var t = localStorage.getItem("meso-theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) { /* storage unavailable; keep the default dark theme */ }
+  </script>
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body class="page-compare" data-files="2">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <nav class="brand" aria-label="Breadcrumb">
+      <a class="brand-link" href="../" title="All utilities">
+        <img class="brand-mark" src="../mesoneer-logo.jpg" alt="" aria-hidden="true" />
+        <span class="brand-name">meso.utilities</span>
+      </a>
+      <span class="crumb-sep" aria-hidden="true">/</span>
+      <span class="crumb-current"><span aria-hidden="true">⇄</span> Compare Files</span>
+    </nav>
+    <div class="topbar-actions">
+      <span class="pill pill-privacy" title="Your files never leave this page.">
+        <span aria-hidden="true">🛡️</span> Runs in your browser
+      </span>
+      <button id="palette-open" class="icon-btn palette-hint" type="button"
+        title="Command palette (Ctrl/⌘ K)" aria-label="Open command palette">⌘K</button>
+      <button id="theme-toggle" class="icon-btn" type="button" aria-label="Toggle colour theme">
+        <span class="theme-icon">🌙</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="layout" id="main" tabindex="-1">
+    <section class="panel controls" aria-label="Mode and actions">
+      <div class="mode-switch" role="tablist" aria-label="Number of files">
+        <button id="mode-2" class="mode-btn is-active" role="tab" aria-selected="true" type="button">2 files</button>
+        <button id="mode-3" class="mode-btn" role="tab" aria-selected="false" type="button">3 files</button>
+      </div>
+
+      <div class="field">
+        <label>How it works</label>
+        <p class="hint">Drop a file onto each pane (or paste text) and the differences are
+          highlighted line by line, with <b>character-level</b> marks inside changed lines.</p>
+        <p class="hint only-cmp-3">In 3-file mode the <b>middle file</b> is the anchor — File A
+          and File C are each compared against File B.</p>
+        <p class="hint">To merge, pick which file's version to <b>keep</b> on each difference —
+          unpicked differences keep File A. Copy or download the merged result.</p>
+      </div>
+
+      <div class="field">
+        <label>Actions</label>
+        <div class="btn-row example-row">
+          <button id="example" class="btn btn-ghost btn-small" type="button">Load example</button>
+          <button id="swap" class="btn btn-ghost btn-small" type="button"
+            title="Swap File A and File B">Swap A ↔ B</button>
+        </div>
+      </div>
+
+      <div class="field btn-row">
+        <button id="clear" class="btn btn-ghost" type="button">Clear</button>
+      </div>
+    </section>
+
+    <section class="panel editor" aria-label="Files to compare">
+      <div class="panel-head">
+        <h2>Files</h2>
+        <span id="input-status" class="status"></span>
+      </div>
+      <div id="inputs" class="cmp-inputs">
+        <div class="cmp-pane" data-pane="0">
+          <div class="cmp-pane-head">
+            <span class="cmp-pane-name">File A</span>
+            <span class="cmp-file-name" data-name="0"></span>
+            <button class="btn btn-ghost btn-small" type="button" data-pick-file="0">Choose…</button>
+          </div>
+          <textarea class="code-area cmp-input" data-input="0" spellcheck="false"
+            autocomplete="off" placeholder="Drop a file here — or paste text"
+            aria-label="File A content"></textarea>
+        </div>
+        <div class="cmp-pane" data-pane="1">
+          <div class="cmp-pane-head">
+            <span class="cmp-pane-name">File B</span>
+            <span class="cmp-file-name" data-name="1"></span>
+            <button class="btn btn-ghost btn-small" type="button" data-pick-file="1">Choose…</button>
+          </div>
+          <textarea class="code-area cmp-input" data-input="1" spellcheck="false"
+            autocomplete="off" placeholder="Drop a file here — or paste text"
+            aria-label="File B content"></textarea>
+        </div>
+        <div class="cmp-pane only-cmp-3" data-pane="2">
+          <div class="cmp-pane-head">
+            <span class="cmp-pane-name">File C</span>
+            <span class="cmp-file-name" data-name="2"></span>
+            <button class="btn btn-ghost btn-small" type="button" data-pick-file="2">Choose…</button>
+          </div>
+          <textarea class="code-area cmp-input" data-input="2" spellcheck="false"
+            autocomplete="off" placeholder="Drop a file here — or paste text"
+            aria-label="File C content"></textarea>
+        </div>
+      </div>
+      <input type="file" id="file-input" hidden />
+    </section>
+
+    <section class="panel result" aria-label="Differences and merge">
+      <div class="panel-head">
+        <h2>Differences</h2>
+        <div class="result-tools">
+          <span id="diff-status" class="status"></span>
+          <button id="copy-merged" class="btn btn-small" type="button">Copy merged</button>
+          <button id="download-merged" class="btn btn-small" type="button">Download merged</button>
+        </div>
+      </div>
+      <div id="diff-view" class="cmp-view" role="region" aria-label="Side-by-side differences">
+        <pre class="code-out step-out"><code><span class="j-null">// add content to two files to compare</span></code></pre>
+      </div>
+      <details id="merged-details" class="cmp-merged" hidden>
+        <summary>Merged result preview</summary>
+        <pre class="code-out"><code id="merged-out"></code></pre>
+      </details>
+    </section>
+  </main>
+
+  <footer class="footer">
+    Comparison and merging run client-side, nothing is uploaded · dropped files are read in your
+    browser only.
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="../theme.js"></script>
+  <script type="module" src="../resize.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

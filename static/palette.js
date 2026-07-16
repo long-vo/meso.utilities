@@ -39,6 +39,12 @@ const TOOL_LINKS = [
     href: "leave/",
     keywords: ["leave", "holiday", "vacation", "time off", "annual", "sick", "wfh", "remote", "hr"],
   },
+  {
+    icon: "⇄",
+    title: "Compare Files",
+    href: "compare/",
+    keywords: ["diff", "merge", "compare", "files", "three-way", "side by side"],
+  },
   // REST hidden — restore this entry to re-list the REST Client in the palette.
   // { icon: "🛰️", title: "REST Client", href: "rest/", keywords: ["http", "api", "curl", "request"] },
   {
