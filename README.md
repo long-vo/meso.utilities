@@ -10,9 +10,6 @@ everything here runs entirely in your browser and deploys to GitHub Pages.
 - **Decode Anything** (`/decode/`) — auto-detect and unwrap layered encodings (Base64, hex,
   URL-encoding, gzip/zlib, JWTs, PEM, `data:` URLs, escaped JSON) until something readable comes
   out. Runs fully client-side.
-- **REST Client** (`/rest/`) — compose and send REST requests (method, headers, auth, body), inspect
-  status/headers/body, copy any request as curl, with a local request history. Runs fully
-  client-side; the target API must allow CORS.
 - **Slidedown** (`/slidedown/`) — turn Markdown files, PDFs and images into navigable presentation
   slides, with speaker view, themes and PDF export. A Vite/React app (in `slidedown/`) built in CI;
   runs fully client-side.
@@ -78,17 +75,6 @@ URL-safe), hex, URL percent-encoding, gzip+Base64, JSON escaping — in any orde
 the current result in one more layer, mirroring how the decoder unwraps them, so building a test
 payload is the same motion as reading one.
 
-## How the REST client works
-
-Requests are sent with `fetch` straight from your browser to the target API — there is no proxy, so
-nothing passes through any server of ours. The flip side: the API must allow cross-origin (CORS)
-calls from the page's origin, and an `http://` API can't be called from the `https://` site (except
-localhost). When a request can't run in the browser, **Copy as curl** exports the exact same request
-— headers, auth and body, properly shell-escaped — to run in a terminal. Bearer/Basic auth helpers
-set the `Authorization` header, JSON bodies get `Content-Type: application/json` automatically
-(explicit headers always win), and the last 20 requests are kept in `localStorage` — including auth
-values, so mind shared machines.
-
 **Environments & variables:** define named environments (dev, uat, prod, …) with variables in the
 sidebar and reference them as `{{name}}` anywhere in the URL, headers, auth fields or body. The
 active environment is switched next to the request; chips under the URL show each variable used —
@@ -120,9 +106,9 @@ jumps to any tool and runs the current page's main actions — copy result, send
 toggle the theme — from the keyboard.
 
 Tools also chain into each other. The **Send to** buttons next to a tool's result hand the output to
-another tool: decode a payload, send it to Sanitize to mask it, then send the masked JSON to the
-REST client as a request body. The handoff travels through `sessionStorage` in your browser (same
-tab only, consumed on arrival, expires after 5 minutes) — nothing is uploaded.
+another tool: decode a payload, send it to Sanitize to mask it. The handoff travels through
+`sessionStorage` in your browser (same tab only, consumed on arrival, expires after 5 minutes) —
+nothing is uploaded.
 
 ## Run locally
 
@@ -160,7 +146,6 @@ One-time setup: in the repo, go to **Settings → Pages → Build and deployment
 src/
   sanitize.test.ts    parity tests (import the module from static/)
   decode.test.ts      decode-pipeline tests (import the module from static/decode/)
-  rest.test.ts        REST-client logic tests (import the module from static/rest/)
   handoff.test.ts     cross-tool handoff tests (import the module from static/)
   palette.test.ts     command-palette filtering tests (import the module from static/)
   diff.test.ts        diff-view line-pairing tests (import the module from static/)
@@ -168,7 +153,6 @@ src/
   encode.test.ts      encode-chain parity tests (roundtrip through decode.mjs)
   jwt.test.ts         JWT verification tests (import the module from static/decode/)
   curl.test.ts        curl-import tests (roundtrip through buildCurlCommand)
-  jsonpath.test.ts    JSON-path extraction tests (import the module from static/rest/)
 static/
   index.html          hub / master page (lists all tools)
   styles.css          shared theme + hub + tool styles
@@ -189,12 +173,6 @@ static/
     decode.mjs        detection + unwrap pipeline (imported by browser and tests)
     encode.mjs        encode-mode layer stacking (imported by browser and tests)
     jwt.mjs           JWT verification + time claims (imported by browser and tests)
-  rest/
-    index.html        REST Client UI
-    app.js            REST UI logic + fetch (imports ./rest.mjs)
-    rest.mjs          pure request/curl/format logic (imported by browser and tests)
-    curl.mjs          curl-command import parser (imported by browser and tests)
-    jsonpath.mjs      JSON-path extraction for capture (imported by browser and tests)
 slidedown/            Slidedown viewer (Vite/React/TS) — built into /slidedown/ at deploy time
 ```
 
