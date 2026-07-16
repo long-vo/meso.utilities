@@ -13,9 +13,9 @@ everything here runs entirely in your browser and deploys to GitHub Pages.
 - **Leave Request** (`/leave/`) — fill one small form and get the two artifacts the team's leave
   process needs: the pre-formatted HR leave-request email (step 1) and the Outlook calendar event
   (step 2), with one-click hand-offs to your mail app and to Outlook. Runs fully client-side.
-- **Slidedown** (`/slidedown/`) — turn Markdown files, PDFs and images into navigable presentation
-  slides, with speaker view, themes and PDF export. A Vite/React app (in `slidedown/`) built in CI;
-  runs fully client-side.
+- **Slidedown** (`/slidedown/`) — turn Markdown, HTML, AsciiDoc, PDFs and images into navigable
+  presentation slides, with speaker view, themes and PDF export. A Vite/React app (in `slidedown/`)
+  built in CI; runs fully client-side.
 - **Scrum Poker** — planning poker for team estimation. Lives in its own repo,
   [meso.poker](https://github.com/long-vo/meso.poker), and is hosted on Render (it needs a server
   for live rooms); the hub links straight to it.

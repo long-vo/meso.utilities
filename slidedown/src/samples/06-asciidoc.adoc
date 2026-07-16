@@ -1,0 +1,14 @@
+= AsciiDoc, too
+
+Slidedown renders *AsciiDoc* right in the browser. This file's title and this
+intro paragraph become the first slide…
+
+== …and every section is a slide
+
+Each top-level `==` heading starts a new slide, so one document turns into a
+whole sequence.
+
+* Lists, tables and admonitions all carry over
+* It stays real, themeable text — never a flat image
+
+TIP: Drop a `.adoc` file on the start screen to try your own.

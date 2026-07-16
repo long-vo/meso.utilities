@@ -1,9 +1,9 @@
 # Slidedown
 
-A PowerPoint-like presentation viewer that turns Markdown files, PDFs, and
-images into navigable slides — right in the browser. **Each Markdown file or
-image becomes one slide; each PDF page becomes one slide**, ordered by
-filename.
+A PowerPoint-like presentation viewer that turns Markdown, HTML, AsciiDoc,
+PDFs, and images into navigable slides — right in the browser. **Each Markdown,
+HTML, or image file becomes one slide; each PDF page and each AsciiDoc section
+becomes one slide**, ordered by filename.
 
 Built with Vite + React + TypeScript.
 
@@ -54,23 +54,33 @@ with no extra configuration.
 ## How it works
 
 1. Open the app — you'll see a start screen.
-2. **Drop `.md`, `.pdf`, or image files** onto it, or click to pick files. You
-   can also click **"Load sample deck"** to see it in action immediately.
+2. **Drop `.md`, `.html`, `.adoc`, `.pdf`, or image files** onto it, or click to
+   pick files. You can also click **"Load sample deck"** to see it in action
+   immediately.
 3. Slides are sorted **naturally by filename**, so `2-intro.md` comes before
-   `10-summary.md`. Each Markdown file or image is one slide; each PDF is
-   expanded into one slide per page (kept in page order).
+   `10-summary.md`. Each Markdown, HTML, or image file is one slide; each PDF is
+   expanded into one slide per page and each AsciiDoc file into one slide per
+   top-level section (kept in order).
 
 ### Supported file types
 
-| Type     | Extensions                                             | Becomes                         |
-| -------- | ------------------------------------------------------ | ------------------------------- |
-| Markdown | `.md` `.markdown` `.mdown` `.mkd`                      | one slide per file              |
-| PDF      | `.pdf`                                                 | one slide per page (via pdf.js) |
-| Image    | `.png` `.jpg` `.jpeg` `.gif` `.webp` `.avif` `.svg` `.bmp` | one slide per image         |
+| Type     | Extensions                                             | Becomes                              |
+| -------- | ------------------------------------------------------ | ------------------------------------ |
+| Markdown | `.md` `.markdown` `.mdown` `.mkd`                      | one slide per file (split on `---`)  |
+| HTML     | `.html` `.htm`                                         | one sanitized slide per file         |
+| AsciiDoc | `.adoc` `.asciidoc`                                    | one slide per top-level `==` section |
+| PDF      | `.pdf`                                                 | one slide per page (via pdf.js)      |
+| Image    | `.png` `.jpg` `.jpeg` `.gif` `.webp` `.avif` `.svg` `.bmp` | one slide per image              |
 
 PDF pages are rendered to images entirely in the browser — nothing is uploaded.
 Large PDFs take a moment to render and use more memory, since every page is
 rasterized up front.
+
+HTML files are sanitized before display: `<script>` is stripped and links open
+in a new tab, while inline styles are kept. AsciiDoc is rendered to HTML in the
+browser with [Asciidoctor.js](https://github.com/asciidoctor/asciidoctor.js)
+(loaded on demand); the document title/author and a `:theme:` attribute fill in
+the deck's title, author, and theme.
 
 Prefix filenames with numbers to control order:
 `01-title.md`, `02-agenda.md`, `03-details.md` …
@@ -185,7 +195,7 @@ src/
   types.ts                Shared types (Slide, Direction)
   styles.css              All styling and the 16:9 slide theme
   lib/
-    markdown.ts           Markdown → sanitized HTML pipeline
+    markdown.ts           Markdown → sanitized HTML pipeline (+ HTML sanitizer)
     deck.ts               Files → sorted slides, front-matter, sample loader
     pdf.ts                PDF pages → image slides (lazy)
     mermaid.ts            ```mermaid blocks → inline SVG (lazy)
@@ -203,7 +213,7 @@ src/
     PrintView.tsx         Print/PDF layout (one page per slide)
     Icons.tsx             Inline SVG icons
   samples/                Bundled "Load sample deck" content
-examples/                 Loose .md files to try drag & drop
+examples/                 Loose .md / .html / .adoc files to try drag & drop
 ```
 
 ## Notes
