@@ -1,0 +1,30 @@
+= AsciiDoc Deck
+Slidedown Team
+:theme: forest
+
+One `.adoc` file becomes several slides — this preamble and the title above
+form the leading slide.
+
+== Why AsciiDoc
+
+AsciiDoc is rendered to HTML in the browser, so every slide stays real,
+themeable text.
+
+* Each top-level `==` section is its own slide
+* Lists, tables and admonitions all carry over
+
+TIP: Use `==` headings to break a document into slides.
+
+== Code Blocks
+
+Source listings keep syntax highlighting:
+
+[source,js]
+----
+const deck = await slidesFromFiles(files);
+console.log(deck.slides.length);
+----
+
+== Thanks
+
+Drop this file on the start screen to see it split into slides.

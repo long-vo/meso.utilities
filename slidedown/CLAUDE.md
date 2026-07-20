@@ -9,9 +9,10 @@ files on a start screen and navigates them as slides. There is no backend and no
 routing — everything runs in the browser and all file parsing is local.
 
 The core rule: **one file = one slide, ordered by natural filename sort**, with
-exceptions — a PDF expands to one slide per page, an image is one slide, a
-`mermaid` code block becomes an inline diagram, and a Markdown file may itself
-split into several slides on `---`.
+exceptions — a PDF expands to one slide per page, an AsciiDoc file to one slide
+per top-level `==` section, an image is one slide, a `mermaid` code block
+becomes an inline diagram, and a Markdown file may itself split into several
+slides on `---`. HTML files are sanitized into a single slide.
 
 ## Commands
 
@@ -42,7 +43,9 @@ Data flows in one direction: **files → `Slide[]` → render**.
   filters supported files, sorts them naturally by filename, and expands each:
   Markdown → strip front-matter, split on `---`, split notes on `???`, split
   fragments on `+++`, `renderMarkdown` + mermaid enhancement; images → one image
-  slide; PDFs → one image slide per page. It assigns final ids at the end.
+  slide; PDFs → one image slide per page; HTML → one sanitized slide; AsciiDoc →
+  `@asciidoctor/core` render, one slide per top-level `==` section (with the doc
+  title/author/`:theme:` feeding deck meta). It assigns final ids at the end.
   `sampleSlides()` builds the bundled demo deck the same way. Both are async.
 - `src/lib/markdown.ts` — `marked` + `marked-highlight`/`highlight.js` +
   `DOMPurify`. Links are rewritten to open in a new tab. Returns sanitized HTML.
@@ -72,11 +75,12 @@ Data flows in one direction: **files → `Slide[]` → render**.
 
 ## Conventions and gotchas
 
-- **Keep `pdfjs-dist` and `mermaid` lazy.** They are dynamically `import()`-ed
-  from `deck.ts` only when a PDF or a `language-mermaid` block is present. Do not
-  add a static import of either into the main module graph — it would move them
-  out of their on-demand chunks and bloat the ~128 KB (gzip) main bundle.
-  (Mermaid further code-splits per diagram type; many small chunks is expected.)
+- **Keep `pdfjs-dist`, `mermaid` and `@asciidoctor/core` lazy.** They are
+  dynamically `import()`-ed from `deck.ts` only when a PDF, a `language-mermaid`
+  block, or an `.adoc` file is present. Do not add a static import of any of them
+  into the main module graph — it would move them out of their on-demand chunks
+  and bloat the ~128 KB (gzip) main bundle. (Mermaid further code-splits per
+  diagram type; many small chunks is expected.)
 - Mermaid detection depends on the `language-mermaid` class emitted by
   `marked-highlight`; changing the markdown highlighter must preserve it.
 - The 1280×720 base size is assumed throughout scaling and thumbnail math — keep
