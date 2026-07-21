@@ -1086,6 +1086,7 @@ input[type="number"],
 input[type="password"],
 input[type="email"],
 input[type="date"],
+input[type="url"],
 select,
 textarea {
   width: 100%;
@@ -2422,4 +2423,418 @@ kbd {
 }
 .mail-help b {
   color: var(--text-dim);
+}
+
+/* ---- shortlink ---- */
+/* A #name visit hides the page until app.js has resolved it, so a working
+   redirect never flashes the directory UI (the class is removed on a miss). */
+:root.resolving body {
+  visibility: hidden;
+}
+.sl-panel-title {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.sl-optional {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+.sl-miss {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg-inset));
+  color: var(--text);
+  font-size: 12.5px;
+}
+.sl-preview {
+  margin-top: 4px;
+  padding: 8px 10px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.sl-preview-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.sl-preview code {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+.sl-add {
+  width: 100%;
+  margin-top: 14px;
+}
+.sl-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.sl-head .sl-panel-title {
+  margin: 0;
+}
+.sl-count {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+.sl-tools-hint {
+  margin: -2px 0 12px;
+}
+.sl-filter {
+  margin-bottom: 12px;
+  font-size: 13px;
+  padding: 7px 10px;
+}
+.sl-group.sl-frequent-head {
+  color: var(--warn);
+}
+.sl-tools-hint b {
+  color: var(--text-dim);
+}
+.sl-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 2px 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.sl-group:hover {
+  color: var(--text);
+}
+.sl-chevron {
+  color: var(--text-faint);
+}
+.sl-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 12px;
+}
+.sl-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: border-color 0.15s;
+}
+.sl-row:hover {
+  border-color: var(--border-strong);
+}
+.sl-row-text {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sl-row-name {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.sl-row-url {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sl-row-url:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.sl-del {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+}
+.sl-del:hover {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+.sl-picker {
+  margin-bottom: 14px;
+  padding: 12px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.sl-picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.sl-picker-head .sl-panel-title {
+  margin: 0;
+}
+.sl-picker-all {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.sl-picker-group {
+  margin: 10px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.sl-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.sl-pick-row:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.sl-picker-actions {
+  margin-top: 12px;
+}
+/* Grid ("speed dial") view: colored monogram tiles. Hues are deterministic —
+   --tile-hue hashes the target hostname, --group-hue the group name — so the
+   same site/group keeps its color on every visit. Ungrouped elements set no
+   --group-hue and fall back to the neutral gray. */
+.sl-view {
+  display: flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.sl-view button {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.sl-view button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+.sl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-faint);
+}
+.sl-dot.is-hued {
+  background: hsl(var(--group-hue) 55% 55%);
+}
+.sl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  padding-left: 12px;
+}
+.sl-tile {
+  position: relative;
+  aspect-ratio: 1;
+  /* A faint wash of the site's hue — the tile is recognizable by color alone;
+     the tint deepens a little on hover. */
+  background: color-mix(in srgb, hsl(var(--tile-hue) 60% 45%) 9%, var(--bg-inset));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.15s, background 0.15s;
+}
+.sl-tile:hover {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, hsl(var(--tile-hue) 60% 45%) 16%, var(--bg-inset));
+}
+.sl-tile-main {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 12px;
+  color: inherit;
+  text-decoration: none;
+}
+.sl-tile-mono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  margin-bottom: 9px;
+  font-size: 17px;
+  font-weight: 600;
+  background: hsl(var(--tile-hue) 45% 32%);
+  color: hsl(var(--tile-hue) 65% 82%);
+}
+:root[data-theme="light"] .sl-tile-mono {
+  background: hsl(var(--tile-hue) 65% 88%);
+  color: hsl(var(--tile-hue) 60% 32%);
+}
+.sl-tile-name {
+  /* Long (imported) names would stretch tiles into uneven rectangles — clamp
+     to 3 lines; the tooltip carries the full name. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.sl-tile-host {
+  display: block;
+  margin-top: auto;
+  padding-top: 2px;
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sl-tile-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.sl-tile:hover .sl-tile-actions,
+.sl-tile:focus-within .sl-tile-actions {
+  opacity: 1;
+}
+.sl-tile-actions button {
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  cursor: pointer;
+}
+.sl-tile-actions button:hover {
+  color: var(--text);
+}
+.sl-tile-actions .sl-tile-del:hover {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border-strong));
+}
+/* Same-group drag reorder: the dragged element dims; an accent line marks the
+   insertion edge — above/below in the list, left/right in the grid. */
+.sl-row,
+.sl-tile {
+  cursor: grab;
+}
+.sl-dragging {
+  opacity: 0.45;
+}
+.sl-rows .sl-drop-before {
+  box-shadow: 0 -2px 0 0 var(--accent);
+}
+.sl-rows .sl-drop-after {
+  box-shadow: 0 2px 0 0 var(--accent);
+}
+.sl-grid .sl-drop-before {
+  box-shadow: -2px 0 0 0 var(--accent);
+}
+.sl-grid .sl-drop-after {
+  box-shadow: 2px 0 0 0 var(--accent);
+}
+.sl-group.sl-drop-into {
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  border-radius: var(--radius-sm);
+}
+/* Group header row: the collapse button plus a rename pencil shown on hover. */
+.sl-group-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.sl-group-row .sl-group {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+}
+.sl-group-edit {
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 13px;
+  line-height: 1;
+  padding: 4px 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.sl-group-row:hover .sl-group-edit,
+.sl-group-row:focus-within .sl-group-edit {
+  opacity: 1;
+}
+.sl-group-edit:hover {
+  color: var(--accent);
+}
+.sl-group-rename {
+  flex: 1;
+  padding: 2px 0;
+}
+.sl-group-create {
+  margin-bottom: 8px;
+}
+/* The URL field is a textarea so long targets wrap into view; the height
+   follows the content (autosized by app.js), so no manual resize handle. */
+.page-shortlink #url {
+  resize: none;
+  overflow: hidden;
+  min-height: 41px;
+  overflow-wrap: anywhere;
+}
+.sl-group-del:hover {
+  color: var(--danger);
+}
+.sl-group-rename input {
+  font-size: 12.5px;
+  padding: 5px 8px;
+}
+.sl-cancel {
+  margin-top: 8px;
 }
