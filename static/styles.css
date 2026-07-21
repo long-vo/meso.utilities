@@ -1277,6 +1277,12 @@ select:focus {
   min-height: 1em;
   font-family: var(--mono);
 }
+/* Fields flagged invalid by the JS validators (e.g. the Leave optional email
+   fields) — the same treatment as .code-area.invalid, kept red even on focus. */
+input[aria-invalid="true"] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent);
+}
 
 .stats {
   margin-top: 12px;

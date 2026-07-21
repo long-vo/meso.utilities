@@ -124,6 +124,9 @@ function render() {
   els.endField.hidden = isHalfDay;
   els.fromSub.hidden = isHalfDay;
   els.dateLabel.textContent = isHalfDay ? "Date" : "Dates";
+  // Keep the native picker from offering an end date before the start. A value
+  // typed in below the min still hits buildLeaveRequest's own conflict check.
+  els.end.min = els.start.value;
 
   // Remote/WFH aren't leave, so no HR email is expected: hide that step. The Outlook
   // event is then the only step, so drop its "· step 2" suffix.
@@ -445,7 +448,14 @@ try {
 }
 // Default the start date to today so the tool shows live output as soon as a
 // name is present. (Browser-only convenience; the pure module stays date-free.)
-els.start.value = new Date().toISOString().slice(0, 10);
+// Built from local date parts — toISOString() is UTC, which is yesterday's date
+// during the early morning in timezones ahead of UTC (e.g. before 7am in UTC+7).
+const today = new Date();
+els.start.value = [
+  today.getFullYear(),
+  String(today.getMonth() + 1).padStart(2, "0"),
+  String(today.getDate()).padStart(2, "0"),
+].join("-");
 render();
 renderTemplates();
 els.name.focus();
