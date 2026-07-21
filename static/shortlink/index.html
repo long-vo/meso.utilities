@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shortlink — meso.utilities</title>
+  <meta name="description" content="Personal shortlinks: give a URL a memorable name and open it via #name. Mappings live in your browser and can be exported to a local file." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%94%97%3C/text%3E%3C/svg%3E" />
+  <!-- Apply the saved theme before first paint so the deferred theme.js can't cause a flash,
+       and hide the page while a #name is being resolved so a working redirect never flashes
+       the directory UI (app.js reveals the page again when the name doesn't resolve). -->
+  <script>
+    try {
+      var t = localStorage.getItem("meso-theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) { /* storage unavailable; keep the default dark theme */ }
+    if (location.hash.length > 1) document.documentElement.classList.add("resolving");
+  </script>
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body class="page-shortlink">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <nav class="brand" aria-label="Breadcrumb">
+      <a class="brand-link" href="../" title="All utilities">
+        <img class="brand-mark" src="../mesoneer-logo.jpg" alt="" aria-hidden="true" />
+        <span class="brand-name">meso.utilities</span>
+      </a>
+      <span class="crumb-sep" aria-hidden="true">/</span>
+      <span class="crumb-current"><span aria-hidden="true">🔗</span> Shortlink</span>
+    </nav>
+    <div class="topbar-actions">
+      <span class="pill pill-privacy" title="Shortlinks live in this browser's storage only.">
+        <span aria-hidden="true">🛡️</span> Stored in your browser
+      </span>
+      <button id="palette-open" class="icon-btn palette-hint" type="button"
+        title="Command palette (Ctrl/⌘ K)" aria-label="Open command palette">⌘K</button>
+      <button id="theme-toggle" class="icon-btn" type="button" aria-label="Toggle colour theme">
+        <span class="theme-icon">🌙</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="layout" id="main" tabindex="-1">
+    <section class="panel controls" aria-label="New shortlink">
+      <form id="create-form">
+        <div class="field">
+          <label for="name">Name</label>
+          <input type="text" id="name" placeholder="sprint-board" spellcheck="false"
+            autocomplete="off" autocapitalize="none" />
+          <p class="hint">Lowercase letters, digits and hyphens — unique across all groups.</p>
+          <p class="error-line" id="name-error" hidden></p>
+        </div>
+
+        <div class="field">
+          <label for="url">Target URL</label>
+          <textarea id="url" rows="1" placeholder="https://…" spellcheck="false"
+            autocomplete="off"></textarea>
+          <p class="error-line" id="url-error" hidden></p>
+        </div>
+
+        <div class="field">
+          <label for="group">Group <span class="sl-optional">(optional)</span></label>
+          <input type="text" id="group" list="group-list" placeholder="Team" spellcheck="false"
+            autocomplete="off" />
+          <datalist id="group-list"></datalist>
+          <p class="hint">Pick an existing group or type a new one — <code>/</code> makes a
+            sub-group (<code>Team/Frontend</code>).</p>
+        </div>
+
+        <div class="sl-preview" id="preview" hidden>
+          <span class="sl-preview-label">Your shortlink</span>
+          <code id="preview-url"></code>
+        </div>
+
+        <button class="btn btn-primary sl-add" id="add" type="submit">Add shortlink</button>
+        <button class="btn btn-ghost sl-add sl-cancel" id="edit-cancel" type="button" hidden>
+          Cancel</button>
+      </form>
+    </section>
+
+    <section class="panel editor" aria-label="Your shortlinks">
+      <p id="miss-banner" class="sl-miss" role="alert" hidden></p>
+      <div class="sl-head">
+        <h2 class="sl-panel-title">Your shortlinks <span id="count" class="sl-count"></span></h2>
+        <div class="btn-row">
+          <div class="sl-view" role="group" aria-label="Directory view">
+            <button id="view-list" type="button" aria-pressed="true">List</button>
+            <button id="view-grid" type="button" aria-pressed="false">Grid</button>
+          </div>
+          <button class="btn btn-small" id="new-group" type="button"
+            title="Create an empty group to organize links into">New group</button>
+          <button class="btn btn-small" id="share" type="button"
+            title="Copy a link that carries all your shortlinks — the receiver picks which to import">
+            Share</button>
+          <button class="btn btn-small" id="export" type="button"
+            title="Download your shortlinks as a JSON file">Export</button>
+          <button class="btn btn-small" id="import" type="button"
+            title="Merge shortlinks from a JSON file or a browser bookmarks export">Import</button>
+          <input type="file" id="import-file"
+            accept=".json,.html,application/json,text/html" hidden />
+        </div>
+      </div>
+      <p class="hint sl-tools-hint"><b>Export</b> downloads your shortlinks as
+        <code>shortlinks.json</code> — back them up or move them to another browser.
+        <b>Import</b> merges a <code>shortlinks.json</code> or your browser's exported
+        <code>bookmarks.html</code> (Bookmark manager → Export bookmarks). Drag a link to
+        reorder it — drop it on another group's links or header to move it there. Dynamic:
+        <code>#name/rest</code> appends <code>rest</code> to the target, and a <code>{q}</code>
+        in a target is replaced by it (search engines).</p>
+      <input type="text" id="filter" class="sl-filter" placeholder="Filter links…"
+        spellcheck="false" autocomplete="off" aria-label="Filter links" />
+      <div class="sl-picker" id="picker" hidden>
+        <div class="sl-picker-head">
+          <h3 class="sl-panel-title" id="picker-title">Import from bookmarks</h3>
+          <label class="sl-picker-all"><input type="checkbox" id="pick-all" checked /> Select
+            all</label>
+        </div>
+        <p class="hint">Pick the bookmarks to turn into shortlinks — names come from the titles,
+          folders become groups.</p>
+        <div id="picker-list"></div>
+        <div class="btn-row sl-picker-actions">
+          <button class="btn btn-primary" id="pick-import" type="button">Import selected</button>
+          <button class="btn btn-ghost" id="pick-cancel" type="button">Cancel</button>
+        </div>
+      </div>
+      <div id="directory"></div>
+      <p id="empty" class="hint" hidden>No shortlinks yet. Name a URL on the left — it's saved in
+        this browser instantly.</p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    Shortlinks live in this browser's <code>localStorage</code> — nothing is uploaded. Use
+    <b>Export</b>/<b>Import</b> to back them up to a local file or move them between browsers.
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="../theme.js"></script>
+  <script type="module" src="../resize.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

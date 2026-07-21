@@ -4,7 +4,7 @@
   "tasks": {
     "dev": "deno run --allow-net --allow-read jsr:@std/http/file-server static",
     "test": "deno test --allow-read",
-    "check": "deno check src/sanitize.test.ts src/decode.test.ts src/rest.test.ts src/handoff.test.ts src/palette.test.ts src/diff.test.ts src/suggest.test.ts src/encode.test.ts src/jwt.test.ts src/curl.test.ts src/jsonpath.test.ts src/resize.test.ts src/leave.test.ts src/ui.test.ts",
+    "check": "deno check src/sanitize.test.ts src/decode.test.ts src/rest.test.ts src/handoff.test.ts src/palette.test.ts src/diff.test.ts src/suggest.test.ts src/encode.test.ts src/jwt.test.ts src/curl.test.ts src/jsonpath.test.ts src/resize.test.ts src/leave.test.ts src/ui.test.ts src/shortlink.test.ts",
     "fmt": "deno fmt",
     "lint": "deno lint"
   },

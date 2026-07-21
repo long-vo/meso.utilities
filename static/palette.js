@@ -9,9 +9,18 @@ const registered = [];
 /**
  * Add page-specific commands. Each command is
  * `{ icon?, title, hint?, keywords?, run }` — `run` is called when picked.
+ * A function may be registered instead of an array: it is called every time
+ * the palette renders and must return commands, so pages can contribute
+ * entries derived from changing state (e.g. saved items).
  */
 export function registerCommands(commands) {
-  registered.push(...commands);
+  if (typeof commands === "function") registered.push(commands);
+  else registered.push(...commands);
+}
+
+/** Registered commands with any provider functions expanded. */
+function registeredCommands() {
+  return registered.flatMap((entry) => (typeof entry === "function" ? entry() : entry));
 }
 
 /* ------------------------------- built-ins ------------------------------- */
@@ -38,6 +47,12 @@ const TOOL_LINKS = [
     title: "Leave Request",
     href: "leave/",
     keywords: ["leave", "holiday", "vacation", "time off", "annual", "sick", "wfh", "remote", "hr"],
+  },
+  {
+    icon: "🔗",
+    title: "Shortlink",
+    href: "shortlink/",
+    keywords: ["link", "url", "bookmark", "go", "redirect", "group"],
   },
   // REST hidden — restore this entry to re-list the REST Client in the palette.
   // { icon: "🛰️", title: "REST Client", href: "rest/", keywords: ["http", "api", "curl", "request"] },
@@ -143,7 +158,7 @@ function ensureOverlay() {
 }
 
 function render(query) {
-  items = filterCommands([...registered, ...builtinCommands()], query);
+  items = filterCommands([...registeredCommands(), ...builtinCommands()], query);
   activeIndex = Math.min(activeIndex, Math.max(0, items.length - 1));
   list.innerHTML = "";
   if (items.length === 0) {

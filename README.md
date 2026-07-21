@@ -13,6 +13,9 @@ everything here runs entirely in your browser and deploys to GitHub Pages.
 - **Leave Request** (`/leave/`) — fill one small form and get the two artifacts the team's leave
   process needs: the pre-formatted HR leave-request email (step 1) and the Outlook calendar event
   (step 2), with one-click hand-offs to your mail app and to Outlook. Runs fully client-side.
+- **Shortlink** (`/shortlink/`) — give a URL a memorable name and open it via `/shortlink/#name`.
+  Links can be organized into groups, live in your browser's `localStorage` (personal only) and can
+  be exported to / imported from a local `shortlinks.json`. Runs fully client-side.
 - **Slidedown** (`/slidedown/`) — turn Markdown, HTML, AsciiDoc, PDFs and images into navigable
   presentation slides, with speaker view, themes, PDF export and shareable content-in-URL links for
   text decks. A Vite/React app (in `slidedown/`) built in CI; runs fully client-side.
@@ -131,6 +134,44 @@ saves it as a `{{variable}}` in the active environment (one is created if none e
 the login-then-call loop: send the login request, capture `$.access_token` as `{{token}}`, reference
 it in the next request.
 
+## How Shortlink works
+
+Define a name (lowercase letters, digits and hyphens — unique across all groups) for any http(s) URL
+and `…/shortlink/#name` redirects to it. An optional **group** organizes the directory into
+collapsible sections — a `/` in the group name nests (`Team/Frontend` sits indented under `Team`,
+and collapsing a parent hides its sub-groups); a group disappears with its last link. Everything is
+stored in this browser's `localStorage` only — a shortlink you share works for someone else only
+after they **Import** your exported `shortlinks.json` (imported entries win on a name conflict).
+Opening an unknown `#name` shows the directory with the name pre-filled instead of redirecting.
+
+The directory has two views, toggled next to Export/Import and remembered per browser: **List**
+(compact rows) and **Grid** — a speed-dial of colored monogram tiles. In both views, drag a link to
+reorder it within its group (the order is stored per link and survives export/import); links you
+haven't reordered sort alphabetically after the ordered ones. Dropping a link on another group's
+links, empty space or header moves it into that group — at the drop position, or at the end for
+headers (which also works on collapsed groups). **Edit** on a row/tile loads the link into the form
+to change its name, target or group; a pencil on a group header renames the group inline (sub-groups
+follow along). **New group** creates an empty group to organize into — explicitly created groups
+persist while empty (unlike link-implied ones, which vanish with their last link) and carry a ✕ to
+remove them again; they live in this browser only, since the export file carries links, not empty
+groups. Tile and group colors are deterministic (hashed from the target hostname and the group
+name), so the same site and group keep their colors on every visit; no favicons are fetched, so the
+grid stays fully offline.
+
+A **filter box** narrows the directory by name, target or group as you type (Escape clears; collapse
+state and empty groups get out of the way while filtering), and every saved link is openable from
+the **Ctrl/⌘ K palette** ("Open standup"). Redirects are counted locally and the five most-used
+links appear in a **Frequently used** strip above the groups. Shortlinks can also be **dynamic**:
+`#name/rest` appends `rest` to the target's URL, and a `{q}` placeholder in a target is replaced by
+the (URL-encoded) rest — `q` → `https://google.com/search?q={q}` makes `#q/deno fmt` a search.
+**Share** copies a link that carries all your shortlinks in the URL fragment; opening it shows a
+picker to choose which to import (imported names win on conflict).
+
+**Import** also accepts a browser bookmarks export (the `bookmarks.html` every browser's "Export
+bookmarks" produces — a page can't read your Bookmarks bar directly): a picker lists the found
+http(s) bookmarks, names are slugified from the titles (deduped with a `-2`/`-3` suffix) and
+bookmark folders become groups — nested folders keep their full trail as a sub-group path.
+
 ## Palette & handoff
 
 Press **Ctrl/⌘ K** on any page (or the `⌘K` button in the top bar) to open the command palette: it
@@ -186,6 +227,7 @@ src/
   jwt.test.ts         JWT verification tests (import the module from static/decode/)
   curl.test.ts        curl-import tests (roundtrip through buildCurlCommand)
   leave.test.ts       leave-request builder tests (import the module from static/leave/)
+  shortlink.test.ts   shortlink logic tests (import the module from static/shortlink/)
 static/
   index.html          hub / master page (lists all tools)
   styles.css          shared theme + hub + tool styles
@@ -210,6 +252,10 @@ static/
     index.html        Leave Request UI
     app.js            leave UI logic (imports ./leave.mjs)
     leave.mjs         HR-email + Outlook-event builder (imported by browser and tests)
+  shortlink/
+    index.html        Shortlink UI
+    app.js            shortlink UI logic (imports ./shortlink.mjs)
+    shortlink.mjs     validation, grouping + export/import logic (browser and tests)
 slidedown/            Slidedown viewer (Vite/React/TS) — built into /slidedown/ at deploy time
 ```
 
