@@ -9,12 +9,16 @@ interface Props {
   onLoad: (deck: Deck) => void;
   theme: ThemeName;
   onSetTheme: (theme: ThemeName) => void;
+  /** Error to show on first render (e.g. an invalid share link). */
+  initialError?: string | null;
 }
 
-export default function StartScreen({ onLoad, theme, onSetTheme }: Props) {
+export default function StartScreen(
+  { onLoad, theme, onSetTheme, initialError }: Props,
+) {
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError ?? null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = useCallback(

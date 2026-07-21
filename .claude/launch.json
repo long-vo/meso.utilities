@@ -6,6 +6,21 @@
       "runtimeExecutable": "deno",
       "runtimeArgs": ["task", "dev"],
       "port": 8000
+    },
+    {
+      "name": "slidedown",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "slidedown",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5199",
+        "--strictPort"
+      ],
+      "port": 5199
     }
   ]
 }

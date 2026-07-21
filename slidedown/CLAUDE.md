@@ -32,7 +32,17 @@ part of `build`) is the only automated check.
 Data flows in one direction: **files → `Slide[]` → render**.
 
 - `src/App.tsx` is a two-state switch: no slides → `StartScreen`; slides →
-  `Presentation`.
+  `Presentation`. A third, transient state restores a deck from a `#deck=…`
+  share link on mount (spinner while decoding; decode failure falls back to
+  `StartScreen` with an error).
+- `src/lib/share.ts` — content-in-URL share links (mermaid.live-style):
+  `'#deck=1.' + base64url(deflate-raw(JSON SourceFile[]))` via the native
+  `CompressionStream` API. Only text decks are shareable: `slidesFromFiles()`
+  sets `Deck.sources` when every input is Markdown/HTML/AsciiDoc, and the
+  "Copy share link" button in `Controls.tsx` is disabled otherwise (binary
+  payloads would exceed practical URL limits). `decodeHashToFiles()` returns
+  `null` on any malformed input; bump the `1.` version when the format
+  changes.
 - `src/types.ts` defines the model. A `Slide` has a `kind` of `'markdown'`
   (renders `html`) or `'image'` (renders `src`, a data/object URL), plus optional
   `notes` (rendered HTML) and a `fragmentCount` (>= 1). `ProtoSlide` is a slide

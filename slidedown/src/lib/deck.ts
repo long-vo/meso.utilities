@@ -1,4 +1,4 @@
-import type { Deck, DeckMeta, ProtoSlide, ThemeName } from '../types';
+import type { Deck, DeckMeta, ProtoSlide, SourceFile, ThemeName } from '../types';
 import { THEMES } from '../types';
 import { renderMarkdown, sanitizeHtml } from './markdown';
 import { applyAnimations } from './animate';
@@ -322,27 +322,37 @@ export async function slidesFromFiles(fileList: File[]): Promise<Deck> {
 
   const protos: ProtoSlide[] = [];
   const meta: { title?: string; author?: string; theme?: ThemeName } = {};
+  const sources: SourceFile[] = [];
+  let textOnly = true;
   let pdf: typeof import('./pdf') | null = null;
 
   for (const file of files) {
     if (isPdfFile(file.name)) {
+      textOnly = false;
       pdf ??= await import('./pdf');
       protos.push(...(await pdf.slidesFromPdf(file)));
     } else if (isImageFile(file.name)) {
+      textOnly = false;
       protos.push(imageProto(file));
     } else if (isHtmlFile(file.name)) {
-      protos.push(await htmlProto(file.name, await file.text()));
+      const text = await file.text();
+      sources.push({ name: file.name, text });
+      protos.push(await htmlProto(file.name, text));
     } else if (isAsciiDocFile(file.name)) {
+      const text = await file.text();
+      sources.push({ name: file.name, text });
       const { protos: adocProtos, meta: adocMeta } = await asciidocSlides(
         file.name,
-        await file.text(),
+        text,
       );
       if (meta.title === undefined && adocMeta.title) meta.title = adocMeta.title;
       if (meta.author === undefined && adocMeta.author) meta.author = adocMeta.author;
       if (meta.theme === undefined) meta.theme = adocMeta.theme;
       protos.push(...adocProtos);
     } else {
-      const { body, fm } = parseFrontMatter(await file.text());
+      const text = await file.text();
+      sources.push({ name: file.name, text });
+      const { body, fm } = parseFrontMatter(text);
       if (meta.title === undefined && fm.title) meta.title = fm.title;
       if (meta.author === undefined && fm.author) meta.author = fm.author;
       if (meta.theme === undefined) meta.theme = asTheme(fm.theme);
@@ -350,7 +360,11 @@ export async function slidesFromFiles(fileList: File[]): Promise<Deck> {
     }
   }
 
-  return { slides: withIds(protos), meta };
+  return {
+    slides: withIds(protos),
+    meta,
+    sources: textOnly && sources.length > 0 ? sources : undefined,
+  };
 }
 
 // Sample deck bundled with the app for the "Load sample deck" button.
@@ -377,5 +391,5 @@ export async function sampleSlides(): Promise<Deck> {
       protos.push(...(await markdownProtos(entry.name, body)));
     }
   }
-  return { slides: withIds(protos), meta };
+  return { slides: withIds(protos), meta, sources: entries };
 }

@@ -185,6 +185,11 @@ theme: dark
 - **Annotations** — `D` toggles a pen to draw on the current slide (strokes
   stick to the slide and survive flipping back and forth; `C` clears them),
   `W` toggles a laser-pointer dot. `Esc` puts the tool away.
+- **Share link** — the 🔗 button copies a URL with the deck's source files
+  compressed into the hash (`#deck=…`); opening it rebuilds the presentation
+  with nothing uploaded anywhere. Text decks only (Markdown, HTML, AsciiDoc) —
+  decks containing PDFs or images can't fit in a URL. Very long decks still
+  work but may exceed what some chat apps accept as a link.
 
 ## Project structure
 
@@ -199,6 +204,7 @@ src/
     deck.ts               Files → sorted slides, front-matter, sample loader
     pdf.ts                PDF pages → image slides (lazy)
     mermaid.ts            ```mermaid blocks → inline SVG (lazy)
+    share.ts              Share links: sources ⇄ compressed #deck=… URL hash
   hooks/
     useKeyboardNav.ts     Global keyboard shortcuts
     useFullscreen.ts      Fullscreen toggle

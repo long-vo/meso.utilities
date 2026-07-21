@@ -615,6 +615,25 @@ body {
   margin: 0 4px;
 }
 
+/* Transient feedback bubble above the bar (share-link copied / failed). */
+.ctrl-note {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(80vw, 420px);
+  padding: 6px 14px;
+  background: rgba(20, 20, 28, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
 /* Secondary controls: inline in the bar on desktop, a ⋯ popup on narrow screens. */
 .ctrl-overflow {
   display: contents;
