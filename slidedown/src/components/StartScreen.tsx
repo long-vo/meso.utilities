@@ -9,12 +9,16 @@ interface Props {
   onLoad: (deck: Deck) => void;
   theme: ThemeName;
   onSetTheme: (theme: ThemeName) => void;
+  /** Error to show on first render (e.g. an invalid share link). */
+  initialError?: string | null;
 }
 
-export default function StartScreen({ onLoad, theme, onSetTheme }: Props) {
+export default function StartScreen(
+  { onLoad, theme, onSetTheme, initialError }: Props,
+) {
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError ?? null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = useCallback(
@@ -22,7 +26,7 @@ export default function StartScreen({ onLoad, theme, onSetTheme }: Props) {
       const arr = Array.from(files);
       if (!arr.some((f) => isSupportedFile(f.name))) {
         setError(
-          'No supported files found. Choose Markdown (.md), PDF, or image files.',
+          'No supported files found. Choose Markdown (.md), HTML, AsciiDoc (.adoc), PDF, or image files.',
         );
         return;
       }
@@ -89,8 +93,9 @@ export default function StartScreen({ onLoad, theme, onSetTheme }: Props) {
       <div className="start-inner">
         <h1 className="start-title">Slidedown</h1>
         <p className="start-subtitle">
-          Turn Markdown files, PDFs, and images into a presentation. Each
-          Markdown file or image is one slide; each PDF page is one slide.
+          Turn Markdown, HTML, AsciiDoc, PDFs, and images into a presentation.
+          Each Markdown, HTML, or image file is one slide; each PDF page and
+          each AsciiDoc section is one slide.
         </p>
 
         <div
@@ -122,7 +127,8 @@ export default function StartScreen({ onLoad, theme, onSetTheme }: Props) {
             <>
               <Upload className="dropzone-icon" />
               <p className="dropzone-primary">
-                Drop <strong>.md</strong>, <strong>.pdf</strong>, or image files
+                Drop <strong>.md</strong>, <strong>.html</strong>,{' '}
+                <strong>.adoc</strong>, <strong>.pdf</strong>, or image files
                 here
               </p>
               <p className="dropzone-secondary">or click to choose files</p>
@@ -131,7 +137,7 @@ export default function StartScreen({ onLoad, theme, onSetTheme }: Props) {
           <input
             ref={inputRef}
             type="file"
-            accept=".md,.markdown,.mdown,.mkd,.pdf,.png,.jpg,.jpeg,.gif,.webp,.avif,.svg,.bmp,text/markdown,application/pdf,image/*"
+            accept=".md,.markdown,.mdown,.mkd,.html,.htm,.adoc,.asciidoc,.pdf,.png,.jpg,.jpeg,.gif,.webp,.avif,.svg,.bmp,text/markdown,text/html,application/pdf,image/*"
             multiple
             hidden
             onChange={(e) => {

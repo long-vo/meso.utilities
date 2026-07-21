@@ -485,6 +485,45 @@ body {
   font-weight: 700;
 }
 
+/* --- AsciiDoc block structures (rendered by asciidoctor.js) ------------- */
+/* Admonitions arrive as an inner <table>; drop the data-table borders and
+   show them as a left-accent callout that reads on light and dark slides. */
+.slide-content .admonitionblock {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-left: 5px solid var(--accent);
+  border-radius: 0 10px 10px 0;
+  padding: 14px 20px;
+  margin: 0 0 0.7em;
+}
+.slide-content .admonitionblock > table,
+.slide-content .admonitionblock td {
+  border: none;
+  padding: 0;
+  background: none;
+  vertical-align: top;
+}
+.slide-content .admonitionblock td.icon {
+  padding-right: 16px;
+  white-space: nowrap;
+}
+.slide-content .admonitionblock td.icon .title {
+  color: var(--accent);
+  font-weight: 700;
+  opacity: 1;
+}
+/* Block captions for tables, listings and images. */
+.slide-content .title {
+  font-size: 0.85em;
+  font-weight: 600;
+  opacity: 0.7;
+  text-align: left;
+  margin: 0 0 0.35em;
+}
+/* Tighten paragraphs inside AsciiDoc table cells. */
+.slide-content .tableblock p {
+  margin: 0;
+}
+
 /* ============================ Control bar ============================ */
 .controls {
   position: absolute;
@@ -574,6 +613,25 @@ body {
   height: 22px;
   background: rgba(255, 255, 255, 0.14);
   margin: 0 4px;
+}
+
+/* Transient feedback bubble above the bar (share-link copied / failed). */
+.ctrl-note {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(80vw, 420px);
+  padding: 6px 14px;
+  background: rgba(20, 20, 28, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
 }
 
 /* Secondary controls: inline in the bar on desktop, a ⋯ popup on narrow screens. */

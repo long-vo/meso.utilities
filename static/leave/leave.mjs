@@ -200,3 +200,65 @@ export function templateSummary(fields) {
   const summary = `${meta.label} · ${duration}`;
   return reason === "" ? summary : `${summary} · ${reason}`;
 }
+
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/**
+ * Day of week (0 = Sunday) for an ISO date, or null when unparsable. UTC-anchored
+ * so the result is the calendar day named, independent of the runtime timezone.
+ * @param {string} isoDate
+ * @returns {number | null}
+ */
+function dayOfWeek(isoDate) {
+  const t = Date.parse(`${isoDate}T00:00:00Z`);
+  return Number.isNaN(t) ? null : new Date(t).getUTCDay();
+}
+
+/**
+ * Day count and weekend feedback for the picked period, shown under the date
+ * fields. Catches the two expensive mistakes: an off-by-one range and a request
+ * that falls on a weekend. Follows formatPeriod's semantics: half days and an
+ * end date not after the start are a single day.
+ * @param {string} startDate ISO date.
+ * @param {string} endDate ISO date; ignored for half days.
+ * @param {"full"|"morning"|"afternoon"} duration
+ * @returns {{ text: string, warning: string } | null} null when startDate is
+ *   missing or unparsable.
+ */
+export function summarizePeriod(startDate, endDate, duration) {
+  const start = String(startDate ?? "").trim();
+  const startDow = dayOfWeek(start);
+  if (startDow === null) return null;
+
+  const half = duration === "morning" || duration === "afternoon";
+  const end = String(endDate ?? "").trim();
+  const endDow = half ? null : dayOfWeek(end);
+  const isWeekend = (/** @type {number} */ dow) => dow === 0 || dow === 6;
+
+  if (endDow === null || end <= start) {
+    return {
+      text: `${half ? "Half day" : "1 day"} — ${DAY_NAMES[startDow]}`,
+      warning: isWeekend(startDow) ? `Falls on a ${DAY_NAMES[startDow]}.` : "",
+    };
+  }
+
+  const days = Math.round(
+    (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000,
+  ) + 1;
+  let weekdays = 0;
+  for (let i = 0; i < days; i++) {
+    if (!isWeekend((startDow + i) % 7)) weekdays++;
+  }
+  const breakdown = weekdays === days
+    ? "all weekdays"
+    : weekdays === 0
+    ? `${days} weekend days`
+    : `${weekdays} weekday${weekdays === 1 ? "" : "s"}, ` +
+      `${days - weekdays} weekend day${days - weekdays === 1 ? "" : "s"}`;
+
+  const warnings = [];
+  if (isWeekend(startDow)) warnings.push(`Starts on a ${DAY_NAMES[startDow]}.`);
+  if (isWeekend(endDow)) warnings.push(`Ends on a ${DAY_NAMES[endDow]}.`);
+
+  return { text: `${days} days — ${breakdown}`, warning: warnings.join(" ") };
+}

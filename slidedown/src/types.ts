@@ -48,9 +48,21 @@ export interface DeckMeta {
   readonly theme?: ThemeName;
 }
 
+/** A text source file a deck was built from (kept for share links). */
+export interface SourceFile {
+  readonly name: string;
+  readonly text: string;
+}
+
 export interface Deck {
   readonly slides: Slide[];
   readonly meta: DeckMeta;
+  /**
+   * Original text sources, present only when every input file was text
+   * (Markdown/HTML/AsciiDoc) — binary inputs (PDF/image) make a deck
+   * unshareable as a content-in-URL link.
+   */
+  readonly sources?: readonly SourceFile[];
 }
 
 export type Direction = 'next' | 'prev' | 'none';

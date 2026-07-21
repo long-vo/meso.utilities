@@ -1277,6 +1277,12 @@ select:focus {
   min-height: 1em;
   font-family: var(--mono);
 }
+/* Fields flagged invalid by the JS validators (e.g. the Leave optional email
+   fields) — the same treatment as .code-area.invalid, kept red even on focus. */
+input[aria-invalid="true"] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent);
+}
 
 .stats {
   margin-top: 12px;
@@ -1339,6 +1345,20 @@ select:focus {
 .toast.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+  /* Interactive while visible so an action button (e.g. Undo) is clickable. */
+  pointer-events: auto;
+}
+.toast-action {
+  margin-left: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.toast-action:hover {
+  text-decoration: underline;
 }
 
 /* ---- responsive ---- */
@@ -2348,6 +2368,22 @@ kbd {
   margin: 12px 0 0;
   font-size: 12px;
   color: var(--text-faint);
+}
+/* The form's single status/guidance line leads the panel; a touch larger than
+   the shared 12px .status so the next step reads first. */
+.page-leave .controls .status {
+  display: block;
+  font-size: 13px;
+}
+/* Day count under the date fields; tinted when the period touches a weekend. */
+.date-summary.warn {
+  color: var(--warn);
+}
+/* "✓ done" badge on a step heading once its open/add action has run. */
+.step-done {
+  color: var(--good);
+  font-size: 12px;
+  font-weight: 600;
 }
 /* Event settings that are prefilled or default correctly — highlighted so they
    read as "no action needed". */

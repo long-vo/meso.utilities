@@ -3,13 +3,14 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "A PowerPoint-like presentation viewer that turns Markdown files, PDFs and images into navigable slides.",
+  "description": "A PowerPoint-like presentation viewer that turns Markdown, HTML, AsciiDoc, PDFs and images into navigable slides.",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@asciidoctor/core": "^4.0.4",
     "dompurify": "^3.1.7",
     "highlight.js": "^11.10.0",
     "marked": "^14.1.3",

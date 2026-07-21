@@ -6,6 +6,7 @@ import {
   buildLeaveRequest,
   mailtoUrl,
   outlookComposeUrl,
+  summarizePeriod,
   templateSummary,
   TYPES,
 } from "./leave.mjs";
@@ -24,6 +25,7 @@ const els = {
   endField: $("end-field"),
   fromSub: $("from-sub"),
   dateLabel: $("date-label"),
+  dateSummary: $("date-summary"),
   reason: $("reason"),
   lead: $("lead"),
   recipients: $("recipients"),
@@ -38,7 +40,9 @@ const els = {
   openOutlook: $("open-outlook"),
   copySubject: $("copy-subject"),
   copyBody: $("copy-body"),
-  eventHeading: $("event-heading"),
+  emailDone: $("email-done"),
+  eventDone: $("event-done"),
+  eventTitle: $("event-title"),
   eventSubject: $("event-subject"),
   eventRecipients: $("event-recipients"),
   addEventOutlook: $("add-event-outlook"),
@@ -58,6 +62,10 @@ let current = null;
 
 /** True once the user edits the body, so form changes stop overwriting their text. */
 let bodyDirty = false;
+
+/** Session-only step progress: the open/add actions set these, any form change
+ *  clears them (an edited form describes a new request, not the one sent). */
+const stepsDone = { email: false, event: false };
 
 /** localStorage key for the remembered name (only the name is stored). */
 const NAME_KEY = "meso-leave-name";
@@ -124,14 +132,25 @@ function render() {
   els.endField.hidden = isHalfDay;
   els.fromSub.hidden = isHalfDay;
   els.dateLabel.textContent = isHalfDay ? "Date" : "Dates";
+  // The visible "From" marker is aria-hidden, so name the input directly.
+  els.start.setAttribute("aria-label", isHalfDay ? "Date" : "From date");
+  // Keep the native picker from offering an end date before the start. A value
+  // typed in below the min still hits buildLeaveRequest's own conflict check.
+  els.end.min = els.start.value;
 
   // Remote/WFH aren't leave, so no HR email is expected: hide that step. The Outlook
   // event is then the only step, so drop its "· step 2" suffix.
   const needsEmail = Boolean(TYPES[els.type.value]?.emailApplicable);
   els.emailCard.hidden = !needsEmail;
-  els.eventHeading.textContent = needsEmail ? "Outlook Event · step 2" : "Outlook Event";
+  els.eventTitle.textContent = needsEmail ? "Outlook Event · step 2" : "Outlook Event";
+  paintSteps();
 
-  const result = buildLeaveRequest(readInput());
+  const input = readInput();
+  // An invalid (but optional) address is flagged by its inline error and the
+  // disabled actions; keep it out of the previews so they never show it as sent.
+  if (!els.lead.validity.valid) input.teamLead = "";
+  if (!els.recipients.validity.valid) input.recipients = "";
+  const result = buildLeaveRequest(input);
 
   if (!result.ok) {
     current = null;
@@ -144,11 +163,21 @@ function render() {
     if (!bodyDirty) els.emailBody.value = "";
     els.bodyReset.hidden = !bodyDirty;
     els.emailCcBlock.hidden = true;
+    els.dateSummary.hidden = true;
     setActionsEnabled(false);
     return;
   }
 
   current = result;
+
+  const summary = summarizePeriod(input.startDate, input.endDate, els.duration.value);
+  els.dateSummary.hidden = !summary;
+  if (summary) {
+    els.dateSummary.textContent = summary.warning
+      ? `${summary.text} · ⚠️ ${summary.warning}`
+      : summary.text;
+    els.dateSummary.classList.toggle("warn", summary.warning !== "");
+  }
 
   els.emailSubject.textContent = result.email.subject;
   if (!bodyDirty) els.emailBody.value = result.email.body;
@@ -171,6 +200,12 @@ function render() {
     els.formStatus.textContent = "Fix the highlighted email address to enable the actions.";
     els.formStatus.className = "status bad";
   }
+}
+
+/** Show or hide the "✓ done" badge on each step heading. */
+function paintSteps() {
+  els.emailDone.hidden = !stepsDone.email;
+  els.eventDone.hidden = !stepsDone.event;
 }
 
 function setActionsEnabled(on) {
@@ -209,6 +244,8 @@ async function copy(text, label) {
 
 function openMail() {
   if (!current) return;
+  stepsDone.email = true;
+  paintSteps();
   location.href = mailtoUrl(
     current.email.to,
     current.email.cc,
@@ -219,6 +256,8 @@ function openMail() {
 
 function openOutlookWeb() {
   if (!current) return;
+  stepsDone.email = true;
+  paintSteps();
   const url = outlookComposeUrl(
     current.email.to,
     current.email.cc,
@@ -242,6 +281,8 @@ function resetBody() {
 
 function addEventToOutlook() {
   if (!current) return;
+  stepsDone.event = true;
+  paintSteps();
   globalThis.open(current.event.outlookWebUrl, "_blank", "noopener");
 }
 
@@ -344,15 +385,30 @@ function applyTemplate(tpl) {
   els.start.value = "";
   els.end.value = "";
   bodyDirty = false;
+  stepsDone.email = stepsDone.event = false;
   saveName();
   render();
   els.start.focus();
   showToast(`Applied "${tpl.title}"`);
 }
 
+/** Delete with a toast Undo — a mis-click on the small × shouldn't lose a preset. */
 function deleteTemplate(id) {
-  storeTemplates(loadTemplates().filter((tpl) => tpl.id !== id));
+  const templates = loadTemplates();
+  const index = templates.findIndex((tpl) => tpl.id === id);
+  if (index === -1) return;
+  const [removed] = templates.splice(index, 1);
+  storeTemplates(templates);
   renderTemplates();
+  showToast(`Deleted "${removed.title}"`, {
+    label: "Undo",
+    onAction: () => {
+      const restored = loadTemplates();
+      restored.splice(Math.min(index, restored.length), 0, removed);
+      storeTemplates(restored);
+      renderTemplates();
+    },
+  });
 }
 
 function openSaveForm() {
@@ -383,10 +439,16 @@ function saveTemplateFromForm(event) {
 
 /* --------------------------------- wire ---------------------------------- */
 
-for (const el of [els.name, els.reason, els.lead, els.recipients, els.start, els.end]) {
-  el.addEventListener("input", render);
+/** A form edit describes a new request: clear the step progress, then re-render. */
+function formChanged() {
+  stepsDone.email = stepsDone.event = false;
+  render();
 }
-for (const el of [els.type, els.duration]) el.addEventListener("change", render);
+
+for (const el of [els.name, els.reason, els.lead, els.recipients, els.start, els.end]) {
+  el.addEventListener("input", formChanged);
+}
+for (const el of [els.type, els.duration]) el.addEventListener("change", formChanged);
 els.name.addEventListener("input", saveName);
 
 els.emailBody.addEventListener("input", onBodyEdited);
@@ -445,7 +507,14 @@ try {
 }
 // Default the start date to today so the tool shows live output as soon as a
 // name is present. (Browser-only convenience; the pure module stays date-free.)
-els.start.value = new Date().toISOString().slice(0, 10);
+// Built from local date parts — toISOString() is UTC, which is yesterday's date
+// during the early morning in timezones ahead of UTC (e.g. before 7am in UTC+7).
+const today = new Date();
+els.start.value = [
+  today.getFullYear(),
+  String(today.getMonth() + 1).padStart(2, "0"),
+  String(today.getDate()).padStart(2, "0"),
+].join("-");
 render();
 renderTemplates();
 els.name.focus();

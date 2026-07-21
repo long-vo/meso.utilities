@@ -16,9 +16,9 @@ everything here runs entirely in your browser and deploys to GitHub Pages.
 - **Compare Files** (`/compare/`) — compare two or three files side by side with highlighted
   differences (down to the character), drag & drop, and a per-difference pick-and-merge that builds
   a merged result you can copy or download. Runs fully client-side.
-- **Slidedown** (`/slidedown/`) — turn Markdown files, PDFs and images into navigable presentation
-  slides, with speaker view, themes and PDF export. A Vite/React app (in `slidedown/`) built in CI;
-  runs fully client-side.
+- **Slidedown** (`/slidedown/`) — turn Markdown, HTML, AsciiDoc, PDFs and images into navigable
+  presentation slides, with speaker view, themes, PDF export and shareable content-in-URL links for
+  text decks. A Vite/React app (in `slidedown/`) built in CI; runs fully client-side.
 - **Scrum Poker** — planning poker for team estimation. Lives in its own repo,
   [meso.poker](https://github.com/long-vo/meso.poker), and is hosted on Render (it needs a server
   for live rooms); the hub links straight to it.

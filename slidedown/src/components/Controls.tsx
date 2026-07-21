@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  Check,
   ChevronLeft,
   ChevronRight,
   Compress,
@@ -7,6 +8,7 @@ import {
   Grid,
   Home,
   Laser,
+  Link,
   Pause,
   Pen,
   Play,
@@ -16,12 +18,18 @@ import {
   ZoomOut,
 } from './Icons';
 import ThemeMenu from './ThemeMenu';
-import type { ThemeName } from '../types';
+import type { SourceFile, ThemeName } from '../types';
 import type { AnnotationTool } from './AnnotationLayer';
+import { encodeDeckToHash } from '../lib/share';
+
+// Above this URL length, warn that some chat clients truncate long links.
+const LONG_LINK_CHARS = 30000;
+const SHARE_NOTE_MS = 2500;
 
 interface Props {
   index: number;
   count: number;
+  sources?: readonly SourceFile[];
   zoom: number;
   minZoom: number;
   maxZoom: number;
@@ -49,6 +57,7 @@ interface Props {
 export default function Controls({
   index,
   count,
+  sources,
   zoom,
   minZoom,
   maxZoom,
@@ -78,6 +87,41 @@ export default function Controls({
 
   const [overflowOpen, setOverflowOpen] = useState(false);
   const barRef = useRef<HTMLDivElement>(null);
+
+  // Share link: encode the deck's sources into the URL hash and copy it.
+  const [shareCopied, setShareCopied] = useState(false);
+  const [shareNote, setShareNote] = useState<string | null>(null);
+  const shareTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (shareTimer.current) window.clearTimeout(shareTimer.current);
+    };
+  }, []);
+
+  const onShare = async (): Promise<void> => {
+    if (!sources) return;
+    let copied = false;
+    let note: string;
+    try {
+      const hash = await encodeDeckToHash(sources);
+      const url = location.origin + location.pathname + location.search + hash;
+      await navigator.clipboard.writeText(url);
+      copied = true;
+      note = url.length > LONG_LINK_CHARS
+        ? 'Link copied — very long links may be truncated by some chat apps'
+        : 'Link copied';
+    } catch {
+      note = 'Could not copy the link';
+    }
+    setShareCopied(copied);
+    setShareNote(note);
+    if (shareTimer.current) window.clearTimeout(shareTimer.current);
+    shareTimer.current = window.setTimeout(() => {
+      setShareCopied(false);
+      setShareNote(null);
+    }, SHARE_NOTE_MS);
+  };
 
   // Close the ⋯ overflow menu on an outside tap, Escape, or when the viewport
   // grows back past the compact breakpoint (where the menu no longer applies).
@@ -233,6 +277,18 @@ export default function Controls({
         <ThemeMenu theme={theme} onSelect={onSetTheme} direction="up" />
 
         <button
+          className={`ctrl-btn ${shareCopied ? 'is-active' : ''}`}
+          onClick={() => void onShare()}
+          disabled={!sources}
+          title={sources
+            ? 'Copy share link'
+            : 'Share links need a text-only deck (no PDFs or images)'}
+          aria-label="Copy share link"
+        >
+          {shareCopied ? <Check /> : <Link />}
+        </button>
+
+        <button
           className="ctrl-btn"
           onClick={onExport}
           title="Export to PDF (E)"
@@ -265,6 +321,12 @@ export default function Controls({
           <circle cx="19" cy="12" r="2" />
         </svg>
       </button>
+
+      {shareNote && (
+        <div className="ctrl-note" role="status">
+          {shareNote}
+        </div>
+      )}
     </div>
   );
 }

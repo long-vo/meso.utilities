@@ -5,7 +5,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import type { Direction, Slide, ThemeName } from '../types';
+import type { Direction, Slide, SourceFile, ThemeName } from '../types';
 import SlideView from './Slide';
 import AnnotationLayer, { type AnnotationTool } from './AnnotationLayer';
 import Controls from './Controls';
@@ -27,6 +27,8 @@ const SWIPE_MIN = 45;
 
 interface Props {
   slides: Slide[];
+  /** Text sources for the share-link button; undefined for binary decks. */
+  sources?: readonly SourceFile[];
   theme: ThemeName;
   onSetTheme: (theme: ThemeName) => void;
   onCycleTheme: () => void;
@@ -40,6 +42,7 @@ interface Point {
 
 export default function Presentation({
   slides,
+  sources,
   theme,
   onSetTheme,
   onCycleTheme,
@@ -425,6 +428,7 @@ export default function Presentation({
       <Controls
         index={index}
         count={count}
+        sources={sources}
         zoom={zoom}
         minZoom={MIN_ZOOM}
         maxZoom={MAX_ZOOM}

@@ -1,6 +1,6 @@
-import type { Deck, DeckMeta, ProtoSlide, ThemeName } from '../types';
+import type { Deck, DeckMeta, ProtoSlide, SourceFile, ThemeName } from '../types';
 import { THEMES } from '../types';
-import { renderMarkdown } from './markdown';
+import { renderMarkdown, sanitizeHtml } from './markdown';
 import { applyAnimations } from './animate';
 import { countExtraSteps } from './code-steps';
 
@@ -24,9 +24,18 @@ export function isImageFile(name: string): boolean {
   return /\.(png|jpe?g|gif|webp|avif|svg|bmp)$/i.test(name);
 }
 
+export function isHtmlFile(name: string): boolean {
+  return /\.html?$/i.test(name);
+}
+
+export function isAsciiDocFile(name: string): boolean {
+  return /\.(adoc|asciidoc)$/i.test(name);
+}
+
 /** Any file type the viewer can turn into slides. */
 export function isSupportedFile(name: string): boolean {
-  return isMarkdownFile(name) || isPdfFile(name) || isImageFile(name);
+  return isMarkdownFile(name) || isPdfFile(name) || isImageFile(name) ||
+    isHtmlFile(name) || isAsciiDocFile(name);
 }
 
 // ---------------------------------------------------------------- helpers
@@ -232,6 +241,69 @@ function imageProto(file: File): ProtoSlide {
   };
 }
 
+/** An HTML file becomes exactly one sanitized slide. */
+async function htmlProto(name: string, text: string): Promise<ProtoSlide> {
+  const dom = new DOMParser().parseFromString(text, 'text/html');
+  const heading = dom.querySelector('h1, h2, h3')?.textContent?.trim();
+  const title = heading || dom.title.trim() || titleFromFilename(name);
+  const html = await enhanceDiagrams(sanitizeHtml(dom.body.innerHTML));
+  return { title, filename: name, kind: 'markdown', html, fragmentCount: 1 };
+}
+
+// Meta an AsciiDoc header can contribute to the deck, mutable like the loader's.
+type PartialMeta = { title?: string; author?: string; theme?: ThemeName };
+
+// Lazily-loaded AsciiDoc processor, imported only when an .adoc file is present
+// (kept out of the main bundle just like pdfjs-dist and mermaid).
+let asciidoctorMod: typeof import('@asciidoctor/core') | null = null;
+
+/**
+ * Convert one AsciiDoc file into slides: the document title + preamble form a
+ * leading slide (when present), then each top-level `==` section is one slide.
+ * A section-less document is a single slide.
+ */
+async function asciidocSlides(
+  name: string,
+  text: string,
+): Promise<{ protos: ProtoSlide[]; meta: PartialMeta }> {
+  asciidoctorMod ??= await import('@asciidoctor/core');
+  const doc = await asciidoctorMod.load(text);
+
+  const docTitle = doc.getDocumentTitle();
+  const title = typeof docTitle === 'string' ? docTitle : undefined;
+  const meta: PartialMeta = {
+    title: title || undefined,
+    author: doc.getAuthor() || undefined,
+    theme: asTheme(doc.getAttribute('theme')),
+  };
+  const fallback = title || titleFromFilename(name);
+
+  const proto = async (html: string, slideTitle: string): Promise<ProtoSlide> => ({
+    title: slideTitle,
+    filename: name,
+    kind: 'markdown',
+    html: await enhanceDiagrams(sanitizeHtml(html)),
+    fragmentCount: 1,
+  });
+
+  // asciidoctor renders in embedded mode, which omits the level-0 title, so
+  // prepend it as an <h1> (sanitized downstream) to both slide shapes.
+  const titleHead = title ? `<h1>${title}</h1>` : '';
+  const sections = doc.getSections();
+  if (sections.length === 0) {
+    return { protos: [await proto(titleHead + (await doc.convert()), fallback)], meta };
+  }
+
+  const protos: ProtoSlide[] = [];
+  const preamble = doc.getBlocks().find((b) => b.getContext() === 'preamble');
+  const lead = titleHead + (preamble ? await preamble.convert() : '');
+  if (lead.trim()) protos.push(await proto(lead, fallback));
+  for (const section of sections) {
+    protos.push(await proto(await section.convert(), section.getTitle() ?? fallback));
+  }
+  return { protos, meta };
+}
+
 function withIds(protos: ProtoSlide[]): Deck['slides'] {
   return protos.map((p, i) => ({ id: `slide-${i}`, ...p }));
 }
@@ -250,16 +322,37 @@ export async function slidesFromFiles(fileList: File[]): Promise<Deck> {
 
   const protos: ProtoSlide[] = [];
   const meta: { title?: string; author?: string; theme?: ThemeName } = {};
+  const sources: SourceFile[] = [];
+  let textOnly = true;
   let pdf: typeof import('./pdf') | null = null;
 
   for (const file of files) {
     if (isPdfFile(file.name)) {
+      textOnly = false;
       pdf ??= await import('./pdf');
       protos.push(...(await pdf.slidesFromPdf(file)));
     } else if (isImageFile(file.name)) {
+      textOnly = false;
       protos.push(imageProto(file));
+    } else if (isHtmlFile(file.name)) {
+      const text = await file.text();
+      sources.push({ name: file.name, text });
+      protos.push(await htmlProto(file.name, text));
+    } else if (isAsciiDocFile(file.name)) {
+      const text = await file.text();
+      sources.push({ name: file.name, text });
+      const { protos: adocProtos, meta: adocMeta } = await asciidocSlides(
+        file.name,
+        text,
+      );
+      if (meta.title === undefined && adocMeta.title) meta.title = adocMeta.title;
+      if (meta.author === undefined && adocMeta.author) meta.author = adocMeta.author;
+      if (meta.theme === undefined) meta.theme = adocMeta.theme;
+      protos.push(...adocProtos);
     } else {
-      const { body, fm } = parseFrontMatter(await file.text());
+      const text = await file.text();
+      sources.push({ name: file.name, text });
+      const { body, fm } = parseFrontMatter(text);
       if (meta.title === undefined && fm.title) meta.title = fm.title;
       if (meta.author === undefined && fm.author) meta.author = fm.author;
       if (meta.theme === undefined) meta.theme = asTheme(fm.theme);
@@ -267,17 +360,20 @@ export async function slidesFromFiles(fileList: File[]): Promise<Deck> {
     }
   }
 
-  return { slides: withIds(protos), meta };
+  return {
+    slides: withIds(protos),
+    meta,
+    sources: textOnly && sources.length > 0 ? sources : undefined,
+  };
 }
 
 // Sample deck bundled with the app for the "Load sample deck" button.
-const sampleModules = import.meta.glob('../samples/*.md', {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-}) as Record<string, string>;
+const sampleModules = import.meta.glob(
+  ['../samples/*.md', '../samples/*.html', '../samples/*.adoc'],
+  { query: '?raw', import: 'default', eager: true },
+) as Record<string, string>;
 
-/** Build the bundled sample deck. */
+/** Build the bundled sample deck (Markdown, HTML and AsciiDoc files). */
 export async function sampleSlides(): Promise<Deck> {
   const entries = Object.entries(sampleModules)
     .map(([path, text]) => ({ name: path.split('/').pop() ?? path, text }))
@@ -286,8 +382,14 @@ export async function sampleSlides(): Promise<Deck> {
   const meta: DeckMeta = {};
   const protos: ProtoSlide[] = [];
   for (const entry of entries) {
-    const { body } = parseFrontMatter(entry.text);
-    protos.push(...(await markdownProtos(entry.name, body)));
+    if (isHtmlFile(entry.name)) {
+      protos.push(await htmlProto(entry.name, entry.text));
+    } else if (isAsciiDocFile(entry.name)) {
+      protos.push(...(await asciidocSlides(entry.name, entry.text)).protos);
+    } else {
+      const { body } = parseFrontMatter(entry.text);
+      protos.push(...(await markdownProtos(entry.name, body)));
+    }
   }
-  return { slides: withIds(protos), meta };
+  return { slides: withIds(protos), meta, sources: entries };
 }

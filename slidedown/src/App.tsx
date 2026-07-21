@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Deck, Slide, ThemeName } from './types';
+import type { Deck, ThemeName } from './types';
 import { THEMES } from './types';
 import StartScreen from './components/StartScreen';
 import Presentation from './components/Presentation';
+import { slidesFromFiles } from './lib/deck';
+import { decodeHashToFiles, hasDeckHash } from './lib/share';
 
 const THEME_KEY = 'slidedown.theme';
 // The hub (meso.utilities) persists its light/dark choice under this key; on
@@ -27,9 +29,19 @@ function storedTheme(): ThemeName {
   }
 }
 
+/** Drop a stale '#deck=…' from the address bar without adding a history entry. */
+function clearDeckHash(): void {
+  if (hasDeckHash(location.hash)) {
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+}
+
 export default function App() {
-  const [slides, setSlides] = useState<Slide[] | null>(null);
+  const [deck, setDeck] = useState<Deck | null>(null);
   const [theme, setTheme] = useState<ThemeName>(storedTheme);
+  // A '#deck=…' share link is decoded on mount; show a loading state meanwhile.
+  const [restoring, setRestoring] = useState(() => hasDeckHash(location.hash));
+  const [restoreError, setRestoreError] = useState<string | null>(null);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -46,24 +58,80 @@ export default function App() {
     [],
   );
 
-  const loadDeck = useCallback((deck: Deck) => {
-    if (deck.meta.theme) setTheme(deck.meta.theme);
-    setSlides(deck.slides);
+  const loadDeck = useCallback((next: Deck) => {
+    if (next.meta.theme) setTheme(next.meta.theme);
+    setRestoreError(null); // a loaded deck supersedes any share-link error
+    setDeck(next);
   }, []);
 
-  if (!slides || slides.length === 0) {
+  // Files chosen on the start screen replace whatever a share link carried.
+  const loadFreshDeck = useCallback(
+    (next: Deck) => {
+      clearDeckHash();
+      loadDeck(next);
+    },
+    [loadDeck],
+  );
+
+  // Open a deck passed in the URL hash (mermaid.live-style share link).
+  useEffect(() => {
+    if (!hasDeckHash(location.hash)) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const sources = await decodeHashToFiles(location.hash);
+        if (!sources) throw new Error('bad share link');
+        const next = await slidesFromFiles(
+          sources.map((s) => new File([s.text], s.name)),
+        );
+        if (next.slides.length === 0) throw new Error('empty deck');
+        if (!cancelled) loadDeck(next);
+      } catch {
+        if (!cancelled) {
+          setRestoreError('This share link is invalid or incomplete.');
+        }
+      } finally {
+        if (!cancelled) setRestoring(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadDeck]);
+
+  if (restoring) {
     return (
-      <StartScreen onLoad={loadDeck} theme={theme} onSetTheme={setTheme} />
+      <div className="start">
+        <div className="start-inner">
+          <div className="spinner" aria-hidden="true" />
+          <p className="start-subtitle">Opening shared deck…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!deck || deck.slides.length === 0) {
+    return (
+      <StartScreen
+        onLoad={loadFreshDeck}
+        theme={theme}
+        onSetTheme={setTheme}
+        initialError={restoreError}
+      />
     );
   }
 
   return (
     <Presentation
-      slides={slides}
+      slides={deck.slides}
+      sources={deck.sources}
       theme={theme}
       onSetTheme={setTheme}
       onCycleTheme={cycleTheme}
-      onExit={() => setSlides(null)}
+      onExit={() => {
+        clearDeckHash();
+        setDeck(null);
+      }}
     />
   );
 }

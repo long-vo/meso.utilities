@@ -52,3 +52,12 @@ export function renderMarkdown(md: string): string {
   const raw = marked.parse(md, { async: false }) as string;
   return DOMPurify.sanitize(raw);
 }
+
+/**
+ * Sanitize an already-rendered HTML string (from HTML / AsciiDoc inputs)
+ * through the same DOMPurify config — `<script>` is stripped, links open in a
+ * new tab, inline styles are kept.
+ */
+export function sanitizeHtml(html: string): string {
+  return DOMPurify.sanitize(html);
+}

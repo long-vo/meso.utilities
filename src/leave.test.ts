@@ -11,6 +11,7 @@ import {
   buildLeaveRequest,
   mailtoUrl,
   outlookComposeUrl,
+  summarizePeriod,
   templateSummary,
 } from "../static/leave/leave.mjs";
 
@@ -368,4 +369,53 @@ Deno.test("validation: name, start date and date order are required", () => {
   assertEquals(backwards.ok, false);
   if (backwards.ok) throw new Error("expected invalid");
   assert(backwards.error.toLowerCase().includes("end"), backwards.error);
+});
+
+Deno.test("summarizePeriod: single weekday, half day, and missing start", () => {
+  // 2024-01-01 was a Monday.
+  assertEquals(summarizePeriod("2024-01-01", "", "full"), {
+    text: "1 day — Monday",
+    warning: "",
+  });
+  assertEquals(summarizePeriod("2024-01-01", "", "morning"), {
+    text: "Half day — Monday",
+    warning: "",
+  });
+  // A half day ignores any (stale) end date.
+  assertEquals(summarizePeriod("2024-01-01", "2024-01-05", "afternoon"), {
+    text: "Half day — Monday",
+    warning: "",
+  });
+  assertEquals(summarizePeriod("", "", "full"), null);
+  assertEquals(summarizePeriod("not-a-date", "", "full"), null);
+});
+
+Deno.test("summarizePeriod: ranges count days and weekdays", () => {
+  // Mon 2024-01-01 .. Fri 2024-01-05: a clean working week.
+  assertEquals(summarizePeriod("2024-01-01", "2024-01-05", "full"), {
+    text: "5 days — all weekdays",
+    warning: "",
+  });
+  // Mon .. Sun spans one weekend; the end lands on it.
+  assertEquals(summarizePeriod("2024-01-01", "2024-01-07", "full"), {
+    text: "7 days — 5 weekdays, 2 weekend days",
+    warning: "Ends on a Sunday.",
+  });
+  // An end date equal to (or before) the start reads as a single day.
+  assertEquals(summarizePeriod("2024-01-01", "2024-01-01", "full"), {
+    text: "1 day — Monday",
+    warning: "",
+  });
+});
+
+Deno.test("summarizePeriod: weekend endpoints warn", () => {
+  // 2024-01-06 was a Saturday, 2024-01-07 a Sunday.
+  assertEquals(summarizePeriod("2024-01-06", "", "full"), {
+    text: "1 day — Saturday",
+    warning: "Falls on a Saturday.",
+  });
+  assertEquals(summarizePeriod("2024-01-06", "2024-01-07", "full"), {
+    text: "2 days — 2 weekend days",
+    warning: "Starts on a Saturday. Ends on a Sunday.",
+  });
 });
