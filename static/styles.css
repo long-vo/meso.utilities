@@ -383,6 +383,279 @@ a.card:hover .card-go {
   transform: translateX(3px);
 }
 
+/* ---- hub cards: pastel "Slack-style" panels --------------------------------
+   Each card carries an accent class (card--purple, card--teal, …) that sets a
+   family of custom properties; the structural rules below consume them. The
+   values declared on the accent class are the DARK theme (the site default);
+   :root[data-theme="light"] swaps in the light pastels. Stops per role:
+     tint  = card background   (dark 900 / light 50)
+     ink   = title text        (dark 100 / light 900)
+     sub   = secondary marks   (dark 200 / light 600)
+     paper = "white paper" shapes in the illustration (dark 100 / light #fff)
+     art1  = strong accent, 400 in both themes
+     art2  = medium fill       (dark 600 / light 200)
+     art3  = subtle fill       (dark 800 / light 100)
+     mid   = 200 in both themes (strokes that sit directly on the tint)
+     deep  = marks on paper    (dark 800 / light 600) */
+
+.card--purple {
+  --card-tint: #26215c;
+  --card-ink: #cecbf6;
+  --card-sub: #afa9ec;
+  --card-paper: #cecbf6;
+  --card-art1: #7f77dd;
+  --card-art2: #534ab7;
+  --card-art3: #3c3489;
+  --card-mid: #afa9ec;
+  --card-deep: #3c3489;
+}
+.card--teal {
+  --card-tint: #04342c;
+  --card-ink: #9fe1cb;
+  --card-sub: #5dcaa5;
+  --card-paper: #9fe1cb;
+  --card-art1: #1d9e75;
+  --card-art2: #0f6e56;
+  --card-art3: #085041;
+  --card-mid: #5dcaa5;
+  --card-deep: #085041;
+}
+.card--green {
+  --card-tint: #173404;
+  --card-ink: #c0dd97;
+  --card-sub: #97c459;
+  --card-paper: #c0dd97;
+  --card-art1: #639922;
+  --card-art2: #3b6d11;
+  --card-art3: #27500a;
+  --card-mid: #97c459;
+  --card-deep: #27500a;
+}
+.card--coral {
+  --card-tint: #4a1b0c;
+  --card-ink: #f5c4b3;
+  --card-sub: #f0997b;
+  --card-paper: #f5c4b3;
+  --card-art1: #d85a30;
+  --card-art2: #993c1d;
+  --card-art3: #712b13;
+  --card-mid: #f0997b;
+  --card-deep: #712b13;
+}
+.card--pink {
+  --card-tint: #4b1528;
+  --card-ink: #f4c0d1;
+  --card-sub: #ed93b1;
+  --card-paper: #f4c0d1;
+  --card-art1: #d4537e;
+  --card-art2: #993556;
+  --card-art3: #72243e;
+  --card-mid: #ed93b1;
+  --card-deep: #72243e;
+}
+.card--amber {
+  --card-tint: #412402;
+  --card-ink: #fac775;
+  --card-sub: #ef9f27;
+  --card-paper: #fac775;
+  --card-art1: #ba7517;
+  --card-art2: #854f0b;
+  --card-art3: #633806;
+  --card-mid: #ef9f27;
+  --card-deep: #633806;
+}
+.card--blue {
+  --card-tint: #042c53;
+  --card-ink: #b5d4f4;
+  --card-sub: #85b7eb;
+  --card-paper: #b5d4f4;
+  --card-art1: #378add;
+  --card-art2: #185fa5;
+  --card-art3: #0c447c;
+  --card-mid: #85b7eb;
+  --card-deep: #0c447c;
+}
+
+:root[data-theme="light"] .card--purple {
+  --card-tint: #eeedfe;
+  --card-ink: #26215c;
+  --card-sub: #534ab7;
+  --card-paper: #ffffff;
+  --card-art2: #afa9ec;
+  --card-art3: #cecbf6;
+  --card-deep: #534ab7;
+}
+:root[data-theme="light"] .card--teal {
+  --card-tint: #e1f5ee;
+  --card-ink: #04342c;
+  --card-sub: #0f6e56;
+  --card-paper: #ffffff;
+  --card-art2: #5dcaa5;
+  --card-art3: #9fe1cb;
+  --card-deep: #0f6e56;
+}
+:root[data-theme="light"] .card--green {
+  --card-tint: #eaf3de;
+  --card-ink: #173404;
+  --card-sub: #3b6d11;
+  --card-paper: #ffffff;
+  --card-art2: #97c459;
+  --card-art3: #c0dd97;
+  --card-deep: #3b6d11;
+}
+:root[data-theme="light"] .card--coral {
+  --card-tint: #faece7;
+  --card-ink: #4a1b0c;
+  --card-sub: #993c1d;
+  --card-paper: #ffffff;
+  --card-art2: #f0997b;
+  --card-art3: #f5c4b3;
+  --card-deep: #993c1d;
+}
+:root[data-theme="light"] .card--pink {
+  --card-tint: #fbeaf0;
+  --card-ink: #4b1528;
+  --card-sub: #993556;
+  --card-paper: #ffffff;
+  --card-art2: #ed93b1;
+  --card-art3: #f4c0d1;
+  --card-deep: #993556;
+}
+:root[data-theme="light"] .card--amber {
+  --card-tint: #faeeda;
+  --card-ink: #412402;
+  --card-sub: #854f0b;
+  --card-paper: #ffffff;
+  --card-art2: #ef9f27;
+  --card-art3: #fac775;
+  --card-deep: #854f0b;
+}
+:root[data-theme="light"] .card--blue {
+  --card-tint: #e6f1fb;
+  --card-ink: #042c53;
+  --card-sub: #185fa5;
+  --card-paper: #ffffff;
+  --card-art2: #85b7eb;
+  --card-art3: #b5d4f4;
+  --card-deep: #185fa5;
+}
+
+body.page-hub .cards {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+body.page-hub .card {
+  background: var(--card-tint, var(--bg-elev));
+  border-color: transparent;
+  border-radius: 16px;
+  box-shadow: none;
+  min-height: 230px;
+  color: var(--card-ink, var(--text));
+  padding: 18px 18px 14px;
+}
+body.page-hub a.card:hover {
+  border-color: var(--card-art1, var(--accent));
+  transform: translateY(-3px);
+}
+body.page-hub .card-head h2 {
+  color: var(--card-ink, var(--text));
+  font-size: 16.5px;
+  line-height: 1.35;
+}
+
+.card-art {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 0;
+}
+.card-art text {
+  font-family: var(--sans);
+}
+.card-art .ap {
+  fill: var(--card-paper);
+}
+.card-art .a1 {
+  fill: var(--card-art1);
+}
+.card-art .a2 {
+  fill: var(--card-art2);
+}
+.card-art .a3 {
+  fill: var(--card-art3);
+}
+.card-art .ad {
+  fill: var(--card-sub);
+}
+.card-art .adp {
+  fill: var(--card-deep);
+}
+.card-art .tp {
+  fill: var(--card-tint);
+}
+.card-art .sd {
+  stroke: var(--card-sub);
+  fill: none;
+}
+.card-art .sp {
+  stroke: var(--card-paper);
+  fill: none;
+}
+.card-art .s1 {
+  stroke: var(--card-art1);
+  fill: none;
+}
+.card-art .s2 {
+  stroke: var(--card-mid);
+  fill: none;
+}
+.card-art .s1-thin {
+  stroke: var(--card-art1);
+}
+
+/* Tags read as translucent "frosted" pills tinted to the card. */
+body.page-hub .card .tag {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--card-sub, var(--text-dim));
+}
+:root[data-theme="light"] body.page-hub .card .tag {
+  background: rgba(255, 255, 255, 0.55);
+}
+body.page-hub .card .tag-hl {
+  background: var(--card-paper);
+  color: var(--card-deep);
+}
+:root[data-theme="light"] body.page-hub .card .tag-hl {
+  color: var(--card-sub);
+}
+/* Anchor the go-arrow to the card's bottom-right corner so a wrapping tag row
+   flows past it instead of pushing it onto a cramped extra line. */
+body.page-hub .card .card-meta {
+  padding-right: 26px;
+}
+body.page-hub .card .card-go {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  margin-left: 0;
+  color: var(--card-sub, var(--accent));
+}
+
+/* Screen-reader-only copy — the old card descriptions stay for assistive
+   tech (and as the link's title tooltip) after the visual redesign. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .card.is-soon {
   opacity: 0.68;
   cursor: default;
@@ -1519,6 +1792,9 @@ input[aria-invalid="true"] {
   cursor: pointer;
   transition: transform 0.15s, color 0.15s;
 }
+body.page-hub .fav-btn:not(:hover, .is-fav) {
+  color: color-mix(in srgb, var(--card-ink, var(--text-faint)) 55%, transparent);
+}
 .fav-btn:hover {
   transform: scale(1.2);
   color: var(--warn);
@@ -1936,7 +2212,8 @@ kbd {
   padding: 0 10px;
   font-family: var(--mono);
   font-size: 12px;
-  color: var(--text-dim);
+  font-weight: 700;
+  color: var(--accent);
 }
 
 .palette-backdrop {
