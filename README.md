@@ -93,16 +93,22 @@ Nothing is sent — the buttons hand off to your own mail app and to Outlook on 
   day.
 - **Dates.** A full day takes a **From/To** range for a multi-day period; a half day collapses to a
   single date tagged with the time of day.
-- **HR email.** Addressed to `hr.vn@mesoneer.io`, with an optional **team-lead Cc**; the subject and
-  body (`Date off`, `Leave type`, `Reason`) are generated for you. The body is editable — tweak it
-  and the hand-offs use your version, or hit **Reset** to return to the generated text. **Open in
-  mail** uses a `mailto:` link to your default mail app; **Open in Outlook (web)** opens a
-  pre-filled compose tab (a help note covers making Outlook your default mail app).
+- **HR email.** Addressed to `hr.vn@mesoneer.io`, with an optional **Cc** (one or more addresses,
+  comma- or semicolon-separated); the subject and body (`Date off`, `Leave type`, `Reason`) are
+  generated for you. The body is editable — tweak it and the hand-offs use your version, or hit
+  **Reset** to return to the generated text. **Open in mail** uses a `mailto:` link to your default
+  mail app; **Open in Outlook (web)** opens a pre-filled compose tab (a help note covers making
+  Outlook your default mail app).
 - **Calendar event.** Subject `[OFF] - Name` — the bracket follows the leave type (`OFF`,
   `Sick Leave`, `Core Leave`, `Remote`, `WFH`, prefixed with the half-day time) — sent to
-  `mesoneer_vn@mesoneer.io` plus any optional PO/extra recipients. **Add to Outlook (web)** prefills
-  the subject, dates, all-day flag and attendees; reminder chips flag what a URL can't set — the one
-  manual step is to **uncheck "Request Response"**.
+  `mesoneer_vn@mesoneer.io` plus any optional PO/extra recipients (one or more, comma- or
+  semicolon-separated). **Add to Outlook (web)** prefills the subject, dates, all-day flag and
+  attendees; reminder chips flag what a URL can't set — the one manual step is to **uncheck "Request
+  Response"**.
+- **Saved recipients.** Addresses used in the Cc and PO/extra fields are remembered (in
+  `localStorage`, shared by both) and offered as autocomplete — pick one to complete the address
+  you're typing, ✕ a suggestion to forget it, or **Save recipients** to keep the current addresses
+  without sending. They're auto-saved when you Open in mail / Add to Outlook.
 - **Templates.** Save the reusable fields (everything except the dates) as a named preset — one
   click refills the form for the next request. Templates and your name persist in `localStorage`;
   the dates always start fresh.

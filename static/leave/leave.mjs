@@ -35,8 +35,10 @@ export const TYPES = {
  * @property {string} startDate ISO date, e.g. "2026-07-20".
  * @property {string} [endDate] ISO date; a full-day period end. Ignored for half days.
  * @property {string} [reason] Optional reason for the HR email.
- * @property {string} [teamLead] Optional team-lead address; becomes the email Cc.
+ * @property {string} [teamLead] Optional team-lead address(es); become the email Cc.
+ *   A comma- or semicolon-separated list is accepted.
  * @property {string} [recipients] Optional extra event recipients (e.g. your PO).
+ *   A comma- or semicolon-separated list is accepted.
  */
 
 /**
@@ -64,8 +66,8 @@ export function buildLeaveRequest(input) {
   const startDate = String(input?.startDate ?? "").trim();
   const endDate = String(input?.endDate ?? "").trim();
   const reason = String(input?.reason ?? "").trim();
-  const teamLead = String(input?.teamLead ?? "").trim();
-  const recipients = String(input?.recipients ?? "").trim();
+  const teamLeads = parseEmails(input?.teamLead);
+  const extraRecipients = parseEmails(input?.recipients);
 
   if (name === "") return { ok: false, error: "Enter your name." };
   if (startDate === "") return { ok: false, error: "Pick a start date." };
@@ -87,15 +89,19 @@ export function buildLeaveRequest(input) {
     "Best regards,",
   ].join("\n");
 
-  // Outlook web's compose deeplink drops a `cc` param, so its link folds the team lead
-  // into `to`; mailto reliably carries a proper Cc. Both are also rebuilt by the UI
-  // from an edited body via the same exported helpers.
-  const mailto = mailtoUrl(HR_EMAIL, teamLead, subject, body);
-  const outlookWebUrl = outlookComposeUrl(HR_EMAIL, teamLead, subject, body);
+  // Cc display uses Outlook's own "; " separator; the URL helpers re-split it into
+  // comma-separated addresses. Outlook web's compose deeplink drops a `cc` param, so
+  // its link folds the team lead(s) into `to`; mailto reliably carries a proper Cc.
+  // Both are also rebuilt by the UI from an edited body via the same exported helpers.
+  const cc = teamLeads.join("; ");
+  const mailto = mailtoUrl(HR_EMAIL, cc, subject, body);
+  const outlookWebUrl = outlookComposeUrl(HR_EMAIL, cc, subject, body);
 
   const eventBracket = time === "" ? meta.bracket : `${time} - ${meta.bracket}`;
   const eventSubject = `[${eventBracket}] - ${name}`;
-  const eventRecipients = recipients === "" ? EVENT_RECIPIENT : `${EVENT_RECIPIENT}; ${recipients}`;
+  const eventRecipients = extraRecipients.length === 0
+    ? EVENT_RECIPIENT
+    : `${EVENT_RECIPIENT}; ${extraRecipients.join("; ")}`;
 
   // Outlook-on-the-web calendar deep link — prefills the new-event form (subject,
   // all-day, dates, attendees). "Show as Free" and "don't request a response" have no
@@ -107,7 +113,7 @@ export function buildLeaveRequest(input) {
     ? endDate
     : startDate;
   const eventEnd = nextDay(lastDay);
-  const attendees = recipients === "" ? EVENT_RECIPIENT : `${EVENT_RECIPIENT},${recipients}`;
+  const attendees = [EVENT_RECIPIENT, ...extraRecipients].join(",");
   const eventOutlookWebUrl = "https://outlook.office.com/calendar/0/deeplink/compose?" +
     [
       `path=${encodeURIComponent("/calendar/action/compose")}`,
@@ -123,7 +129,7 @@ export function buildLeaveRequest(input) {
     ok: true,
     email: {
       to: HR_EMAIL,
-      cc: teamLead,
+      cc,
       subject,
       body,
       mailto,
@@ -153,9 +159,132 @@ function formatPeriod(startDate, endDate, duration) {
   return startDate;
 }
 
+/** The HTML5 email-input validity regex, applied per address (WHATWG spec). */
+const EMAIL_RE =
+  /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+
 /**
- * A `mailto:` link. `cc` is omitted when empty. Exported so the UI can rebuild the
- * link from an edited body using the same encoding.
+ * Split a free-typed recipient list on commas or semicolons (Outlook uses `;`),
+ * trim each, and drop the empties. Returns the addresses in order.
+ * @param {string | undefined} list
+ * @returns {string[]}
+ */
+export function parseEmails(list) {
+  return String(list ?? "")
+    .split(/[,;]/)
+    .map((address) => address.trim())
+    .filter((address) => address !== "");
+}
+
+/**
+ * Whether an optional recipient field is acceptable: blank, or a list whose every
+ * address is a well-formed email. Mirrors the browser's per-address `type=email`
+ * check so multi-recipient input is validated exactly as a single one used to be.
+ * @param {string | undefined} list
+ * @returns {boolean}
+ */
+export function isValidEmailList(list) {
+  return parseEmails(list).every((address) => EMAIL_RE.test(address));
+}
+
+/**
+ * Add addresses to the saved-recipient pool: valid ones are moved to the front
+ * (most-recent-first), the list is de-duplicated case-insensitively (the newest
+ * casing wins) and capped. Blank/invalid entries are ignored. Pure — the UI owns
+ * the localStorage read/write.
+ * @param {string[]} list Existing pool.
+ * @param {string[]} addresses Addresses just used or saved.
+ * @param {number} [cap] Maximum entries to keep.
+ * @returns {string[]} A new pool.
+ */
+export function addRecipients(list, addresses, cap = 50) {
+  const clean = (addresses ?? []).map((a) => String(a).trim()).filter((a) => EMAIL_RE.test(a));
+  const seen = new Set();
+  const out = [];
+  for (const address of [...clean, ...(list ?? [])]) {
+    const key = address.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(address);
+    if (out.length >= cap) break;
+  }
+  return out;
+}
+
+/**
+ * Remove one address from the pool, matched case-insensitively.
+ * @param {string[]} list
+ * @param {string} address
+ * @returns {string[]} A new pool.
+ */
+export function removeRecipient(list, address) {
+  const key = String(address).toLowerCase();
+  return (list ?? []).filter((a) => a.toLowerCase() !== key);
+}
+
+/**
+ * The recipient token the caret sits in — the address fragment between the comma
+ * or semicolon before the caret and the one after it. `prefix` is that fragment
+ * trimmed, used to match suggestions.
+ * @param {string} value Full field value.
+ * @param {number} caret Caret index.
+ * @returns {{ start: number, end: number, prefix: string }}
+ */
+export function recipientTokenAt(value, caret) {
+  const text = String(value ?? "");
+  let pos = Number.isInteger(caret) ? caret : text.length;
+  pos = Math.max(0, Math.min(pos, text.length));
+  let start = pos;
+  while (start > 0 && text[start - 1] !== "," && text[start - 1] !== ";") start--;
+  let end = pos;
+  while (end < text.length && text[end] !== "," && text[end] !== ";") end++;
+  return { start, end, prefix: text.slice(start, end).trim() };
+}
+
+/**
+ * Suggestions for the token at the caret: saved addresses whose start matches the
+ * token's prefix (case-insensitive), minus any already present elsewhere in the
+ * field. An empty prefix returns the whole pool (minus present), recent-first.
+ * @param {string[]} saved
+ * @param {string} value
+ * @param {number} caret
+ * @param {number} [cap]
+ * @returns {string[]}
+ */
+export function filterRecipientSuggestions(saved, value, caret, cap = 8) {
+  const needle = recipientTokenAt(value, caret).prefix.toLowerCase();
+  const present = new Set(parseEmails(value).map((a) => a.toLowerCase()));
+  const out = [];
+  for (const address of saved ?? []) {
+    const key = address.toLowerCase();
+    if (needle && !key.startsWith(needle)) continue;
+    if (present.has(key)) continue;
+    out.push(address);
+    if (out.length >= cap) break;
+  }
+  return out;
+}
+
+/**
+ * Replace the token at the caret with `address`, normalising the separators
+ * around it to "; ". Returns the new text and where to place the caret (just
+ * after the inserted address).
+ * @param {string} value
+ * @param {number} caret
+ * @param {string} address
+ * @returns {{ text: string, caret: number }}
+ */
+export function applyRecipientCompletion(value, caret, address) {
+  const { start, end } = recipientTokenAt(value, caret);
+  const left = String(value ?? "").slice(0, start).replace(/[;,]\s*$/, "; ");
+  const right = String(value ?? "").slice(end).replace(/^\s*[;,]\s*/, "; ");
+  return { text: left + address + right, caret: (left + address).length };
+}
+
+/**
+ * A `mailto:` link. `cc` is omitted when empty; a comma/semicolon list is
+ * normalised to the comma-separated addresses mailto expects. Exported so the UI
+ * can rebuild the link from an edited body using the same encoding.
  * @param {string} to
  * @param {string} cc
  * @param {string} subject
@@ -163,8 +292,9 @@ function formatPeriod(startDate, endDate, duration) {
  * @returns {string}
  */
 export function mailtoUrl(to, cc, subject, body) {
+  const ccList = parseEmails(cc).join(",");
   const params = [];
-  if (cc) params.push(`cc=${encodeURIComponent(cc)}`);
+  if (ccList) params.push(`cc=${encodeURIComponent(ccList)}`);
   params.push(`subject=${encodeURIComponent(subject)}`);
   params.push(`body=${encodeURIComponent(body)}`);
   return `mailto:${to}?${params.join("&")}`;
@@ -174,8 +304,8 @@ export function mailtoUrl(to, cc, subject, body) {
  * An Outlook-on-the-web mail compose deep link (Microsoft 365). Recipients are query
  * params, so they're percent-encoded. The deeplink/compose endpoint honours only
  * `to`, `subject` and `body` — a `cc`/`bcc` param is silently dropped — so the Cc
- * recipient is folded into `to` (comma-separated) to keep the team lead on the mail;
- * the mailto path carries a proper Cc for the Outlook app.
+ * recipient(s) are folded into `to` (comma-separated) to keep the team lead on the
+ * mail; the mailto path carries a proper Cc for the Outlook app.
  * @param {string} to
  * @param {string} cc
  * @param {string} subject
@@ -183,7 +313,8 @@ export function mailtoUrl(to, cc, subject, body) {
  * @returns {string}
  */
 export function outlookComposeUrl(to, cc, subject, body) {
-  const recipients = cc ? `${to},${cc}` : to;
+  const ccList = parseEmails(cc).join(",");
+  const recipients = ccList ? `${to},${ccList}` : to;
   const params = [
     `to=${encodeURIComponent(recipients)}`,
     `subject=${encodeURIComponent(subject)}`,

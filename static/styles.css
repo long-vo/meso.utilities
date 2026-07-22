@@ -1850,6 +1850,45 @@ html.js body.page-hub .cards.is-ready {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--text);
 }
+/* Recipient suggestions carry a ✕ to forget the saved address. */
+.ac-item-recipient {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.ac-item-recipient .ac-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ac-forget {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 3px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.ac-forget:hover {
+  color: var(--danger);
+}
+/* Leave: the hint + "Save recipients" button sit on one row under each field. */
+.recipient-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+.recipient-row .hint {
+  margin: 0;
+}
+.recipient-row .btn {
+  flex: none;
+}
 
 /* ---- gradient labels ----
    One signature accent→violet gradient for every label/heading, site-wide:

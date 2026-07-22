@@ -3,9 +3,15 @@
 // page. "Open in mail" hands off to the local mail client via a mailto: link;
 // the calendar event is copied for pasting into a new Outlook event.
 import {
+  addRecipients,
+  applyRecipientCompletion,
   buildLeaveRequest,
+  filterRecipientSuggestions,
+  isValidEmailList,
   mailtoUrl,
   outlookComposeUrl,
+  parseEmails,
+  removeRecipient,
   summarizePeriod,
   templateSummary,
   TYPES,
@@ -28,7 +34,9 @@ const els = {
   dateSummary: $("date-summary"),
   reason: $("reason"),
   lead: $("lead"),
+  leadSave: $("lead-save"),
   recipients: $("recipients"),
+  recipientsSave: $("recipients-save"),
   formStatus: $("form-status"),
   emailCard: $("email-card"),
   emailCc: $("email-cc"),
@@ -148,8 +156,8 @@ function render() {
   const input = readInput();
   // An invalid (but optional) address is flagged by its inline error and the
   // disabled actions; keep it out of the previews so they never show it as sent.
-  if (!els.lead.validity.valid) input.teamLead = "";
-  if (!els.recipients.validity.valid) input.recipients = "";
+  if (!isValidEmailList(els.lead.value)) input.teamLead = "";
+  if (!isValidEmailList(els.recipients.value)) input.recipients = "";
   const result = buildLeaveRequest(input);
 
   if (!result.ok) {
@@ -217,14 +225,17 @@ function setActionsEnabled(on) {
 
 /**
  * Validate the optional email fields, show or clear their inline errors, and
- * return whether all are acceptable (blank or well-formed). `type=email` alone
- * doesn't block the actions, so without this a typo would reach the mailto/event.
+ * return whether all are acceptable (blank or a list of well-formed addresses).
+ * `type=email` alone doesn't block the actions, so without this a typo would reach
+ * the mailto/event; and a multi-address list needs per-address checking anyway.
  */
 function validateEmails() {
   let allValid = true;
   for (const { input, error } of EMAIL_FIELDS) {
-    const valid = input.validity.valid; // no `required`, so empty counts as valid
-    error.textContent = valid ? "" : "Enter a valid email address, or leave it blank.";
+    const valid = isValidEmailList(input.value); // blank counts as valid (optional)
+    error.textContent = valid
+      ? ""
+      : "Enter valid email addresses (comma or semicolon separated), or leave it blank.";
     error.hidden = valid;
     input.setAttribute("aria-invalid", valid ? "false" : "true");
     if (!valid) allValid = false;
@@ -244,6 +255,7 @@ async function copy(text, label) {
 
 function openMail() {
   if (!current) return;
+  rememberRecipients(els.lead.value);
   stepsDone.email = true;
   paintSteps();
   location.href = mailtoUrl(
@@ -256,6 +268,7 @@ function openMail() {
 
 function openOutlookWeb() {
   if (!current) return;
+  rememberRecipients(els.lead.value);
   stepsDone.email = true;
   paintSteps();
   const url = outlookComposeUrl(
@@ -281,6 +294,7 @@ function resetBody() {
 
 function addEventToOutlook() {
   if (!current) return;
+  rememberRecipients(els.recipients.value);
   stepsDone.event = true;
   paintSteps();
   globalThis.open(current.event.outlookWebUrl, "_blank", "noopener");
@@ -437,6 +451,189 @@ function saveTemplateFromForm(event) {
   showToast("Template saved");
 }
 
+/* --------------------------- saved recipients ---------------------------- */
+// One shared pool of previously-used addresses, offered as autocomplete in both
+// email fields. Auto-saved when a request is actually used, or saved by hand.
+
+/** localStorage key for the saved-recipient pool (a plain array of addresses). */
+const RECIPIENTS_KEY = "meso-leave-recipients";
+
+/** In-memory copy of the pool; the source of truth for the autocomplete. */
+let recipients = loadRecipients();
+
+function loadRecipients() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(RECIPIENTS_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((a) => typeof a === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function storeRecipients() {
+  try {
+    localStorage.setItem(RECIPIENTS_KEY, JSON.stringify(recipients));
+  } catch {
+    /* storage unavailable; the pool just won't persist */
+  }
+}
+
+/** Remember every valid address in a field's value (used on send / manual save). */
+function rememberRecipients(value) {
+  const next = addRecipients(recipients, parseEmails(value));
+  if (next.length !== recipients.length || next.some((a, i) => a !== recipients[i])) {
+    recipients = next;
+    storeRecipients();
+  }
+}
+
+function forgetRecipient(address) {
+  recipients = removeRecipient(recipients, address);
+  storeRecipients();
+}
+
+/** Save a field's current addresses on demand; reports what happened. */
+function manualSaveRecipients(field) {
+  const before = recipients.length;
+  const valid = parseEmails(field.value).filter((a) => isValidEmailList(a));
+  if (valid.length === 0) {
+    showToast("Enter a valid email address to save it");
+    return;
+  }
+  rememberRecipients(field.value);
+  const added = recipients.length - before;
+  showToast(
+    added === 0 ? "Already saved" : added === 1 ? "Recipient saved" : `${added} recipients saved`,
+  );
+}
+
+// A single floating listbox, reused by both fields (mirrors the REST tool's
+// pattern). Reuses the shared .ac-menu / .ac-item styles.
+const acMenu = document.createElement("div");
+acMenu.className = "ac-menu";
+acMenu.hidden = true;
+acMenu.setAttribute("role", "listbox");
+acMenu.setAttribute("aria-label", "Saved recipients");
+document.body.appendChild(acMenu);
+
+/** Field the menu is attached to (undefined = closed). */
+let acField;
+/** @type {string[]} */
+let acItems = [];
+let acIndex = 0;
+
+const isAcOpen = () => !acMenu.hidden;
+
+function closeAc() {
+  acMenu.hidden = true;
+  acField = undefined;
+}
+
+function renderAc() {
+  acMenu.innerHTML = "";
+  acItems.forEach((address, index) => {
+    const item = document.createElement("div");
+    item.className = "ac-item ac-item-recipient" + (index === acIndex ? " is-active" : "");
+    item.setAttribute("role", "option");
+    item.setAttribute("aria-selected", String(index === acIndex));
+
+    const label = document.createElement("span");
+    label.className = "ac-text";
+    label.textContent = address;
+    // mousedown (not click) so the field never blurs before we complete
+    label.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      acceptAc(address);
+    });
+
+    const forget = document.createElement("button");
+    forget.type = "button";
+    forget.className = "ac-forget";
+    forget.textContent = "×";
+    forget.setAttribute("aria-label", `Forget ${address}`);
+    forget.title = `Forget ${address}`;
+    forget.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      forgetRecipient(address);
+      openAcFor(acField); // re-filter; closes if nothing is left
+    });
+
+    item.append(label, forget);
+    acMenu.appendChild(item);
+  });
+}
+
+function positionAc(field) {
+  const rect = field.getBoundingClientRect();
+  acMenu.style.left = `${rect.left + globalThis.scrollX}px`;
+  acMenu.style.top = `${rect.bottom + globalThis.scrollY + 4}px`;
+  acMenu.style.minWidth = `${Math.min(rect.width, 320)}px`;
+}
+
+function openAcFor(field) {
+  if (!field) return closeAc();
+  const caret = field.selectionStart ?? field.value.length;
+  acItems = filterRecipientSuggestions(recipients, field.value, caret);
+  if (acItems.length === 0) return closeAc();
+  acIndex = 0;
+  acField = field;
+  renderAc();
+  positionAc(field);
+  acMenu.hidden = false;
+}
+
+function acceptAc(address) {
+  const field = acField;
+  if (!field) return;
+  const caret = field.selectionStart ?? field.value.length;
+  const result = applyRecipientCompletion(field.value, caret, address);
+  field.value = result.text;
+  // type=email inputs don't support the selection API (setSelectionRange throws,
+  // selectionStart is null); the caret lands at the end after assignment, which is
+  // what we want when completing the trailing address.
+  try {
+    field.setSelectionRange(result.caret, result.caret);
+  } catch {
+    /* selection unsupported for this input type */
+  }
+  closeAc();
+  field.focus();
+  // notify the regular listeners (validation, previews)
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function onAcKeydown(event) {
+  if (!isAcOpen() || event.target !== acField) return;
+  if (event.key === "ArrowDown") {
+    acIndex = (acIndex + 1) % acItems.length;
+    renderAc();
+    event.preventDefault();
+  } else if (event.key === "ArrowUp") {
+    acIndex = (acIndex - 1 + acItems.length) % acItems.length;
+    renderAc();
+    event.preventDefault();
+  } else if (event.key === "Enter" || event.key === "Tab") {
+    acceptAc(acItems[acIndex]);
+    event.preventDefault();
+  } else if (event.key === "Escape") {
+    closeAc();
+    event.preventDefault();
+  }
+}
+
+/** Wire the recipient autocomplete onto one email field. */
+function attachRecipientAutocomplete(field) {
+  field.addEventListener("input", () => openAcFor(field));
+  field.addEventListener("focus", () => openAcFor(field));
+  field.addEventListener("click", () => openAcFor(field));
+  field.addEventListener("keydown", onAcKeydown);
+  field.addEventListener("blur", () => setTimeout(closeAc, 120));
+}
+
+globalThis.addEventListener("scroll", closeAc, true);
+globalThis.addEventListener("resize", closeAc);
+
 /* --------------------------------- wire ---------------------------------- */
 
 /** A form edit describes a new request: clear the step progress, then re-render. */
@@ -450,6 +647,11 @@ for (const el of [els.name, els.reason, els.lead, els.recipients, els.start, els
 }
 for (const el of [els.type, els.duration]) el.addEventListener("change", formChanged);
 els.name.addEventListener("input", saveName);
+
+attachRecipientAutocomplete(els.lead);
+attachRecipientAutocomplete(els.recipients);
+els.leadSave.addEventListener("click", () => manualSaveRecipients(els.lead));
+els.recipientsSave.addEventListener("click", () => manualSaveRecipients(els.recipients));
 
 els.emailBody.addEventListener("input", onBodyEdited);
 els.bodyReset.addEventListener("click", resetBody);

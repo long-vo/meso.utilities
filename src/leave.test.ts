@@ -8,9 +8,16 @@
  * Run with `deno task test`.
  */
 import {
+  addRecipients,
+  applyRecipientCompletion,
   buildLeaveRequest,
+  filterRecipientSuggestions,
+  isValidEmailList,
   mailtoUrl,
   outlookComposeUrl,
+  parseEmails,
+  recipientTokenAt,
+  removeRecipient,
   summarizePeriod,
   templateSummary,
 } from "../static/leave/leave.mjs";
@@ -174,6 +181,54 @@ Deno.test("team lead becomes Cc; extra recipients append to the event", () => {
   if (!result.ok) throw new Error(result.error);
   assertEquals(result.email.cc, "lead@mesoneer.io");
   assertEquals(result.event.recipients, "mesoneer_vn@mesoneer.io; po@mesoneer.io");
+});
+
+Deno.test("multiple team leads: Cc lists all, mailto + Outlook fold carry every address", () => {
+  const result = buildLeaveRequest({
+    name: "John Doe",
+    type: "annual",
+    duration: "full",
+    startDate: "2026-07-20",
+    teamLead: "lead@mesoneer.io; lead2@mesoneer.io",
+  });
+  if (!result.ok) throw new Error(result.error);
+  // Cc displays the Outlook-style "; " list.
+  assertEquals(result.email.cc, "lead@mesoneer.io; lead2@mesoneer.io");
+  // mailto carries a proper comma-separated Cc.
+  assert(
+    result.email.mailto.includes(`cc=${encodeURIComponent("lead@mesoneer.io,lead2@mesoneer.io")}`),
+    result.email.mailto,
+  );
+  // Outlook web drops `cc`, so both leads are folded into `to` (comma-separated).
+  assert(
+    result.email.outlookWebUrl.includes(
+      `to=${encodeURIComponent("hr.vn@mesoneer.io,lead@mesoneer.io,lead2@mesoneer.io")}`,
+    ),
+    result.email.outlookWebUrl,
+  );
+});
+
+Deno.test("multiple PO recipients: event lists all, calendar deep link attends every address", () => {
+  const result = buildLeaveRequest({
+    name: "John Doe",
+    type: "annual",
+    duration: "full",
+    startDate: "2026-07-20",
+    recipients: "po@mesoneer.io, po2@mesoneer.io",
+  });
+  if (!result.ok) throw new Error(result.error);
+  // Display keeps the "; " separator after the fixed recipient.
+  assertEquals(
+    result.event.recipients,
+    "mesoneer_vn@mesoneer.io; po@mesoneer.io; po2@mesoneer.io",
+  );
+  // Calendar `to` attendees are comma-separated, percent-encoded.
+  assert(
+    result.event.outlookWebUrl.includes(
+      `to=${encodeURIComponent("mesoneer_vn@mesoneer.io,po@mesoneer.io,po2@mesoneer.io")}`,
+    ),
+    result.event.outlookWebUrl,
+  );
 });
 
 Deno.test("mailto: encodes cc, subject and body (special chars are safe)", () => {
@@ -350,6 +405,85 @@ Deno.test("templateSummary: type label, duration, and optional reason", () => {
   assertEquals(
     templateSummary({ type: "wfh", duration: "morning", reason: "  " }),
     "WFH · morning",
+  );
+});
+
+Deno.test("parseEmails: splits on comma or semicolon, trims, drops empties", () => {
+  assertEquals(parseEmails("a@x.io, b@x.io"), ["a@x.io", "b@x.io"]);
+  assertEquals(parseEmails("a@x.io; b@x.io"), ["a@x.io", "b@x.io"]);
+  assertEquals(parseEmails("  a@x.io ,; b@x.io ; "), ["a@x.io", "b@x.io"]);
+  assertEquals(parseEmails(""), []);
+  assertEquals(parseEmails(undefined), []);
+});
+
+Deno.test("isValidEmailList: blank is valid; every address must be well-formed", () => {
+  assert(isValidEmailList(""), "blank is valid (optional field)");
+  assert(isValidEmailList(undefined), "undefined is valid");
+  assert(isValidEmailList("a@x.io"), "single address");
+  assert(isValidEmailList("a@x.io, b@y.io; c@z.io"), "mixed separators");
+  assert(!isValidEmailList("a@x.io, not-an-email"), "one malformed address fails the list");
+  assert(!isValidEmailList("nope"), "bare token fails");
+});
+
+Deno.test("addRecipients: valid addresses go to the front, deduped and capped", () => {
+  // New addresses move to the front, keeping given order.
+  assertEquals(
+    addRecipients(["a@x.io", "b@x.io"], ["c@x.io", "d@x.io"]),
+    ["c@x.io", "d@x.io", "a@x.io", "b@x.io"],
+  );
+  // Case-insensitive dedupe — the newest casing wins and moves front.
+  assertEquals(addRecipients(["Bob@x.io"], ["bob@x.io"]), ["bob@x.io"]);
+  // Blank and invalid entries are ignored.
+  assertEquals(addRecipients([], ["  ", "nope", "ok@x.io"]), ["ok@x.io"]);
+  // The cap keeps the most-recent entries.
+  assertEquals(addRecipients(["a@x.io", "b@x.io"], ["c@x.io"], 2), ["c@x.io", "a@x.io"]);
+});
+
+Deno.test("removeRecipient: drops the address case-insensitively, no-op otherwise", () => {
+  assertEquals(removeRecipient(["a@x.io", "b@x.io"], "A@X.IO"), ["b@x.io"]);
+  assertEquals(removeRecipient(["a@x.io"], "c@x.io"), ["a@x.io"]);
+});
+
+Deno.test("recipientTokenAt: finds the fragment under the caret across separators", () => {
+  // Caret at the end of a second, still-typing token.
+  assertEquals(recipientTokenAt("a@x.io; jo", 10), { start: 7, end: 10, prefix: "jo" });
+  // Caret right after a separator → an empty prefix.
+  assertEquals(recipientTokenAt("a@x.io; ", 8), { start: 7, end: 8, prefix: "" });
+  // A middle token bounded on both sides.
+  assertEquals(recipientTokenAt("a@x.io; jo; b@x.io", 10), { start: 7, end: 10, prefix: "jo" });
+});
+
+Deno.test("filterRecipientSuggestions: prefix match, excludes present, honours cap", () => {
+  const saved = ["joanne@x.io", "john@x.io", "jordan@x.io", "kim@x.io"];
+  // Prefix filters, order preserved.
+  assertEquals(
+    filterRecipientSuggestions(saved, "lead@x.io; jo", 13),
+    ["joanne@x.io", "john@x.io", "jordan@x.io"],
+  );
+  // An empty prefix returns the pool minus addresses already in the field.
+  assertEquals(
+    filterRecipientSuggestions(["a@x.io", "b@x.io"], "a@x.io; ", 8),
+    ["b@x.io"],
+  );
+  // Cap limits the count.
+  assertEquals(filterRecipientSuggestions(saved, "jo", 2, 2), ["joanne@x.io", "john@x.io"]);
+});
+
+Deno.test("applyRecipientCompletion: replaces the token and normalises separators", () => {
+  // Last token: completes and leaves no trailing separator.
+  assertEquals(
+    applyRecipientCompletion("lead@x.io; jo", 13, "joanne@x.io"),
+    { text: "lead@x.io; joanne@x.io", caret: "lead@x.io; joanne@x.io".length },
+  );
+  // Middle token: the following address is kept, separator normalised to "; ".
+  assertEquals(
+    applyRecipientCompletion("a@x.io; jo; b@x.io", 10, "joanne@x.io"),
+    { text: "a@x.io; joanne@x.io; b@x.io", caret: "a@x.io; joanne@x.io".length },
+  );
+  // First and only token.
+  assertEquals(
+    applyRecipientCompletion("jo", 2, "joanne@x.io"),
+    { text: "joanne@x.io", caret: "joanne@x.io".length },
   );
 });
 
