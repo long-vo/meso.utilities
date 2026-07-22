@@ -226,9 +226,15 @@ Deno.test("outlookWebUrl: office.com compose deep link with encoded fields", () 
     result.email.outlookWebUrl.startsWith("https://outlook.office.com/mail/deeplink/compose?"),
     result.email.outlookWebUrl,
   );
-  // Query-param recipients must be percent-encoded (unlike the mailto path).
-  assert(result.email.outlookWebUrl.includes("to=hr.vn%40mesoneer.io"), result.email.outlookWebUrl);
-  assert(result.email.outlookWebUrl.includes("cc=lead%40mesoneer.io"), result.email.outlookWebUrl);
+  // Query-param recipients must be percent-encoded (unlike the mailto path). Outlook
+  // web ignores a `cc` param, so the team lead is folded into `to` (comma-separated).
+  assert(
+    result.email.outlookWebUrl.includes(
+      `to=${encodeURIComponent("hr.vn@mesoneer.io,lead@mesoneer.io")}`,
+    ),
+    result.email.outlookWebUrl,
+  );
+  assert(!result.email.outlookWebUrl.includes("cc="), result.email.outlookWebUrl);
   assert(
     result.email.outlookWebUrl.includes(`subject=${encodeURIComponent(result.email.subject)}`),
     result.email.outlookWebUrl,
@@ -240,7 +246,7 @@ Deno.test("outlookWebUrl: office.com compose deep link with encoded fields", () 
   assert(!result.email.outlookWebUrl.includes("R&R"), result.email.outlookWebUrl);
 });
 
-Deno.test("outlookWebUrl: omits cc when no team lead is given", () => {
+Deno.test("outlookWebUrl: with no team lead, `to` is HR alone (nothing folded in)", () => {
   const result = buildLeaveRequest({
     name: "John Doe",
     type: "annual",
@@ -249,6 +255,11 @@ Deno.test("outlookWebUrl: omits cc when no team lead is given", () => {
   });
   if (!result.ok) throw new Error(result.error);
   assert(!result.email.outlookWebUrl.includes("cc="), result.email.outlookWebUrl);
+  // No cc → `to` holds HR alone (ends at the next `&`, nothing folded in).
+  assert(
+    result.email.outlookWebUrl.includes("to=hr.vn%40mesoneer.io&subject="),
+    result.email.outlookWebUrl,
+  );
 });
 
 Deno.test("event.outlookWebUrl: all-day calendar deep link with dates and attendees", () => {

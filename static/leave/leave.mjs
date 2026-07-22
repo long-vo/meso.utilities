@@ -87,8 +87,9 @@ export function buildLeaveRequest(input) {
     "Best regards,",
   ].join("\n");
 
-  // Outlook-web `cc` support varies by tenant (best-effort); mailto reliably carries Cc.
-  // Both are also rebuilt by the UI from an edited body via the same exported helpers.
+  // Outlook web's compose deeplink drops a `cc` param, so its link folds the team lead
+  // into `to`; mailto reliably carries a proper Cc. Both are also rebuilt by the UI
+  // from an edited body via the same exported helpers.
   const mailto = mailtoUrl(HR_EMAIL, teamLead, subject, body);
   const outlookWebUrl = outlookComposeUrl(HR_EMAIL, teamLead, subject, body);
 
@@ -169,7 +170,10 @@ export function mailtoUrl(to, cc, subject, body) {
 
 /**
  * An Outlook-on-the-web mail compose deep link (Microsoft 365). Recipients are query
- * params, so they're percent-encoded; `cc` is omitted when empty.
+ * params, so they're percent-encoded. The deeplink/compose endpoint honours only
+ * `to`, `subject` and `body` — a `cc`/`bcc` param is silently dropped — so the Cc
+ * recipient is folded into `to` (comma-separated) to keep the team lead on the mail;
+ * the mailto path carries a proper Cc for the Outlook app.
  * @param {string} to
  * @param {string} cc
  * @param {string} subject
@@ -177,10 +181,12 @@ export function mailtoUrl(to, cc, subject, body) {
  * @returns {string}
  */
 export function outlookComposeUrl(to, cc, subject, body) {
-  const params = [`to=${encodeURIComponent(to)}`];
-  if (cc) params.push(`cc=${encodeURIComponent(cc)}`);
-  params.push(`subject=${encodeURIComponent(subject)}`);
-  params.push(`body=${encodeURIComponent(body)}`);
+  const recipients = cc ? `${to},${cc}` : to;
+  const params = [
+    `to=${encodeURIComponent(recipients)}`,
+    `subject=${encodeURIComponent(subject)}`,
+    `body=${encodeURIComponent(body)}`,
+  ];
   return `https://outlook.office.com/mail/deeplink/compose?${params.join("&")}`;
 }
 
