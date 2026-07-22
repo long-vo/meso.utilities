@@ -19,7 +19,7 @@ export function clampWidth(value) {
   return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(n)));
 }
 
-/** Tool id from a pathname: the folder the page lives in (`sanitize`, `decode`, `rest`). */
+/** Tool id from a pathname: the folder the page lives in (`sanitize`, `decode`, `leave`). */
 export function toolKey(pathname) {
   const parts = String(pathname).replace(/\/index\.html$/, "").split("/").filter(Boolean);
   return parts.length ? parts[parts.length - 1] : "root";

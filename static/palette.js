@@ -54,8 +54,6 @@ const TOOL_LINKS = [
     href: "shortlink/",
     keywords: ["link", "url", "bookmark", "go", "redirect", "group"],
   },
-  // REST hidden — restore this entry to re-list the REST Client in the palette.
-  // { icon: "🛰️", title: "REST Client", href: "rest/", keywords: ["http", "api", "curl", "request"] },
   {
     icon: "📽️",
     title: "Slidedown",

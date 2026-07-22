@@ -507,8 +507,8 @@ function manualSaveRecipients(field) {
   );
 }
 
-// A single floating listbox, reused by both fields (mirrors the REST tool's
-// pattern). Reuses the shared .ac-menu / .ac-item styles.
+// A single floating listbox, reused by both fields. Uses the shared
+// .ac-menu / .ac-item styles.
 const acMenu = document.createElement("div");
 acMenu.className = "ac-menu";
 acMenu.hidden = true;

@@ -116,30 +116,6 @@ Nothing is sent — the buttons hand off to your own mail app and to Outlook on 
 > Everything runs in your browser. Your details are never uploaded — the mail and calendar buttons
 > just hand off to your own apps.
 
-**Environments & variables:** define named environments (dev, uat, prod, …) with variables in the
-sidebar and reference them as `{{name}}` anywhere in the URL, headers, auth fields or body. The
-active environment is switched next to the request; chips under the URL show each variable used —
-green when resolved, red when missing — and sending (or curl export, which uses the resolved values)
-is blocked while anything is red. History keeps the `{{placeholders}}` plus an environment badge, so
-one saved request replays against any environment. Typing `{{` in the URL, headers, auth fields or
-body opens an autocomplete of the active environment's variables (↑↓ to select, Enter/Tab to accept,
-Esc to close). Environments live in `localStorage` (key `meso-rest-environments`); variable values
-are masked in the editor by default.
-
-**Import curl:** the inverse of the export — click **Import curl** (or just paste a curl command
-into the URL field) and the method, URL, headers, auth and body fill themselves in.
-`Authorization:
-Bearer/Basic` headers land in the auth fields, multiple `-d` parts join like curl
-joins them, `-G` moves data into the query string, and anything that can't be imported (`-o`,
-`--retry`, …) is listed in the toast rather than silently dropped.
-
-**Response tooling & capture:** JSON responses get a **Tree** view — collapsible nodes with a search
-box that prunes the tree to matching keys/values — next to the raw pretty-print. Clicking any leaf
-fills the JSON-path box (`$.data.items[0].id`); the extracted value previews live, and **Capture**
-saves it as a `{{variable}}` in the active environment (one is created if none exists). That closes
-the login-then-call loop: send the login request, capture `$.access_token` as `{{token}}`, reference
-it in the next request.
-
 ## How Shortlink works
 
 Define a name (lowercase letters, digits and hyphens — unique across all groups) for any http(s) URL
