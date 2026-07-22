@@ -89,8 +89,7 @@ function builtinCommands() {
         location.href = link.url;
       },
     }));
-  return [
-    ...links,
+  const actions = [
     {
       icon: "🌓",
       title: "Toggle dark / light theme",
@@ -99,6 +98,17 @@ function builtinCommands() {
       run: () => document.getElementById("theme-toggle")?.click(),
     },
   ];
+  // Only tool pages have a controls sidebar; skip the action on the hub.
+  if (document.getElementById("controls-toggle")) {
+    actions.push({
+      icon: "◧",
+      title: "Toggle controls sidebar",
+      hint: "action",
+      keywords: ["sidebar", "controls", "panel", "hide", "show", "collapse", "expand"],
+      run: () => document.getElementById("controls-toggle")?.click(),
+    });
+  }
+  return [...links, ...actions];
 }
 
 /* -------------------------------- overlay -------------------------------- */

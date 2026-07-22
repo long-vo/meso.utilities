@@ -70,6 +70,12 @@ pages contribute page-specific actions via `registerCommands`) and `handoff.mjs`
 "Send to" handoff over `sessionStorage`). Both shared `.mjs` modules follow the dual-consumption
 pattern and have parity tests.
 
+A gotcha with that single stylesheet: some tool pages override the shared `.layout` grid with extra
+areas — Leave's `.page-leave .layout` adds a `templates` column. A shared `.layout` grid override
+(`grid-template-areas`/`grid-template-columns`) can outrank those page rules by CSS specificity and
+silently drop the extra area, hiding a panel. Check any shared layout change against every tool page
+(Leave especially), or scope it to the page's own `.page-<tool> .layout`.
+
 `sanitize.mjs`'s masking is lifted verbatim (semantics-wise) from the Slack `/sanitize-text`
 command; `src/sanitize.test.ts` exists to assert that parity.
 

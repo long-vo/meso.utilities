@@ -229,6 +229,18 @@ main:focus {
   transform: translateY(-1px);
 }
 
+/* Controls show/hide toggle: centre its inline SVG and read as "active"
+   (accent-tinted) while the sidebar is visible. */
+#controls-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#controls-toggle[aria-expanded="true"] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
 /* ---- hub (master page) ---- */
 .hub {
   max-width: 980px;
@@ -953,6 +965,26 @@ button.wheel-chip:hover .chip-x {
 body.is-resizing {
   cursor: col-resize;
   user-select: none;
+}
+
+/* ---- controls show/hide ----
+   The topbar toggle (#controls-toggle) collapses the sidebar. The flag lives on
+   <html> (set before first paint by the inline head script) so the sidebar
+   never flashes on load; the editor/result then reflow to full width. The
+   attribute selector outranks the base and responsive `.layout` rules, so the
+   collapsed layout holds at every breakpoint. */
+:root[data-controls-collapsed] .controls {
+  display: none;
+}
+:root[data-controls-collapsed] .layout {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "editor"
+    "result";
+}
+:root[data-controls-collapsed] .editor,
+:root[data-controls-collapsed] .result {
+  max-width: none;
 }
 
 .editor {
@@ -2212,6 +2244,19 @@ kbd {
       "controls result templates"
       "controls result templates";
   }
+  /* Collapsed sidebar: drop the controls column but keep the templates one, so
+     the editor/result reflow into the freed space and templates stays put. */
+  :root[data-controls-collapsed] .page-leave .layout {
+    grid-template-columns: minmax(0, 1fr) 260px;
+    grid-template-areas:
+      "editor templates"
+      "result templates";
+  }
+  :root[data-controls-collapsed] .page-leave .layout:has(> .editor[hidden]) {
+    grid-template-areas:
+      "result templates"
+      "result templates";
+  }
   .templates {
     position: sticky;
     top: 86px;
@@ -2230,6 +2275,18 @@ kbd {
   .page-leave .layout:has(> .editor[hidden]) {
     grid-template-areas:
       "controls"
+      "result"
+      "templates";
+  }
+  /* Collapsed sidebar: drop the controls row, keep the stacked panels. */
+  :root[data-controls-collapsed] .page-leave .layout {
+    grid-template-areas:
+      "editor"
+      "result"
+      "templates";
+  }
+  :root[data-controls-collapsed] .page-leave .layout:has(> .editor[hidden]) {
+    grid-template-areas:
       "result"
       "templates";
   }
