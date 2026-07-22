@@ -169,10 +169,38 @@ main:focus {
   color: var(--text-faint);
 }
 .crumb-current {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   color: var(--text-dim);
   font-size: 13.5px;
   font-weight: 600;
   white-space: nowrap;
+}
+
+/* Mini flat icon in the breadcrumb — drawn with the same per-tool accent
+   tokens as the hub card art (the card--* class on the span provides them;
+   art1/mid are mid-ramp stops, so they read on the topbar in both themes). */
+.crumb-icon {
+  display: inline-flex;
+  flex: none;
+}
+.crumb-icon svg {
+  display: block;
+}
+.crumb-icon .i1 {
+  fill: var(--card-art1);
+}
+.crumb-icon .i2 {
+  fill: var(--card-mid);
+}
+.crumb-icon .is1 {
+  stroke: var(--card-art1);
+  fill: none;
+}
+.crumb-icon .is2 {
+  stroke: var(--card-mid);
+  fill: none;
 }
 
 /* centered brand logo in the topbar (square tile with its own background) */
@@ -2607,13 +2635,15 @@ kbd {
       "templates";
   }
 }
-/* ---- shortlink: frequently-used right column ----
-   Same three-column pattern as .page-leave: the star speed-dial lives in a
-   sticky right column. These page-scoped rules must outrank the shared
-   `.layout` and `:root[data-controls-collapsed] .layout` rules, so every state
-   (default / collapsed sidebar / panel hidden while filtering) is spelled out
-   at matching specificity — otherwise the shared rule silently drops the
-   `frequent` area. */
+/* ---- shortlink: right rail (filter + frequently-used) ----
+   Same three-column pattern as .page-leave: a sticky right rail (.sl-rail) holds
+   the filter box and the star speed-dial. These page-scoped rules must outrank
+   the shared `.layout` and `:root[data-controls-collapsed] .layout` rules
+   (default / collapsed sidebar), spelled out at matching specificity — otherwise
+   the shared rule silently drops the `frequent` area. The rail stays put while
+   filtering (so the filter box is always reachable); only the speed-dial's
+   contents hide (app.js toggles `#frequent[hidden]`), which is why there is no
+   longer a track-reclaiming rule here. */
 @media (min-width: 1081px) {
   .page-shortlink .layout {
     /* 100px over the shared 1440 cap so the flexible editor keeps its width
@@ -2624,14 +2654,6 @@ kbd {
       "controls editor frequent"
       "controls result frequent";
   }
-  /* Filtering hides the panel — the directory results are the whole story then;
-     reclaim its track so the directory isn't pinched by an empty column. */
-  .page-shortlink .layout:has(> .frequent[hidden]) {
-    grid-template-columns: var(--controls-w, 320px) minmax(0, 1fr);
-    grid-template-areas:
-      "controls editor"
-      "controls result";
-  }
   /* Collapsed sidebar: drop the controls column, keep the frequent one. */
   :root[data-controls-collapsed] .page-shortlink .layout {
     grid-template-columns: minmax(0, 1fr) 260px;
@@ -2639,13 +2661,7 @@ kbd {
       "editor frequent"
       "result frequent";
   }
-  :root[data-controls-collapsed] .page-shortlink .layout:has(> .frequent[hidden]) {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "editor"
-      "result";
-  }
-  .frequent {
+  .sl-rail {
     position: sticky;
     top: 86px;
   }
@@ -2666,8 +2682,12 @@ kbd {
       "frequent";
   }
 }
-.frequent {
+.sl-rail {
   grid-area: frequent;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
 }
 
 /* ---- templates panel ---- */
@@ -2934,8 +2954,33 @@ kbd {
 .sl-tools-hint {
   margin: -2px 0 12px;
 }
+.sl-tools-hint > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.sl-tools-hint > summary::-webkit-details-marker {
+  display: none;
+}
+.sl-tools-hint > summary::before {
+  content: "▸";
+  color: var(--text-faint);
+}
+.sl-tools-hint[open] > summary::before {
+  content: "▾";
+}
+.sl-tools-hint > summary:hover {
+  color: var(--text);
+}
+.sl-tools-hint > p {
+  margin: 8px 0 0;
+}
 .sl-filter {
-  margin-bottom: 12px;
+  margin-bottom: 0;
   font-size: 13px;
   padding: 7px 10px;
 }
@@ -3162,6 +3207,14 @@ kbd {
   gap: 10px;
   padding-left: 12px;
 }
+/* Breathing room between a group's tiles and the next group header. */
+.sl-grid + .sl-group-row {
+  margin-top: 12px;
+}
+/* A smaller gap sets a group header off from its own tiles below. */
+.sl-group-row + .sl-grid {
+  margin-top: 6px;
+}
 .sl-tile {
   position: relative;
   aspect-ratio: 1;
@@ -3275,41 +3328,62 @@ kbd {
 .sl-grid .sl-drop-after {
   box-shadow: 2px 0 0 0 var(--accent);
 }
-.sl-group.sl-drop-into {
-  color: var(--accent);
+.sl-group-row.sl-drop-into {
   box-shadow: inset 0 0 0 1px var(--accent);
-  border-radius: var(--radius-sm);
 }
-/* Group header row: the collapse button plus a rename pencil shown on hover. */
+.sl-group-row.sl-drop-into .sl-group {
+  color: var(--accent);
+}
+/* Group header row: the whole row toggles collapse; on hover/focus it lifts to
+   an "active" surface and reveals the group's action buttons (rename / share /
+   delete) anchored right beside the name, so the label and its controls read as
+   one unit. */
 .sl-group-row {
   display: flex;
   align-items: center;
   gap: 4px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.sl-group-row:hover,
+.sl-group-row:focus-within {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
 }
 .sl-group-row .sl-group {
   width: auto;
-  flex: 1;
   min-width: 0;
 }
 .sl-group-edit {
   flex-shrink: 0;
-  border: none;
-  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
   background: transparent;
-  color: var(--text-faint);
+  color: var(--text-dim);
   font-size: 13px;
   line-height: 1;
-  padding: 4px 6px;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s, color 0.15s;
+  transition: opacity 0.15s, color 0.15s, background 0.15s, border-color 0.15s;
+}
+/* Separate the action cluster from the group name and count. */
+.sl-group + .sl-group-edit {
+  margin-left: 8px;
 }
 .sl-group-row:hover .sl-group-edit,
 .sl-group-row:focus-within .sl-group-edit {
   opacity: 1;
 }
-.sl-group-edit:hover {
+.sl-group-edit:hover,
+.sl-group-edit:focus-visible {
   color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .sl-group-rename {
   flex: 1;
@@ -3326,8 +3400,11 @@ kbd {
   min-height: 41px;
   overflow-wrap: anywhere;
 }
-.sl-group-del:hover {
+.sl-group-del:hover,
+.sl-group-del:focus-visible {
   color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
 }
 .sl-group-rename input {
   font-size: 12.5px;

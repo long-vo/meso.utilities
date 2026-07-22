@@ -566,6 +566,9 @@ function renderDirectory() {
     const isCollapsed = collapsed.has(path);
     const indent = depth * 16;
 
+    const headRow = document.createElement("div");
+    headRow.className = "sl-group-row";
+
     const head = document.createElement("button");
     head.type = "button";
     head.className = "sl-group";
@@ -595,17 +598,18 @@ function renderDirectory() {
       groupCount.textContent = String(entries.length);
       head.appendChild(groupCount);
     }
-    head.addEventListener("click", () => {
+    headRow.appendChild(head);
+    // The whole row is the collapse target (a wide, forgiving hit area); clicks
+    // on the per-group action buttons or the inline rename form are excluded so
+    // they don't also fold the group.
+    headRow.addEventListener("click", (event) => {
+      if (event.target.closest(".sl-group-edit, .sl-group-rename")) return;
       const next = loadCollapsed();
       if (next.has(path)) next.delete(path);
       else next.add(path);
       saveCollapsed(next);
       renderDirectory();
     });
-    wireHeaderDrop(head, path);
-    const headRow = document.createElement("div");
-    headRow.className = "sl-group-row";
-    headRow.appendChild(head);
     if (path !== "") {
       const rename = document.createElement("button");
       rename.type = "button";
@@ -620,7 +624,7 @@ function renderDirectory() {
         const share = document.createElement("button");
         share.type = "button";
         share.className = "sl-group-edit sl-group-share";
-        share.textContent = "⤴";
+        share.textContent = "↗";
         share.title = "Share group";
         share.setAttribute("aria-label", `Share group ${path}`);
         share.addEventListener("click", () => shareGroup(path));
@@ -642,6 +646,7 @@ function renderDirectory() {
         headRow.appendChild(del);
       }
     }
+    wireHeaderDrop(headRow, path);
     els.directory.appendChild(headRow);
 
     if (isCollapsed || entries.length === 0) continue;

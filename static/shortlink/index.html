@@ -28,7 +28,7 @@
         <span class="brand-name">meso.utilities</span>
       </a>
       <span class="crumb-sep" aria-hidden="true">/</span>
-      <span class="crumb-current"><span aria-hidden="true">🔗</span> Shortlink</span>
+      <span class="crumb-current"><span class="crumb-icon card--coral" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><rect class="is1" x="1.5" y="5.5" width="8" height="5" rx="2.5" stroke-width="1.8" /><rect class="is2" x="6.5" y="5.5" width="8" height="5" rx="2.5" stroke-width="1.8" /></svg></span> Shortlink</span>
     </nav>
     <div class="topbar-actions">
       <span class="pill pill-privacy" title="Shortlinks live in this browser's storage only.">
@@ -116,15 +116,16 @@
             accept=".json,.html,application/json,text/html" hidden />
         </div>
       </div>
-      <p class="hint sl-tools-hint"><b>Export</b> downloads your shortlinks as
-        <code>shortlinks.json</code> — back them up or move them to another browser.
-        <b>Import</b> merges a <code>shortlinks.json</code> or your browser's exported
-        <code>bookmarks.html</code> (Bookmark manager → Export bookmarks). Drag a link to
-        reorder it — drop it on another group's links or header to move it there. Dynamic:
-        <code>#name/rest</code> appends <code>rest</code> to the target, and a <code>{q}</code>
-        in a target is replaced by it (search engines).</p>
-      <input type="text" id="filter" class="sl-filter" placeholder="Filter links…"
-        spellcheck="false" autocomplete="off" aria-label="Filter links" />
+      <details class="hint sl-tools-hint">
+        <summary>Export / Import, drag-to-reorder &amp; dynamic links</summary>
+        <p><b>Export</b> downloads your shortlinks as
+          <code>shortlinks.json</code> — back them up or move them to another browser.
+          <b>Import</b> merges a <code>shortlinks.json</code> or your browser's exported
+          <code>bookmarks.html</code> (Bookmark manager → Export bookmarks). Drag a link to
+          reorder it — drop it on another group's links or header to move it there. Dynamic:
+          <code>#name/rest</code> appends <code>rest</code> to the target, and a <code>{q}</code>
+          in a target is replaced by it (search engines).</p>
+      </details>
       <div class="sl-picker" id="picker" hidden>
         <div class="sl-picker-head">
           <h3 class="sl-panel-title" id="picker-title">Import from bookmarks</h3>
@@ -144,9 +145,15 @@
         this browser instantly.</p>
     </section>
 
-    <section class="panel frequent" id="frequent" aria-label="Frequently used shortlinks">
-      <!-- Speed-dial of the most-visited links, populated by app.js. -->
-    </section>
+    <div class="sl-rail">
+      <section class="panel frequent sl-filter-panel" aria-label="Filter shortlinks">
+        <input type="text" id="filter" class="sl-filter" placeholder="Filter links…"
+          spellcheck="false" autocomplete="off" aria-label="Filter links" />
+      </section>
+      <section class="panel frequent" id="frequent" aria-label="Frequently used shortlinks">
+        <!-- Speed-dial of the most-visited links, populated by app.js. -->
+      </section>
+    </div>
   </main>
 
   <footer class="footer">

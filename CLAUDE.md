@@ -43,12 +43,12 @@ on :5173, `deno task build`). It is excluded from the root `deno.json` and has i
 ## Architecture
 
 **The dual-consumption module pattern is the central idea.** Each no-build tool's pure logic lives
-in a plain ES module (`static/sanitize.mjs`, `static/decode/decode.mjs`, `static/rest/rest.mjs`,
-`static/leave/leave.mjs`). That module is imported _unchanged_ by both the browser UI (`app.js`) and
-the Deno tests (`src/*.test.ts` import straight from `static/`). There is no bundler, no build step,
-and no separate test copy — the logic under test is byte-for-byte the logic that ships to the
-browser. This is why the tests are called "parity tests." When you touch a tool, keep pure/testable
-logic in the `.mjs` module and confine DOM wiring to `app.js`.
+in a plain ES module (`static/sanitize.mjs`, `static/decode/decode.mjs`, `static/leave/leave.mjs`).
+That module is imported _unchanged_ by both the browser UI (`app.js`) and the Deno tests
+(`src/*.test.ts` import straight from `static/`). There is no bundler, no build step, and no
+separate test copy — the logic under test is byte-for-byte the logic that ships to the browser. This
+is why the tests are called "parity tests." When you touch a tool, keep pure/testable logic in the
+`.mjs` module and confine DOM wiring to `app.js`.
 
 Tools come in three tiers:
 
