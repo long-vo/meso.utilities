@@ -143,6 +143,9 @@ and collapsing a parent hides its sub-groups); a group disappears with its last 
 stored in this browser's `localStorage` only — a shortlink you share works for someone else only
 after they **Import** your exported `shortlinks.json` (imported entries win on a name conflict).
 Opening an unknown `#name` shows the directory with the name pre-filled instead of redirecting.
+Pasting a target into the empty form auto-suggests a name from the URL (`jira.mesoneer.io/browse` →
+`jira-browse`, deduped so it's free to take) until you type your own; if the same URL is already
+saved under another name, the form says so rather than quietly creating a twin.
 
 The directory has two views, toggled next to Export/Import and remembered per browser: **List**
 (compact rows) and **Grid** — a speed-dial of colored monogram tiles. In both views, drag a link to
@@ -163,14 +166,19 @@ state and empty groups get out of the way while filtering), and every saved link
 the **Ctrl/⌘ K palette** ("Open standup"). Redirects are counted locally and the five most-used
 links appear in a **Frequently used** strip above the groups. Shortlinks can also be **dynamic**:
 `#name/rest` appends `rest` to the target's URL, and a `{q}` placeholder in a target is replaced by
-the (URL-encoded) rest — `q` → `https://google.com/search?q={q}` makes `#q/deno fmt` a search.
+the (URL-encoded) rest — `q` → `https://google.com/search?q={q}` makes `#q/deno fmt` a search; the
+create form previews that substitution live (`#q/foo → …?q=foo`) whenever the target holds a `{q}`.
 **Share** copies a link that carries all your shortlinks in the URL fragment; opening it shows a
-picker to choose which to import (imported names win on conflict).
+picker to choose which to import. A **Share group** button (⤴) on each group header shares just that
+branch (`Team/Frontend` and its sub-groups) instead of everything.
 
-**Import** also accepts a browser bookmarks export (the `bookmarks.html` every browser's "Export
-bookmarks" produces — a page can't read your Bookmarks bar directly): a picker lists the found
-http(s) bookmarks, names are slugified from the titles (deduped with a `-2`/`-3` suffix) and
-bookmark folders become groups — nested folders keep their full trail as a sub-group path.
+Every **Import** — a shared link, a `shortlinks.json` or a browser bookmarks export — goes through
+the same picker, so a merge never silently replaces links: candidates whose name you already have
+are tagged **replaces**, and the import can be undone from the toast. **Import** also accepts a
+browser bookmarks export (the `bookmarks.html` every browser's "Export bookmarks" produces — a page
+can't read your Bookmarks bar directly): names are slugified from the titles (deduped with a
+`-2`/`-3` suffix) and bookmark folders become groups — nested folders keep their full trail as a
+sub-group path.
 
 ## Palette & handoff
 

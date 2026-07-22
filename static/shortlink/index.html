@@ -67,6 +67,7 @@
           <textarea id="url" rows="1" placeholder="https://…" spellcheck="false"
             autocomplete="off"></textarea>
           <p class="error-line" id="url-error" hidden></p>
+          <p class="hint sl-dup-hint" id="url-dup" hidden></p>
         </div>
 
         <div class="field">
@@ -81,6 +82,10 @@
         <div class="sl-preview" id="preview" hidden>
           <span class="sl-preview-label">Your shortlink</span>
           <code id="preview-url"></code>
+          <div class="sl-preview-dyn" id="preview-dyn" hidden>
+            <span class="sl-preview-label">Dynamic example</span>
+            <code id="preview-dyn-example"></code>
+          </div>
         </div>
 
         <button class="btn btn-primary sl-add" id="add" type="submit">Add shortlink</button>
@@ -126,8 +131,8 @@
           <label class="sl-picker-all"><input type="checkbox" id="pick-all" checked /> Select
             all</label>
         </div>
-        <p class="hint">Pick the bookmarks to turn into shortlinks — names come from the titles,
-          folders become groups.</p>
+        <p class="hint" id="picker-hint">Pick the bookmarks to turn into shortlinks — names come
+          from the titles, folders become groups.</p>
         <div id="picker-list"></div>
         <div class="btn-row sl-picker-actions">
           <button class="btn btn-primary" id="pick-import" type="button">Import selected</button>

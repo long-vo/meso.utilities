@@ -14,9 +14,11 @@ import {
   displayHost,
   encodeShare,
   filterLinks,
+  findDuplicateTarget,
   groupLinks,
   groupTree,
   hueForText,
+  linksInGroup,
   mergeLinks,
   moveToGroup,
   normalizeGroup,
@@ -30,6 +32,7 @@ import {
   resolve,
   resolveDynamic,
   serializeLinks,
+  suggestName,
   topLinks,
   updateLink,
   validateName,
@@ -148,6 +151,20 @@ Deno.test("parseHash: strips the leading # and percent-decoding", () => {
   assertEquals(parseHash(""), "");
 });
 
+/* --------------------------- findDuplicateTarget -------------------------- */
+
+Deno.test("findDuplicateTarget: names the first link with the same target, else null", () => {
+  assertEquals(findDuplicateTarget(links, "https://example.com/scratch"), "scratch");
+  // Ties break A→Z across every group.
+  const twins = {
+    zeta: { url: "https://dup.example" },
+    alpha: { url: "https://dup.example", group: "Team" },
+  };
+  assertEquals(findDuplicateTarget(twins, "https://dup.example"), "alpha");
+  assertEquals(findDuplicateTarget(links, "https://nowhere.example"), null);
+  assertEquals(findDuplicateTarget(links, "  "), null);
+});
+
 /* ------------------------------- groupLinks ------------------------------- */
 
 Deno.test("groupLinks: groups A→Z with ungrouped last, entries A→Z inside each", () => {
@@ -253,6 +270,21 @@ Deno.test("groupTree: entries keep the group's reorder ordering", () => {
   const node = groupTree(links).find((n: { path: string }) => n.path === "G/S");
   if (!node) throw new Error('expected a "G/S" node');
   assertEquals(node.entries.map((e: { name: string }) => e.name), ["b", "a"]);
+});
+
+/* ------------------------------- linksInGroup ------------------------------ */
+
+Deno.test("linksInGroup: takes the group and its sub-groups; empty path is ungrouped", () => {
+  const nested = {
+    one: { url: "https://1.example", group: "Team" },
+    two: { url: "https://2.example", group: "Team/Frontend" },
+    three: { url: "https://3.example", group: "Teammates" },
+    four: { url: "https://4.example" },
+  };
+  assertEquals(Object.keys(linksInGroup(nested, "Team")).sort(), ["one", "two"]);
+  assertEquals(Object.keys(linksInGroup(nested, "Team/Frontend")), ["two"]);
+  assertEquals(Object.keys(linksInGroup(nested, "")), ["four"]);
+  assertEquals(linksInGroup(nested, "Nope"), {});
 });
 
 /* -------------------------------- updateLink ------------------------------- */
@@ -561,6 +593,24 @@ Deno.test("bookmarksToLinks: slugified names, folder as group, deduped candidate
     },
     { name: "portal-example-com", title: "", url: "https://portal.example.com/x", group: "" },
   ]);
+});
+
+/* ------------------------------- suggestName ------------------------------- */
+
+Deno.test("suggestName: leading host label plus first path segment, slugified", () => {
+  assertEquals(suggestName("https://jira.mesoneer.io/browse"), "jira-browse");
+  assertEquals(suggestName("https://github.com"), "github");
+  assertEquals(suggestName("https://www.google.com/search?q=x"), "google-search");
+  assertEquals(suggestName("http://localhost:8000/x"), "localhost-x");
+});
+
+Deno.test("suggestName: dedupes against existing names, returns '' for non-http(s)", () => {
+  const existing = { github: { url: "https://github.com" } };
+  assertEquals(suggestName("https://github.com/deno", { github: existing.github }), "github-deno");
+  assertEquals(suggestName("https://github.com", existing), "github-2");
+  assertEquals(suggestName("not a url"), "");
+  assertEquals(suggestName("ftp://x/y"), "");
+  assertEquals(suggestName(""), "");
 });
 
 /* ------------------------- grid view: hue + host --------------------------- */

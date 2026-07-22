@@ -10,9 +10,11 @@ import {
   displayHost,
   encodeShare,
   filterLinks,
+  findDuplicateTarget,
   groupLinks,
   groupTree,
   hueForText,
+  linksInGroup,
   mergeLinks,
   moveToGroup,
   normalizeGroup,
@@ -26,6 +28,7 @@ import {
   resolveDynamic,
   serializeLinks,
   STORE_KEY,
+  suggestName,
   topLinks,
   updateLink,
   validateName,
@@ -44,10 +47,13 @@ const els = {
   nameError: $("name-error"),
   url: $("url"),
   urlError: $("url-error"),
+  urlDup: $("url-dup"),
   group: $("group"),
   groupList: $("group-list"),
   preview: $("preview"),
   previewUrl: $("preview-url"),
+  previewDyn: $("preview-dyn"),
+  previewDynExample: $("preview-dyn-example"),
   add: $("add"),
   count: $("count"),
   directory: $("directory"),
@@ -63,6 +69,7 @@ const els = {
   importFile: $("import-file"),
   picker: $("picker"),
   pickerTitle: $("picker-title"),
+  pickerHint: $("picker-hint"),
   pickerList: $("picker-list"),
   pickAll: $("pick-all"),
   pickImport: $("pick-import"),
@@ -174,16 +181,7 @@ function followHash() {
       showToast(decoded.error);
       return;
     }
-    openPicker(
-      Object.entries(decoded.links).map(([name, entry]) => ({
-        name,
-        title: "",
-        url: entry.url,
-        group: entry.group ?? "",
-        order: entry.order,
-      })),
-      "share",
-    );
+    openPicker(linksToCandidates(decoded.links), "share");
     return;
   }
   if (raw !== "") {
@@ -250,11 +248,15 @@ function copyShortlink(name) {
 
 /** The name of the link loaded into the form for editing, or null. */
 let editingName = null;
+/** True while the name field holds a slug we derived from the URL — such a name
+ *  keeps following the URL until the user types their own. */
+let nameAutofilled = false;
 
 function startEdit(name) {
   const entry = loadLinks()[name];
   if (!entry) return;
   editingName = name;
+  nameAutofilled = false;
   els.name.value = name;
   els.url.value = entry.url;
   els.group.value = entry.group ?? "";
@@ -267,12 +269,34 @@ function startEdit(name) {
 
 function exitEdit() {
   editingName = null;
+  nameAutofilled = false;
   els.name.value = "";
   els.url.value = "";
   els.group.value = "";
   els.add.textContent = "Add shortlink";
   els.editCancel.hidden = true;
   syncForm();
+}
+
+/**
+ * Auto-suggest a name from the URL while creating a link: fills the name field
+ * from the URL as long as the user hasn't typed their own name (an empty field,
+ * or one we filled ourselves). Never touches the name while editing.
+ */
+function maybeSuggestName() {
+  if (editingName !== null) return;
+  if (els.name.value !== "" && !nameAutofilled) return;
+  const suggestion = suggestName(els.url.value, loadLinks());
+  if (suggestion === "") {
+    // The URL isn't usable yet — clear only a name we put there ourselves.
+    if (nameAutofilled) {
+      els.name.value = "";
+      nameAutofilled = false;
+    }
+    return;
+  }
+  els.name.value = suggestion;
+  nameAutofilled = true;
 }
 
 function deleteLink(name) {
@@ -508,7 +532,8 @@ let filterQuery = loadFilter();
 
 function renderDirectory() {
   const filtering = filterQuery.trim() !== "";
-  const links = filterLinks(loadLinks(), filterQuery);
+  const allLinks = loadLinks();
+  const links = filterLinks(allLinks, filterQuery);
   // While filtering: declared-but-empty groups and collapse state get out of
   // the way — every match is visible.
   const tree = groupTree(links, filtering ? [] : loadGroups());
@@ -590,6 +615,17 @@ function renderDirectory() {
       rename.setAttribute("aria-label", `Rename group ${path}`);
       rename.addEventListener("click", () => startGroupRename(path, headRow));
       headRow.appendChild(rename);
+      // Share just this branch (the group and its sub-groups) when it has links.
+      if (Object.keys(linksInGroup(allLinks, path)).length > 0) {
+        const share = document.createElement("button");
+        share.type = "button";
+        share.className = "sl-group-edit sl-group-share";
+        share.textContent = "⤴";
+        share.title = "Share group";
+        share.setAttribute("aria-label", `Share group ${path}`);
+        share.addEventListener("click", () => shareGroup(path));
+        headRow.appendChild(share);
+      }
       // An empty leaf group only exists by explicit creation — deletable.
       if (entries.length === 0 && isLeaf) {
         const del = document.createElement("button");
@@ -832,9 +868,26 @@ function syncForm() {
   els.urlError.hidden = url === "" || validUrl.ok;
   if (!validUrl.ok) els.urlError.textContent = validUrl.error;
 
+  // Warn when this exact target is already saved under another name.
+  const twin = validUrl.ok ? findDuplicateTarget(others, validUrl.url) : null;
+  els.urlDup.hidden = twin === null;
+  if (twin !== null) els.urlDup.textContent = `Already saved as "${twin}".`;
+
   els.preview.hidden = !validName.ok;
   if (validName.ok) {
     els.previewUrl.textContent = buildShortlinkUrl(location.href, validName.name);
+    // A {q} target is a search template — show how #name/foo fills it in.
+    const dynamic = validUrl.ok && validUrl.url.includes("{q}");
+    els.previewDyn.hidden = !dynamic;
+    if (dynamic) {
+      const example = resolveDynamic(
+        { [validName.name]: { url: validUrl.url } },
+        `${validName.name}/foo`,
+      );
+      els.previewDynExample.textContent = `#${validName.name}/foo → ${example}`;
+    }
+  } else {
+    els.previewDyn.hidden = true;
   }
 }
 
@@ -877,6 +930,7 @@ function onCreate(event) {
   const created = els.name.value.trim();
   els.name.value = "";
   els.url.value = "";
+  nameAutofilled = false;
   // The group stays — adding several links to one group is the common flow.
   renderDirectory();
   syncForm();
@@ -905,6 +959,25 @@ function onShare() {
   );
 }
 
+/** Copy a share link carrying just one group's branch (its sub-groups too). */
+function shareGroup(path) {
+  const subset = linksInGroup(loadLinks(), path);
+  const count = Object.keys(subset).length;
+  if (count === 0) {
+    showToast(`"${path}" has no links to share.`);
+    return;
+  }
+  const base = location.href.split("#")[0].replace(/index\.html$/, "");
+  navigator.clipboard.writeText(`${base}#share=${encodeShare(subset)}`).then(
+    () =>
+      showToast(
+        `Share link copied — ${count} link${count === 1 ? "" : "s"} from "${path}"; ` +
+          "the receiver picks which to import.",
+      ),
+    () => showToast("Couldn't access the clipboard."),
+  );
+}
+
 function onExport() {
   const links = loadLinks();
   if (Object.keys(links).length === 0) {
@@ -925,20 +998,15 @@ async function onImportFile() {
   if (!file) return;
   const text = await file.text();
   // A shortlinks.json starts with "{"; anything else is treated as a browser
-  // bookmarks export (the Netscape bookmarks.html format).
+  // bookmarks export (the Netscape bookmarks.html format). Both go through the
+  // picker so a merge never silently replaces existing links.
   if (text.trimStart().startsWith("{")) {
     const parsed = parseImport(text);
     if (!parsed.ok) {
       showToast(parsed.error);
       return;
     }
-    const { links, added, replaced } = mergeLinks(loadLinks(), parsed.links);
-    saveLinks(links);
-    renderDirectory();
-    syncForm();
-    const parts = [`${added} added`];
-    if (replaced > 0) parts.push(`${replaced} replaced`);
-    showToast(`Imported: ${parts.join(", ")}.`);
+    openPicker(linksToCandidates(parsed.links), "json");
     return;
   }
   const parsed = parseBookmarksHtml(text);
@@ -947,6 +1015,17 @@ async function onImportFile() {
     return;
   }
   openPicker(bookmarksToLinks(parsed.bookmarks, loadLinks()));
+}
+
+/** A Links map as picker candidates (no bookmark titles). */
+function linksToCandidates(links) {
+  return Object.entries(links).map(([name, entry]) => ({
+    name,
+    title: "",
+    url: entry.url,
+    group: entry.group ?? "",
+    order: entry.order,
+  }));
 }
 
 /* ----------------------------- bookmark picker ---------------------------- */
@@ -959,10 +1038,19 @@ let pickerNoun = "bookmark";
 let pickerCheckboxes = [];
 
 function openPicker(candidates, source = "bookmarks") {
-  pickerNoun = source === "share" ? "link" : "bookmark";
-  els.pickerTitle.textContent = source === "share"
+  pickerNoun = source === "bookmarks" ? "bookmark" : "link";
+  els.pickerTitle.textContent = source === "bookmarks"
+    ? "Import from bookmarks"
+    : source === "share"
     ? "Import shared links"
-    : "Import from bookmarks";
+    : "Import shortlinks";
+  els.pickerHint.textContent = source === "bookmarks"
+    ? "Pick the bookmarks to turn into shortlinks — names come from the titles, folders " +
+      "become groups."
+    : "Pick which to import — a “replaces” tag marks a name you already have; importing it " +
+      "overwrites yours (undo from the toast).";
+  // Names already in this browser: candidates keeping one overwrite it on import.
+  const existing = loadLinks();
   // Same ordering as the directory: groups A→Z with ungrouped last (stable, so
   // bookmarks keep their file order inside a group).
   pickerCandidates = [...candidates].sort((a, b) =>
@@ -1006,6 +1094,13 @@ function openPicker(candidates, source = "bookmarks") {
     urlEl.title = candidate.url;
     text.append(nameEl, urlEl);
     row.append(checkbox, text);
+    if (Object.hasOwn(existing, candidate.name)) {
+      const tag = document.createElement("span");
+      tag.className = "sl-pick-conflict";
+      tag.textContent = "replaces";
+      tag.title = `Overwrites the existing "${candidate.name}"`;
+      row.appendChild(tag);
+    }
     pickerCheckboxes.push(checkbox);
     els.pickerList.appendChild(row);
   }
@@ -1044,11 +1139,26 @@ function onPickImport() {
     imported[name] = group === "" ? { url } : { url, group };
     if (typeof order === "number") imported[name].order = order;
   }
-  const { links, added } = mergeLinks(loadLinks(), imported);
+  const before = loadLinks();
+  const { links, added, replaced } = mergeLinks(before, imported);
+  const noun = pickerNoun;
   saveLinks(links);
   closePicker();
   syncForm();
-  showToast(`Imported ${added} ${pickerNoun}${added === 1 ? "" : "s"}.`);
+  const message = replaced > 0
+    ? `Imported ${added} added, ${replaced} replaced.`
+    : `Imported ${added} ${noun}${added === 1 ? "" : "s"}.`;
+  showToast(
+    message,
+    added + replaced === 0 ? undefined : {
+      label: "Undo",
+      onAction: () => {
+        saveLinks(before);
+        renderDirectory();
+        syncForm();
+      },
+    },
+  );
 }
 
 /* --------------------------------- wire ---------------------------------- */
@@ -1068,8 +1178,14 @@ els.url.addEventListener("input", () => {
   if (/[\r\n]/.test(els.url.value)) {
     els.url.value = els.url.value.replace(/[\r\n]+/g, "");
   }
+  maybeSuggestName();
+  syncForm();
 });
-for (const input of [els.name, els.url]) input.addEventListener("input", syncForm);
+els.name.addEventListener("input", () => {
+  // The user is naming the link themselves — stop mirroring the URL.
+  nameAutofilled = false;
+  syncForm();
+});
 els.newGroup.addEventListener("click", startGroupCreate);
 els.shareBtn.addEventListener("click", onShare);
 els.filter.addEventListener("input", () => {

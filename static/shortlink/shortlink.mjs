@@ -99,6 +99,23 @@ export function resolve(links, name) {
 }
 
 /**
+ * The name of an existing link whose target is exactly `url`, or null — used to
+ * warn before the same URL is saved under a second name. Ties break by name
+ * (A→Z) so the hint is stable.
+ * @param {Links} links
+ * @param {string} url
+ * @returns {string | null}
+ */
+export function findDuplicateTarget(links, url) {
+  const target = String(url ?? "").trim();
+  if (target === "") return null;
+  for (const name of Object.keys(links).sort()) {
+    if (links[name].url === target) return name;
+  }
+  return null;
+}
+
+/**
  * Resolve a hash that may be dynamic. Exact names win (a `{q}` in the target
  * is blanked). Otherwise `head/rest` resolves `head` and either substitutes
  * the URL-encoded rest for every `{q}` in the target (search-engine style) or
@@ -244,6 +261,26 @@ export function groupLinks(links) {
     a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)
   );
   return groups.map((group) => ({ group, entries: byGroup.get(group) ?? [] }));
+}
+
+/**
+ * The subset of links in `path` and its sub-groups — the branch a "Share group"
+ * action carries (`Team` also takes `Team/Frontend`). An empty path selects the
+ * ungrouped links.
+ * @param {Links} links
+ * @param {string} path
+ * @returns {Links}
+ */
+export function linksInGroup(links, path) {
+  const base = normalizeGroup(path);
+  /** @type {Links} */
+  const subset = {};
+  for (const [name, entry] of Object.entries(links)) {
+    const group = normalizeGroup(entry.group ?? "");
+    const inBranch = base === "" ? group === "" : group === base || group.startsWith(`${base}/`);
+    if (inBranch) subset[name] = entry;
+  }
+  return subset;
 }
 
 /**
@@ -637,6 +674,33 @@ export function bookmarksToLinks(bookmarks, existing) {
     taken.add(name);
     return { name, title, url, group: folder };
   });
+}
+
+/**
+ * Suggest a shortlink name from a target URL: the leading hostname label plus
+ * the first path segment, slugified (`https://jira.mesoneer.io/browse` →
+ * `jira-browse`). Deduped with a -2/-3 suffix against `links`, like a bookmark
+ * import, so the suggestion is always free to take. Returns "" when the URL
+ * can't be parsed as http(s).
+ * @param {string} url
+ * @param {Links} [links] Existing links, for the uniqueness suffix.
+ * @returns {string}
+ */
+export function suggestName(url, links = {}) {
+  let parsed;
+  try {
+    parsed = new URL(String(url ?? "").trim());
+  } catch {
+    return "";
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+  const label = parsed.hostname.replace(/^www\./, "").split(".")[0];
+  const segment = parsed.pathname.split("/").find((part) => part !== "") ?? "";
+  const base = slugify(`${label} ${segment}`);
+  if (base === "") return "";
+  let name = base;
+  for (let i = 2; Object.hasOwn(links, name); i++) name = `${base}-${i}`;
+  return name;
 }
 
 /**
