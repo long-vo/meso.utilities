@@ -275,7 +275,8 @@ Deno.test("event.outlookWebUrl: all-day calendar deep link with dates and attend
   assert(url.startsWith("https://outlook.office.com/calendar/0/deeplink/compose?"), url);
   assert(url.includes(`subject=${encodeURIComponent(result.event.subject)}`), url);
   assert(url.includes("startdt=2026-07-20"), url);
-  assert(url.includes("enddt=2026-07-20"), url); // single day → same date, boundary-safe
+  // Outlook's all-day end is exclusive, so a single day ends at 00:00 the next day.
+  assert(url.includes("enddt=2026-07-21"), url);
   assert(url.includes("allday=true"), url);
   // Attendees go in `to` (comma-separated), percent-encoded.
   assert(url.includes(`to=${encodeURIComponent("mesoneer_vn@mesoneer.io,po@mesoneer.io")}`), url);
@@ -292,12 +293,13 @@ Deno.test("half day ignores a stale end date (single-day period and event)", () 
   if (!result.ok) throw new Error(result.error);
   assert(result.email.subject.includes("2026-07-20 (Morning)"), result.email.subject);
   assert(!result.email.subject.includes("to 2026-07-24"), result.email.subject);
-  // A half day is one day: the calendar event must not span a range.
+  // A half day is one day: the calendar event must not span a range. enddt is the
+  // day after (Outlook's all-day end is exclusive).
   assert(result.event.outlookWebUrl.includes("startdt=2026-07-20"), result.event.outlookWebUrl);
-  assert(result.event.outlookWebUrl.includes("enddt=2026-07-20"), result.event.outlookWebUrl);
+  assert(result.event.outlookWebUrl.includes("enddt=2026-07-21"), result.event.outlookWebUrl);
 });
 
-Deno.test("event.outlookWebUrl: multi-day range spans start..end inclusive", () => {
+Deno.test("event.outlookWebUrl: multi-day range covers the final day (exclusive end)", () => {
   const result = buildLeaveRequest({
     name: "John Doe",
     type: "annual",
@@ -308,7 +310,9 @@ Deno.test("event.outlookWebUrl: multi-day range spans start..end inclusive", () 
   if (!result.ok) throw new Error(result.error);
   const url = result.event.outlookWebUrl;
   assert(url.includes("startdt=2026-07-20"), url);
-  assert(url.includes("enddt=2026-07-24"), url);
+  // Last leave day is 07-24; Outlook's all-day end is exclusive, so enddt is 07-25
+  // (otherwise the event would stop at 07-24 00:00 and drop the final day).
+  assert(url.includes("enddt=2026-07-25"), url);
   assert(url.includes(`to=${encodeURIComponent("mesoneer_vn@mesoneer.io")}`), url);
 });
 

@@ -99,12 +99,14 @@ export function buildLeaveRequest(input) {
 
   // Outlook-on-the-web calendar deep link — prefills the new-event form (subject,
   // all-day, dates, attendees). "Show as Free" and "don't request a response" have no
-  // URL parameters, so they stay manual (see the reminder chips). enddt is inclusive;
-  // a single day repeats the date so the span is right whether Outlook treats the end
-  // as inclusive or exclusive. Attendees go in `to` (comma-separated).
-  const eventEnd = duration === "full" && endDate !== "" && endDate > startDate
+  // URL parameters, so they stay manual (see the reminder chips). Outlook treats an
+  // all-day event's end as exclusive (00:00 of the day after the last day), so enddt
+  // is the day *after* the last leave day — otherwise a single day is a zero-length
+  // event Outlook won't create and a range drops its final day. Attendees go in `to`.
+  const lastDay = duration === "full" && endDate !== "" && endDate > startDate
     ? endDate
     : startDate;
+  const eventEnd = nextDay(lastDay);
   const attendees = recipients === "" ? EVENT_RECIPIENT : `${EVENT_RECIPIENT},${recipients}`;
   const eventOutlookWebUrl = "https://outlook.office.com/calendar/0/deeplink/compose?" +
     [
@@ -218,6 +220,17 @@ const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Frid
 function dayOfWeek(isoDate) {
   const t = Date.parse(`${isoDate}T00:00:00Z`);
   return Number.isNaN(t) ? null : new Date(t).getUTCDay();
+}
+
+/**
+ * The day after an ISO date (YYYY-MM-DD), as an ISO date. UTC-anchored so it never
+ * shifts by the runtime timezone. Used for the calendar deep link's exclusive
+ * all-day end date.
+ * @param {string} isoDate
+ * @returns {string}
+ */
+function nextDay(isoDate) {
+  return new Date(Date.parse(`${isoDate}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
 }
 
 /**
