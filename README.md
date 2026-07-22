@@ -176,7 +176,11 @@ bookmark folders become groups — nested folders keep their full trail as a sub
 
 Press **Ctrl/⌘ K** on any page (or the `⌘K` button in the top bar) to open the command palette: it
 jumps to any tool and runs the current page's main actions — copy result, send request, switch mode,
-toggle the theme — from the keyboard.
+toggle the theme, show/hide the controls sidebar — from the keyboard.
+
+On every tool page the controls sidebar can be collapsed to give the editor and result the full
+width — via the sidebar toggle in the top bar, the palette, or **Ctrl/⌘ B**. The choice is
+remembered per tool (as is its drag-to-resize width).
 
 Tools also chain into each other. The **Send to** buttons next to a tool's result hand the output to
 another tool: decode a payload, send it to Sanitize to mask it. The handoff travels through
