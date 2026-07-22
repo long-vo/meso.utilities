@@ -51,6 +51,7 @@ const els = {
   add: $("add"),
   count: $("count"),
   directory: $("directory"),
+  frequent: $("frequent"),
   empty: $("empty"),
   viewList: $("view-list"),
   viewGrid: $("view-grid"),
@@ -75,6 +76,8 @@ const showToast = makeToast(els.toast);
 const COLLAPSED_KEY = "meso-shortlinks-collapsed";
 /** localStorage key for the directory view ("list" or "grid"). */
 const VIEW_KEY = "meso-shortlinks-view";
+/** localStorage key for the persisted filter query. */
+const FILTER_KEY = "meso-shortlinks-filter";
 /** localStorage key for explicitly created groups (they render even empty). */
 const GROUPS_KEY = "meso-shortlinks-groups";
 /** localStorage key for per-link redirect counts (the "Frequently used" strip). */
@@ -221,6 +224,21 @@ function setView(view) {
   els.viewList.setAttribute("aria-pressed", String(view === "list"));
   els.viewGrid.setAttribute("aria-pressed", String(view === "grid"));
   renderDirectory();
+}
+
+function loadFilter() {
+  try {
+    return localStorage.getItem(FILTER_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function saveFilter(query) {
+  try {
+    if (query === "") localStorage.removeItem(FILTER_KEY);
+    else localStorage.setItem(FILTER_KEY, query);
+  } catch { /* UI state only — losing it is fine */ }
 }
 
 function copyShortlink(name) {
@@ -485,8 +503,8 @@ function hasCollapsedAncestor(path, collapsed) {
   return false;
 }
 
-/** The live filter query (never persisted). */
-let filterQuery = "";
+/** The live filter query, restored from and persisted to localStorage. */
+let filterQuery = loadFilter();
 
 function renderDirectory() {
   const filtering = filterQuery.trim() !== "";
@@ -513,46 +531,7 @@ function renderDirectory() {
 
   const view = loadView();
 
-  // "Frequently used": the most-visited links, speed-dial style, above the
-  // groups. Collapsible like a group; hidden while filtering — the filter
-  // results are the whole story.
-  const top = filtering ? [] : topLinks(links, loadHits(), 5);
-  if (top.length > 0) {
-    const isCollapsed = collapsed.has(FREQUENT_COLLAPSE_KEY);
-    const head = document.createElement("button");
-    head.type = "button";
-    head.className = "sl-group sl-frequent-head";
-    head.setAttribute("aria-expanded", String(!isCollapsed));
-    const chevron = document.createElement("span");
-    chevron.className = "sl-chevron";
-    chevron.setAttribute("aria-hidden", "true");
-    chevron.textContent = isCollapsed ? "▸" : "▾";
-    const label = document.createElement("span");
-    label.textContent = "★ Frequently used";
-    const count = document.createElement("span");
-    count.className = "sl-count";
-    count.textContent = String(top.length);
-    head.append(chevron, label, count);
-    head.addEventListener("click", () => {
-      const next = loadCollapsed();
-      if (next.has(FREQUENT_COLLAPSE_KEY)) next.delete(FREQUENT_COLLAPSE_KEY);
-      else next.add(FREQUENT_COLLAPSE_KEY);
-      saveCollapsed(next);
-      renderDirectory();
-    });
-    els.directory.appendChild(head);
-
-    if (!isCollapsed) {
-      const list = document.createElement("div");
-      list.className = view === "grid" ? "sl-grid" : "sl-rows";
-      for (const { name, url } of top) {
-        list.appendChild(
-          view === "grid" ? renderTile(name, url, "", false) : renderRow(name, url, "", false),
-        );
-      }
-      els.directory.appendChild(list);
-    }
-  }
+  renderFrequent(links, filtering, collapsed);
 
   for (let i = 0; i < tree.length; i++) {
     const { path, label, depth, entries } = tree[i];
@@ -743,6 +722,86 @@ function renderRow(name, url, group, canDrag = true) {
   del.addEventListener("click", () => deleteLink(name));
 
   row.append(text, copy, edit, del);
+  return row;
+}
+
+/**
+ * "Frequently used": the most-visited links as a speed-dial in the sticky right
+ * column. Collapsible; hidden while filtering — the directory results are the
+ * whole story then, and the layout reclaims the panel's track (see the
+ * `.frequent[hidden]` rule in styles.css).
+ */
+function renderFrequent(links, filtering, collapsed) {
+  els.frequent.hidden = filtering;
+  els.frequent.replaceChildren();
+  if (filtering) return;
+
+  const top = topLinks(links, loadHits(), 5);
+  const isCollapsed = collapsed.has(FREQUENT_COLLAPSE_KEY);
+
+  const head = document.createElement("button");
+  head.type = "button";
+  head.className = "sl-group sl-frequent-head";
+  head.setAttribute("aria-expanded", String(!isCollapsed));
+  const chevron = document.createElement("span");
+  chevron.className = "sl-chevron";
+  chevron.setAttribute("aria-hidden", "true");
+  chevron.textContent = isCollapsed ? "▸" : "▾";
+  const label = document.createElement("span");
+  label.textContent = "★ Frequently used";
+  head.append(chevron, label);
+  if (top.length > 0) {
+    const count = document.createElement("span");
+    count.className = "sl-count";
+    count.textContent = String(top.length);
+    head.appendChild(count);
+  }
+  head.addEventListener("click", () => {
+    const next = loadCollapsed();
+    if (next.has(FREQUENT_COLLAPSE_KEY)) next.delete(FREQUENT_COLLAPSE_KEY);
+    else next.add(FREQUENT_COLLAPSE_KEY);
+    saveCollapsed(next);
+    renderDirectory();
+  });
+  els.frequent.appendChild(head);
+
+  if (isCollapsed) return;
+
+  if (top.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "sl-fav-empty";
+    empty.textContent = "Links you open often appear here.";
+    els.frequent.appendChild(empty);
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "sl-fav-list";
+  for (const { name, url } of top) list.appendChild(renderFavRow(name, url));
+  els.frequent.appendChild(list);
+}
+
+/**
+ * A compact speed-dial row for the Frequently used column: the whole row is a
+ * link that opens the target. A host-hued dot and the name identify it; the
+ * full name and URL live in the tooltip, since the narrow column has no room
+ * for the URL inline.
+ */
+function renderFavRow(name, url) {
+  const row = document.createElement("a");
+  row.className = "sl-fav";
+  row.href = url;
+  row.target = "_blank";
+  row.rel = "noopener";
+  row.title = `${name}\n${url}`;
+  const dot = document.createElement("span");
+  dot.className = "sl-dot";
+  dot.setAttribute("aria-hidden", "true");
+  dot.style.setProperty("--fav-hue", String(hueForText(displayHost(url))));
+  const nameEl = document.createElement("code");
+  nameEl.className = "sl-fav-name";
+  nameEl.textContent = name;
+  row.append(dot, nameEl);
   return row;
 }
 
@@ -1015,12 +1074,14 @@ els.newGroup.addEventListener("click", startGroupCreate);
 els.shareBtn.addEventListener("click", onShare);
 els.filter.addEventListener("input", () => {
   filterQuery = els.filter.value;
+  saveFilter(filterQuery);
   renderDirectory();
 });
 els.filter.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && els.filter.value !== "") {
     els.filter.value = "";
     filterQuery = "";
+    saveFilter("");
     renderDirectory();
   }
 });
@@ -1084,6 +1145,7 @@ registerCommands([
   },
 ]);
 
+els.filter.value = filterQuery;
 setView(loadView());
 syncForm();
 followHash();
