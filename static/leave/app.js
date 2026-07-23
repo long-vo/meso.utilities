@@ -122,7 +122,7 @@ function readInput() {
   };
 }
 
-/** Annual/Core leave is full-day only — disable the half-day options for those types. */
+/** Core leave is full-day only — disable the half-day options for it. */
 function syncDurationConstraint() {
   const fullOnly = Boolean(TYPES[els.type.value]?.fullDayOnly);
   for (const option of els.duration.options) {

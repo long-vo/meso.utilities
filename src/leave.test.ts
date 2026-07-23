@@ -76,19 +76,29 @@ Deno.test("type mapping: bracket, leave-type label and email applicability", () 
   }
 });
 
-Deno.test("Annual and Core leave are full-day only — a half-day is coerced to full", () => {
-  for (const type of ["annual", "core"] as const) {
-    const result = buildLeaveRequest({
-      name: "John Doe",
-      type,
-      duration: "morning",
-      startDate: "2026-07-20",
-    });
-    if (!result.ok) throw new Error(result.error);
-    assert(!result.event.subject.includes("Morning"), `${type} event: ${result.event.subject}`);
-    assert(!result.email.subject.includes("(Morning)"), `${type} subject: ${result.email.subject}`);
-    assert(!result.email.body.includes("(Morning)"), `${type} body: ${result.email.body}`);
-  }
+Deno.test("Core leave is full-day only — a half-day is coerced to full", () => {
+  const result = buildLeaveRequest({
+    name: "John Doe",
+    type: "core",
+    duration: "morning",
+    startDate: "2026-07-20",
+  });
+  if (!result.ok) throw new Error(result.error);
+  assert(!result.event.subject.includes("Morning"), `core event: ${result.event.subject}`);
+  assert(!result.email.subject.includes("(Morning)"), `core subject: ${result.email.subject}`);
+  assert(!result.email.body.includes("(Morning)"), `core body: ${result.email.body}`);
+});
+
+Deno.test("Annual leave allows a half-day: TIME token in event bracket and email period", () => {
+  const result = buildLeaveRequest({
+    name: "John Doe",
+    type: "annual",
+    duration: "morning",
+    startDate: "2026-07-20",
+  });
+  if (!result.ok) throw new Error(result.error);
+  assertEquals(result.event.subject, "[Morning - OFF] - John Doe");
+  assertEquals(result.email.subject, "[Leave Request] John Doe - 2026-07-20 (Morning)");
 });
 
 Deno.test("half-day morning prepends the TIME token to the event bracket", () => {
@@ -160,7 +170,7 @@ Deno.test("end date equal to start is a single day; half-day ignores any end dat
 
   const half = buildLeaveRequest({
     name: "John Doe",
-    type: "sick", // half-day-allowed type (Annual/Core are full-day only)
+    type: "sick", // half-day-allowed type (Core is full-day only)
     duration: "morning",
     startDate: "2026-07-20",
     endDate: "2026-07-24",
@@ -340,7 +350,7 @@ Deno.test("event.outlookWebUrl: all-day calendar deep link with dates and attend
 Deno.test("half day ignores a stale end date (single-day period and event)", () => {
   const result = buildLeaveRequest({
     name: "John Doe",
-    type: "sick", // half-day-allowed type; Annual/Core would coerce to full day
+    type: "sick", // half-day-allowed type; Core would coerce to full day
     duration: "morning",
     startDate: "2026-07-20",
     endDate: "2026-07-24", // e.g. left over from a previous full-day selection

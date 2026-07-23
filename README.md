@@ -88,8 +88,8 @@ page mandates: the **HR leave-request email** (step 1) and the **Outlook calenda
 Nothing is sent — the buttons hand off to your own mail app and to Outlook on the web.
 
 - **Leave types.** Annual, Sick and Core leave produce both artifacts. **Remote** and **WFH** aren't
-  leave, so the HR-email step is hidden and only the calendar event remains. Annual and Core leave
-  are full-day only; Sick leave (and Remote/WFH) can be taken as a **Morning** or **Afternoon** half
+  leave, so the HR-email step is hidden and only the calendar event remains. Core leave is full-day
+  only; Annual and Sick leave (and Remote/WFH) can be taken as a **Morning** or **Afternoon** half
   day.
 - **Dates.** A full day takes a **From/To** range for a multi-day period; a half day collapses to a
   single date tagged with the time of day.

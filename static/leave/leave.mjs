@@ -15,12 +15,12 @@ export const EVENT_RECIPIENT = "mesoneer_vn@mesoneer.io";
 /**
  * Leave types → the Outlook event bracket, the HR "Leave type" label, whether an
  * HR email is normally expected (Remote/WFH are not leave), and whether the type is
- * full-day only (Annual/Core leave can't be taken as a half day).
+ * full-day only (Core leave can't be taken as a half day).
  * @type {Record<string, { bracket: string, label: string, emailApplicable: boolean,
  *   fullDayOnly?: boolean }>}
  */
 export const TYPES = {
-  annual: { bracket: "OFF", label: "Annual leave", emailApplicable: true, fullDayOnly: true },
+  annual: { bracket: "OFF", label: "Annual leave", emailApplicable: true },
   sick: { bracket: "Sick Leave", label: "Sick leave", emailApplicable: true },
   core: { bracket: "Core Leave", label: "Core leave", emailApplicable: true, fullDayOnly: true },
   remote: { bracket: "Remote", label: "Remote", emailApplicable: false },
@@ -58,7 +58,7 @@ export function buildLeaveRequest(input) {
   const name = String(input?.name ?? "").trim();
   const type = TYPES[input?.type] ? input.type : "annual";
   const meta = TYPES[type];
-  // Annual/Core leave is full-day only, so a half-day selection is ignored for them.
+  // Core leave is full-day only, so a half-day selection is ignored for it.
   const duration = !meta.fullDayOnly &&
       (input?.duration === "morning" || input?.duration === "afternoon")
     ? input.duration
