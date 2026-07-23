@@ -572,7 +572,8 @@ function renderDirectory() {
 
     const head = document.createElement("button");
     head.type = "button";
-    head.className = "sl-group";
+    // Top-level ("main") groups read one step larger than nested sub-groups.
+    head.className = depth === 0 ? "sl-group sl-group-top" : "sl-group";
     head.setAttribute("aria-expanded", String(!isCollapsed));
     head.style.paddingLeft = `${2 + indent}px`;
     const chevron = document.createElement("span");
@@ -580,7 +581,8 @@ function renderDirectory() {
     chevron.setAttribute("aria-hidden", "true");
     chevron.textContent = isCollapsed ? "▸" : "▾";
     head.appendChild(chevron);
-    if (view === "grid") {
+    // Top-level ("main") groups carry no hue dot — only nested sub-groups do.
+    if (view === "grid" && depth !== 0) {
       const dot = document.createElement("span");
       dot.className = "sl-dot";
       dot.setAttribute("aria-hidden", "true");
@@ -591,6 +593,7 @@ function renderDirectory() {
       head.appendChild(dot);
     }
     const labelEl = document.createElement("span");
+    labelEl.className = "sl-group-label";
     labelEl.textContent = path === "" ? "Ungrouped" : label;
     head.append(labelEl);
     if (entries.length > 0) {

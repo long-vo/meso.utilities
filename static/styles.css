@@ -1969,7 +1969,8 @@ html.js body.page-hub .cards.is-ready {
   .controls .field > label:not(.switch),
   .room-label,
   .story-panel > label,
-  .pick-label {
+  .pick-label,
+  .sl-group-top .sl-group-label {
     background-image: linear-gradient(92deg, var(--accent) 10%, var(--accent-2) 90%);
     -webkit-background-clip: text;
     background-clip: text;
@@ -2706,6 +2707,10 @@ kbd {
 }
 .sl-group:hover {
   color: var(--text);
+}
+/* Top-level ("main") groups sit one step above nested sub-groups. */
+.sl-group-top {
+  font-size: 14px;
 }
 .sl-chevron {
   color: var(--text-faint);

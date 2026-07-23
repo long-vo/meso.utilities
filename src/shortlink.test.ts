@@ -61,12 +61,14 @@ const links = {
 
 /* ------------------------------ validateName ------------------------------ */
 
-Deno.test("validateName: accepts lowercase letters, digits and hyphens, trimmed", () => {
+Deno.test("validateName: accepts letters, digits, spaces and hyphens, trimmed", () => {
   assertEquals(validateName("  sprint-board-2  ", {}), { ok: true, name: "sprint-board-2" });
+  assertEquals(validateName("Sprint Board", {}), { ok: true, name: "Sprint Board" });
+  assertEquals(validateName("My Cool Link", {}), { ok: true, name: "My Cool Link" });
 });
 
-Deno.test("validateName: rejects empty, bad characters and hyphen misuse", () => {
-  for (const bad of ["", "   ", "Sprint", "a b", "a_b", "über", "-a", "a-", "a--b", "#a"]) {
+Deno.test("validateName: rejects empty, bad characters and separator misuse", () => {
+  for (const bad of ["", "   ", "a_b", "über", "-a", "a-", "a--b", "a  b", "a -b", "#a"]) {
     const result = validateName(bad, {});
     if (result.ok) throw new Error(`expected "${bad}" to be rejected`);
     assert(result.error.length > 0, `expected an error message for "${bad}"`);
@@ -484,7 +486,7 @@ Deno.test("parseImport: rejects non-JSON, non-objects and malformed entries", ()
     "[1,2]",
     '"str"',
     "null",
-    '{"ok":{"url":"https://x.example"},"BAD NAME":{"url":"https://x.example"}}',
+    '{"ok":{"url":"https://x.example"},"bad_name":{"url":"https://x.example"}}',
     '{"a":{"url":"file:///etc/passwd"}}',
     '{"a":{"url":"https://x.example","group":42}}',
     '{"a":"https://x.example"}',
@@ -652,6 +654,27 @@ Deno.test("faviconUrl: null for non-http schemes and unparsable values", () => {
   assertEquals(faviconUrl("chrome://settings"), null);
   assertEquals(faviconUrl("not a url"), null);
   assertEquals(faviconUrl(""), null);
+});
+
+Deno.test("faviconUrl: embedded OKD icon for the cluster host and its subdomains", () => {
+  const okdIcon = faviconUrl("https://okd4.dev.mesoneer.io/");
+  assert(
+    okdIcon !== null && okdIcon.startsWith("data:image/png;base64,"),
+    "expected an embedded PNG data URI",
+  );
+  // Subdomains — the *.apps.<cluster> routes — get the same icon.
+  assertEquals(faviconUrl("https://console.apps.okd4.dev.mesoneer.io/dashboard"), okdIcon);
+  // A lookalike host that only ends in the same labels without the dot boundary
+  // is a different domain and keeps its own favicon.
+  assertEquals(
+    faviconUrl("https://notokd4.dev.mesoneer.io/"),
+    "https://notokd4.dev.mesoneer.io/favicon.ico",
+  );
+  // Other mesoneer hosts are unaffected.
+  assertEquals(
+    faviconUrl("https://jira.mesoneer.io/browse"),
+    "https://jira.mesoneer.io/favicon.ico",
+  );
 });
 
 /* ------------------------------ resolveDynamic ----------------------------- */

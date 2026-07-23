@@ -15,10 +15,10 @@ export const STORE_KEY = "meso-shortlinks";
  * @typedef {Record<string, LinkEntry>} Links
  */
 
-const NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const NAME_PATTERN = /^[A-Za-z0-9]+([ -][A-Za-z0-9]+)*$/;
 
 /**
- * Validate a new shortlink name: lowercase letters, digits and single hyphens,
+ * Validate a new shortlink name: letters, digits and single spaces or hyphens,
  * unique across all groups.
  * @param {string} name
  * @param {Links} links Existing links (for the uniqueness check).
@@ -28,7 +28,7 @@ export function validateName(name, links) {
   const trimmed = String(name ?? "").trim();
   if (trimmed === "") return { ok: false, error: "Enter a name." };
   if (!NAME_PATTERN.test(trimmed)) {
-    return { ok: false, error: "Use lowercase letters, digits and hyphens (e.g. sprint-board)." };
+    return { ok: false, error: "Use letters, digits, spaces and hyphens (e.g. Sprint board)." };
   }
   if (Object.hasOwn(links, trimmed)) return { ok: false, error: `"${trimmed}" is already taken.` };
   return { ok: true, name: trimmed };
@@ -733,13 +733,27 @@ export function displayHost(url) {
   }
 }
 
+/** The OKD dev cluster's domain: its console host and every route beneath it
+ *  (`*.apps.okd4.dev.mesoneer.io`). These tiles show the OKD console favicon
+ *  ({@link OKD_ICON}) rather than a fetched icon. */
+const OKD_HOST = "okd4.dev.mesoneer.io";
+
+/** The OKD console favicon (a red ring), embedded as a base64 PNG data URI so
+ *  rendering an OKD tile contacts nothing — same self-contained handling as any
+ *  other tile's icon. Source: the standard OpenShift console asset at
+ *  `/static/assets/public/imgs/okd-favicon.png`. */
+const OKD_ICON =
+  "data:image/png;base64,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";
+
 /**
  * The favicon URL for a grid tile: `https://<host>/favicon.ico` served by the
  * target's own origin — never a third-party icon service, so rendering the
- * directory only ever contacts hosts the user already has links to. Non-http(s)
- * targets and unparsable URLs get no favicon (the tile falls back to its
- * monogram). The scheme is preserved so plain-http intranet hosts aren't asked
- * for an https icon they can't serve.
+ * directory only ever contacts hosts the user already has links to. The OKD dev
+ * cluster ({@link OKD_HOST} and its subdomains) is the one exception: it gets a
+ * fixed red-circle data URI, contacting nothing. Non-http(s) targets and
+ * unparsable URLs get no favicon (the tile falls back to its monogram). The
+ * scheme is preserved so plain-http intranet hosts aren't asked for an https
+ * icon they can't serve.
  * @param {string} url
  * @returns {string | null}
  */
@@ -747,6 +761,8 @@ export function faviconUrl(url) {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    const host = parsed.hostname;
+    if (host === OKD_HOST || host.endsWith(`.${OKD_HOST}`)) return OKD_ICON;
     return `${parsed.protocol}//${parsed.host}/favicon.ico`;
   } catch {
     return null;
