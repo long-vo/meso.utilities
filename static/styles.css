@@ -2878,64 +2878,84 @@ kbd {
 .sl-tile {
   position: relative;
   aspect-ratio: 1;
-  /* A faint wash of the site's hue — the tile is recognizable by color alone;
-     the tint deepens a little on hover. */
-  background: color-mix(in srgb, hsl(var(--tile-hue) 60% 45%) 9%, var(--bg-inset));
+  /* Speed-dial tile: a quiet neutral surface — the hue lives in the icon well
+     and only reaches the border on hover, so a wall of tiles stays calm. */
+  background: var(--bg-inset);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 14px;
   overflow: hidden;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.18s, background 0.18s, transform 0.18s;
 }
 .sl-tile:hover {
-  border-color: var(--border-strong);
-  background: color-mix(in srgb, hsl(var(--tile-hue) 60% 45%) 16%, var(--bg-inset));
+  border-color: color-mix(in srgb, hsl(var(--tile-hue) 60% 55%) 50%, var(--border));
+  background: color-mix(in srgb, hsl(var(--tile-hue) 60% 45%) 6%, var(--bg-inset));
+  transform: translateY(-2px);
 }
 .sl-tile-main {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   height: 100%;
-  padding: 12px;
+  padding: 12px 10px;
+  text-align: center;
   color: inherit;
   text-decoration: none;
 }
+/* The icon well: the target's favicon when it loads, the hue monogram until
+   then (and forever, when the site has none) — both stacked on one grid cell
+   so the swap never shifts layout. */
+.sl-tile-ico {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  background: color-mix(in srgb, hsl(var(--tile-hue) 60% 50%) 16%, var(--bg-inset));
+  transition: transform 0.18s;
+}
+.sl-tile:hover .sl-tile-ico {
+  transform: scale(1.1);
+}
+.sl-tile-ico > * {
+  grid-area: 1 / 1;
+}
 .sl-tile-mono {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  margin-bottom: 9px;
-  font-size: 17px;
+  font-size: 19px;
   font-weight: 600;
-  background: hsl(var(--tile-hue) 45% 32%);
-  color: hsl(var(--tile-hue) 65% 82%);
+  color: hsl(var(--tile-hue) 70% 72%);
 }
 :root[data-theme="light"] .sl-tile-mono {
-  background: hsl(var(--tile-hue) 65% 88%);
-  color: hsl(var(--tile-hue) 60% 32%);
+  color: hsl(var(--tile-hue) 60% 34%);
+}
+.sl-tile-favicon {
+  display: none;
+  width: 24px;
+  height: 24px;
+}
+.sl-tile-ico.has-favicon .sl-tile-favicon {
+  display: block;
+}
+.sl-tile-ico.has-favicon .sl-tile-mono {
+  display: none;
 }
 .sl-tile-name {
   /* Long (imported) names would stretch tiles into uneven rectangles — clamp
-     to 3 lines; the tooltip carries the full name. */
+     to 2 lines; the tooltip carries the full name. The two-line height is
+     always reserved (even for one-line names) so the centered column above
+     never shifts: the icon well sits at the same spot on every tile. */
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  font-family: var(--mono);
+  height: calc(2 * 1.35em);
   font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
   color: var(--text);
   overflow-wrap: anywhere;
-}
-.sl-tile-host {
-  display: block;
-  margin-top: auto;
-  padding-top: 2px;
-  font-size: 11px;
-  color: var(--text-faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .sl-tile-actions {
   position: absolute;
@@ -2952,8 +2972,9 @@ kbd {
 }
 .sl-tile-actions button {
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: var(--bg-elev);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
+  backdrop-filter: blur(4px);
   color: var(--text-dim);
   font-size: 11px;
   line-height: 1;

@@ -82,7 +82,21 @@ export default function StartScreen(
           /
         </span>
         <span className="start-crumb-current">
-          <span aria-hidden="true">📽️</span> Slidedown
+          <span className="start-crumb-icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 16 16">
+              <rect x="4.5" y="2" width="9" height="7.5" rx="1.6" fill="#ed93b1" />
+              <rect x="2.5" y="5" width="9" height="7.5" rx="1.6" fill="#d4537e" />
+              <path
+                d="M5 7.9l2 2 2-2"
+                fill="none"
+                stroke="#fff"
+                strokeWidth="1.3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>{' '}
+          Slidedown
         </span>
       </nav>
 

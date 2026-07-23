@@ -9,6 +9,7 @@ import {
   decodeShare,
   displayHost,
   encodeShare,
+  faviconUrl,
   filterLinks,
   findDuplicateTarget,
   groupLinks,
@@ -680,17 +681,34 @@ function renderTile(name, url, group, canDrag = true) {
   main.title = `${name}\n${url}`;
   // Dragging anywhere on the tile must drag the tile, not the native link.
   main.draggable = false;
+  // The icon well shows the target's own favicon; the hue monogram is the
+  // fallback (and stays visible until the icon has actually loaded, so a slow
+  // or missing favicon never leaves an empty well or a broken-image glyph).
+  const well = document.createElement("span");
+  well.className = "sl-tile-ico";
+  well.setAttribute("aria-hidden", "true");
   const mono = document.createElement("span");
   mono.className = "sl-tile-mono";
-  mono.setAttribute("aria-hidden", "true");
   mono.textContent = name.charAt(0).toUpperCase();
+  well.appendChild(mono);
+  const icon = faviconUrl(url);
+  if (icon) {
+    // Never `loading="lazy"`: the image is display:none until it loads, and a
+    // lazy image with no layout box is never fetched — the swap would deadlock.
+    const img = document.createElement("img");
+    img.className = "sl-tile-favicon";
+    img.alt = "";
+    img.decoding = "async";
+    img.draggable = false;
+    img.addEventListener("load", () => well.classList.add("has-favicon"));
+    img.addEventListener("error", () => img.remove());
+    img.src = icon;
+    well.appendChild(img);
+  }
   const nameEl = document.createElement("span");
   nameEl.className = "sl-tile-name";
   nameEl.textContent = name;
-  const host = document.createElement("span");
-  host.className = "sl-tile-host";
-  host.textContent = displayHost(url);
-  main.append(mono, nameEl, host);
+  main.append(well, nameEl);
 
   const actions = document.createElement("div");
   actions.className = "sl-tile-actions";

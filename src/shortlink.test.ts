@@ -13,6 +13,7 @@ import {
   decodeShare,
   displayHost,
   encodeShare,
+  faviconUrl,
   filterLinks,
   findDuplicateTarget,
   groupLinks,
@@ -629,6 +630,28 @@ Deno.test("displayHost: hostname without www, or the raw value when unparsable",
   assertEquals(displayHost("https://www.example.com/a/b?c=1"), "example.com");
   assertEquals(displayHost("http://localhost:8000/x"), "localhost");
   assertEquals(displayHost("not a url"), "not a url");
+});
+
+Deno.test("faviconUrl: target-origin icon for http(s), path and query stripped", () => {
+  assertEquals(
+    faviconUrl("https://www.example.com/a/b?c=1"),
+    "https://www.example.com/favicon.ico",
+  );
+  assertEquals(faviconUrl("https://github.com/mesoneer"), "https://github.com/favicon.ico");
+  // The port is part of the origin; the scheme is preserved for http intranets.
+  assertEquals(faviconUrl("http://localhost:8000/x"), "http://localhost:8000/favicon.ico");
+  // Dynamic {q} targets still have a plain host to ask for an icon.
+  assertEquals(
+    faviconUrl("https://www.google.com/search?q={q}"),
+    "https://www.google.com/favicon.ico",
+  );
+});
+
+Deno.test("faviconUrl: null for non-http schemes and unparsable values", () => {
+  assertEquals(faviconUrl("mailto:team@example.com"), null);
+  assertEquals(faviconUrl("chrome://settings"), null);
+  assertEquals(faviconUrl("not a url"), null);
+  assertEquals(faviconUrl(""), null);
 });
 
 /* ------------------------------ resolveDynamic ----------------------------- */

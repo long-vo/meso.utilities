@@ -734,6 +734,26 @@ export function displayHost(url) {
 }
 
 /**
+ * The favicon URL for a grid tile: `https://<host>/favicon.ico` served by the
+ * target's own origin — never a third-party icon service, so rendering the
+ * directory only ever contacts hosts the user already has links to. Non-http(s)
+ * targets and unparsable URLs get no favicon (the tile falls back to its
+ * monogram). The scheme is preserved so plain-http intranet hosts aren't asked
+ * for an https icon they can't serve.
+ * @param {string} url
+ * @returns {string | null}
+ */
+export function faviconUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    return `${parsed.protocol}//${parsed.host}/favicon.ico`;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The shareable shortlink URL for a name on the tool page: any existing hash
  * is replaced, an `index.html` suffix is dropped.
  * @param {string} pageHref The tool page's location.href.

@@ -130,7 +130,8 @@ Pasting a target into the empty form auto-suggests a name from the URL (`jira.me
 saved under another name, the form says so rather than quietly creating a twin.
 
 The directory has two views, toggled next to Export/Import and remembered per browser: **List**
-(compact rows) and **Grid** — a speed-dial of colored monogram tiles. In both views, drag a link to
+(compact rows) and **Grid** — a speed-dial of tiles showing each target's favicon, with a colored
+monogram standing in until the icon loads (or when the site has none). In both views, drag a link to
 reorder it within its group (the order is stored per link and survives export/import); links you
 haven't reordered sort alphabetically after the ordered ones. Dropping a link on another group's
 links, empty space or header moves it into that group — at the drop position, or at the end for
@@ -140,8 +141,10 @@ follow along). **New group** creates an empty group to organize into — explici
 persist while empty (unlike link-implied ones, which vanish with their last link) and carry a ✕ to
 remove them again; they live in this browser only, since the export file carries links, not empty
 groups. Tile and group colors are deterministic (hashed from the target hostname and the group
-name), so the same site and group keep their colors on every visit; no favicons are fetched, so the
-grid stays fully offline.
+name), so the same site and group keep their colors on every visit. Favicons are requested from each
+target's own origin (`https://<host>/favicon.ico`) — never a third-party icon service — so rendering
+the grid only ever contacts sites you already have links to, and nothing else learns what you've
+saved.
 
 A **filter box** narrows the directory by name, target or group as you type (Escape clears; collapse
 state and empty groups get out of the way while filtering), and every saved link is openable from

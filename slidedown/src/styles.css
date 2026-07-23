@@ -1418,7 +1418,10 @@ body {
   align-items: center;
   gap: 10px;
   text-decoration: none;
-  color: var(--ink);
+  /* The start screen is a fixed dark surface in every theme (see .start /
+     .start-inner), so brand text uses the same fixed light palette rather than
+     the slide-surface --ink tokens, which go dark on several themes. */
+  color: #eef0f6;
 }
 
 .start-brand-link:hover .start-brand-name {
@@ -1439,14 +1442,22 @@ body {
 }
 
 .start-crumb-sep {
-  color: var(--ink-soft);
+  color: #b7bccb;
 }
 
 .start-crumb-current {
-  color: var(--ink-soft);
+  color: #b7bccb;
   font-size: 13.5px;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.start-crumb-icon {
+  display: inline-flex;
+  vertical-align: -3px;
+}
+.start-crumb-icon svg {
+  display: block;
 }
 
 @media (max-width: 560px) {
