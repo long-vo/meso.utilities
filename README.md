@@ -16,6 +16,9 @@ everything here runs entirely in your browser and deploys to GitHub Pages.
 - **Shortlink** (`/shortlink/`) — give a URL a memorable name and open it via `/shortlink/#name`.
   Links can be organized into groups, live in your browser's `localStorage` (personal only) and can
   be exported to / imported from a local `shortlinks.json`. Runs fully client-side.
+- **Text Transform** (`/transform/`) — 60+ text actions modelled on the IntelliJ String Manipulation
+  plugin: switch case (camelCase ↔ snake_case ↔ kebab-case …), sort, align, grep, trim, dedupe,
+  quote juggling and JSON ↔ YAML — applied in place with undo. Runs fully client-side.
 - **Slidedown** (`/slidedown/`) — turn Markdown, HTML, AsciiDoc, PDFs and images into navigable
   presentation slides, with speaker view, themes, PDF export and shareable content-in-URL links for
   text decks. A Vite/React app (in `slidedown/`) built in CI; runs fully client-side.
@@ -165,6 +168,46 @@ can't read your Bookmarks bar directly): names are slugified from the titles (de
 `-2`/`-3` suffix) and bookmark folders become groups — nested folders keep their full trail as a
 sub-group path.
 
+## How Text Transform works
+
+One text area, one searchable action list — pick an action and it transforms the text in place
+(select part of the text first to transform only the selection). **Undo/Redo** step through the
+action history (also **Ctrl/⌘ Alt Z**), and every action is runnable from the **Ctrl/⌘ K** palette
+too. The ☆ star next to each action pins it to the **Favourites** rail on the right (the same third
+column Leave uses for templates) for one-click reuse — favourites persist in your browser's
+`localStorage`, in the order you starred them. The actions, grouped as in the sidebar:
+
+- **Switch case** — convert to camelCase, kebab-case (lower/UPPER), snake_case,
+  SCREAMING_SNAKE_CASE, Capitalized_Snake_Case, dot.case, words lowercase, First word capitalized,
+  Words Capitalized or PascalCase — or **cycle** through them: the current format is detected and
+  the text moves to the next one. Plus capitalize words, lower/UPPER, invert case, and the Spring
+  Boot env-variable form (`spring.main.log-startup-info` → `SPRING_MAIN_LOGSTARTUPINFO`).
+  Conversions work per line, so a pasted list of identifiers converts in one go, indentation intact.
+- **Case toggles** — two-way switches (snake_case / camelCase, kebab-case / snake_case, PascalCase /
+  camelCase, …): already in the first format → converts to the second, anything else → the first.
+- **Sort lines** — A-z / z-A (case-sensitive, by code point), A-Z / Z-A (case-insensitive _natural_
+  order via `Intl.Collator`, so `a2` < `a10`), by line length, hexadecimally (by the first hex
+  number on each line), reverse, shuffle, sort tokens within each line (delimiter from Options),
+  hierarchical sort (indented children stay attached to their parent and are sorted recursively),
+  shuffle characters, and JSON sort (object keys, recursive).
+- **Align** — format delimited lines into padded columns (delimiter from Options; blank =
+  whitespace), or align lines left / center / right against the longest line.
+- **Filter / remove / trim** — grep, inverted grep and group-by-grep (matched lines first) take a
+  pattern from Options — plain text or `/regex/flags`. Trim (both/leading/trailing), collapse
+  whitespace runs, remove all spaces, remove duplicate lines / keep only duplicates, remove empty
+  lines, collapse consecutive empty lines, remove all newlines.
+- **Convert** — minify JSON, JSON → YAML, and YAML → JSON (the common YAML subset: block and flow
+  mappings/sequences, quoted and plain scalars, comments; anchors, tags, multi-doc streams and block
+  scalars report a clear error).
+- **Quotes & other** — shift quotes `"` → `'` → `` ` `` → `"` (re-escaping the contents), swap
+  double ↔ single quotes, educate (straight → curly) and straighten (curly → straight) quotes,
+  reverse letters, swap word order, and switch path separators Windows ↔ UNIX.
+
+Caret-bound IDE actions from the plugin (align carets, sort by subselection, multi-caret swaps,
+"select all occurrences") have no equivalent in a plain text area and are intentionally left out.
+
+> Every transform runs in your browser. Your text is never uploaded anywhere.
+
 ## Palette & handoff
 
 Press **Ctrl/⌘ K** on any page (or the `⌘K` button in the top bar) to open the command palette: it
@@ -225,6 +268,7 @@ src/
   curl.test.ts        curl-import tests (roundtrip through buildCurlCommand)
   leave.test.ts       leave-request builder tests (import the module from static/leave/)
   shortlink.test.ts   shortlink logic tests (import the module from static/shortlink/)
+  transform.test.ts   text-transform tests (import the modules from static/transform/)
 static/
   index.html          hub / master page (lists all tools)
   styles.css          shared theme + hub + tool styles
@@ -253,6 +297,11 @@ static/
     index.html        Shortlink UI
     app.js            shortlink UI logic (imports ./shortlink.mjs)
     shortlink.mjs     validation, grouping + export/import logic (browser and tests)
+  transform/
+    index.html        Text Transform UI
+    app.js            transform UI logic (imports ./transform.mjs)
+    transform.mjs     case/sort/align/filter/quote actions (browser and tests)
+    yaml.mjs          minimal JSON ↔ YAML support (browser and tests)
 slidedown/            Slidedown viewer (Vite/React/TS) — built into /slidedown/ at deploy time
 ```
 

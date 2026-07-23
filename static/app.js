@@ -5,7 +5,7 @@ import { parseFields, runSanitize, runSanitizeLog } from "./sanitize.mjs";
 import { changedCount, pairLineDiff } from "./diff.mjs";
 import { suggestSensitiveFields } from "./suggest.mjs";
 import { sendHandoff, takeHandoff } from "./handoff.mjs";
-import { registerCommands } from "./palette.js";
+import { registerCommands, TOOL_ICONS } from "./palette.js";
 import { escapeHtml, highlightJson, makeToast } from "./ui.mjs";
 
 const $ = (id) => document.getElementById(id);
@@ -470,7 +470,7 @@ registerCommands([
   },
   { icon: "✨", title: "Load example", hint: "action", run: loadExample },
   {
-    icon: "🔍",
+    icon: TOOL_ICONS.decode,
     title: "Send result to Decode Anything",
     hint: "action",
     run: () => sendResultTo("decode"),

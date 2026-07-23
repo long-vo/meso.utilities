@@ -5,7 +5,7 @@ import { decodeAll } from "./decode.mjs";
 import { encodeChain, encoderFor, ENCODERS } from "./encode.mjs";
 import { decodeJwtParts, describeJwtTimes, verifyJwtSignature } from "./jwt.mjs";
 import { sendHandoff, takeHandoff } from "../handoff.mjs";
-import { registerCommands } from "../palette.js";
+import { registerCommands, TOOL_ICONS } from "../palette.js";
 import { escapeHtml, highlightJson, makeToast } from "../ui.mjs";
 
 const $ = (id) => document.getElementById(id);
@@ -392,7 +392,7 @@ registerCommands([
     run: () => setPageMode(pageMode === "encode" ? "decode" : "encode"),
   },
   {
-    icon: "🔒",
+    icon: TOOL_ICONS.sanitize,
     title: "Send result to Sanitize JSON",
     hint: "action",
     run: () => sendResultTo("sanitize"),

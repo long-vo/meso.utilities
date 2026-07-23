@@ -76,6 +76,30 @@ areas — Leave's `.page-leave .layout` adds a `templates` column. A shared `.la
 silently drop the extra area, hiding a panel. Check any shared layout change against every tool page
 (Leave especially), or scope it to the page's own `.page-<tool> .layout`.
 
+### Tool iconography — keep it consistent
+
+Since the favicon refresh, every tool has **one visual identity**: a card color class
+(`card--purple`, `card--teal`, `card--green`, `card--coral`, `card--pink`, `card--amber`,
+`card--blue`) plus an SVG icon. That same icon and color must appear everywhere the tool is
+referenced — do not introduce emojis for tool references (emojis remain only for non-tool action
+glyphs like 📋 ⬇️ 🌓, and for tools without an SVG identity: the hub 🧰 and Scrum Poker 🃏):
+
+- **Favicon** (`static/<tool>/index.html`) — inline `data:` SVG filled with the tool's own
+  `--card-art1` hex (dark-theme value), not another tool's color.
+- **Breadcrumb** — `<span class="crumb-icon card--<color>">` in the tool page's topbar.
+- **⌘K palette** — `TOOL_ICONS` in `static/palette.js` holds the shared markup (icons starting with
+  `<` render via `innerHTML`; trusted codebase strings only). `TOOL_LINKS` and any page-registered
+  "Send to <tool>" commands must reference `TOOL_ICONS.<tool>`, never an emoji.
+- **Send-to buttons** on other tool pages — reuse the same crumb-icon markup inline (see the
+  Sanitize/Decode/Transform pages); `.btn .crumb-icon` handles the baseline alignment.
+
+SVG part classes are **context-scoped** — using one outside its context renders unstyled (black):
+`.crumb-icon` styles only `i1`/`i2` (fills) and `is1`/`is2` (strokes); `.card-art` styles
+`ap`/`a1`/`a2`/`a3` (fills), `adp`/`tp` (text fills), `sd`/`s1`/`s1-thin` (strokes). Light-theme
+gotcha inside card art: `--card-paper` is pure white and `--card-tint` near-white, so never pair an
+`ap` shape with `tp` text (white-on-white). Give white `ap` shapes an `s1-thin` outline, put `adp`
+text on `ap`, and `tp` text on `a1` — the Scrum Poker card is the reference for these pairings.
+
 `sanitize.mjs`'s masking is lifted verbatim (semantics-wise) from the Slack `/sanitize-text`
 command; `src/sanitize.test.ts` exists to assert that parity.
 
@@ -91,7 +115,9 @@ Deploy is `.github/workflows/pages.yml`: it copies `static/` → `_site/`, then 
 4. Add a card with a unique `data-tool` to `static/index.html`.
 5. **Register the tool in the ⌘K palette** — add an entry to `TOOL_LINKS` in `static/palette.js` so
    it's reachable from every page (no test catches a missing one).
-6. Update README.md
+6. Give the tool a consistent icon — pick a card color, add its SVG to `TOOL_ICONS`, and use the
+   same icon/color for the favicon, breadcrumb and card art (see "Tool iconography" above).
+7. Update README.md
 
 ## Conventions
 
