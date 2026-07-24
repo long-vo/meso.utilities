@@ -7,6 +7,8 @@ import logoUrl from '../assets/mesoneer-logo.jpg';
 
 interface Props {
   onLoad: (deck: Deck) => void;
+  /** Open the paste/write editor. */
+  onCompose: () => void;
   theme: ThemeName;
   onSetTheme: (theme: ThemeName) => void;
   /** Error to show on first render (e.g. an invalid share link). */
@@ -14,7 +16,7 @@ interface Props {
 }
 
 export default function StartScreen(
-  { onLoad, theme, onSetTheme, initialError }: Props,
+  { onLoad, onCompose, theme, onSetTheme, initialError }: Props,
 ) {
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -164,6 +166,9 @@ export default function StartScreen(
         {error && <p className="start-error">{error}</p>}
 
         <div className="start-actions">
+          <button className="link-btn" disabled={busy} onClick={onCompose}>
+            Write or paste slides
+          </button>
           <button className="link-btn" disabled={busy} onClick={loadSamples}>
             Load sample deck
           </button>

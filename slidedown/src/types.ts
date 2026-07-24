@@ -66,3 +66,19 @@ export interface Deck {
 }
 
 export type Direction = 'next' | 'prev' | 'none';
+
+/** Text formats the paste editor can author (each maps to a file extension). */
+export const COMPOSE_FORMATS = ['markdown', 'asciidoc', 'html'] as const;
+export type ComposeFormat = (typeof COMPOSE_FORMATS)[number];
+
+export const COMPOSE_FORMAT_LABELS: Record<ComposeFormat, string> = {
+  markdown: 'Markdown',
+  asciidoc: 'AsciiDoc',
+  html: 'HTML',
+};
+
+/** The paste editor's persisted working state. */
+export interface Draft {
+  readonly text: string;
+  readonly format: ComposeFormat;
+}
