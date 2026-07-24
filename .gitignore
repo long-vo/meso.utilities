@@ -10,3 +10,5 @@ deno.lock
 
 # Plan
 docs/
+
+.superpowers/
