@@ -9,6 +9,7 @@ import {
   filterRecipientSuggestions,
   isValidEmailList,
   mailtoUrl,
+  nextWorkingDay,
   outlookComposeUrl,
   parseEmails,
   removeRecipient,
@@ -33,7 +34,9 @@ const els = {
   dateLabel: $("date-label"),
   dateSummary: $("date-summary"),
   reason: $("reason"),
+  reasonField: $("reason-field"),
   lead: $("lead"),
+  leadField: $("lead-field"),
   leadSave: $("lead-save"),
   recipients: $("recipients"),
   recipientsSave: $("recipients-save"),
@@ -85,27 +88,43 @@ const BOOKMARK_ICON =
   'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
   '<path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>';
 
-const ACTION_BUTTONS = [
-  els.openMail,
-  els.openOutlook,
-  els.copySubject,
-  els.copyBody,
-  els.addEventOutlook,
-  els.copyEventSubject,
-  els.copyRecipients,
-];
+/**
+ * Actions grouped by what could actually go wrong, so one bad optional address
+ * only blocks what would silently drop it:
+ *  - `emailCopy` — the subject/body never carry the Cc, so only the form matters
+ *    (and the HR step has to apply at all: Remote/WFH have no email).
+ *  - `emailSend` — the mailto/Outlook links carry the Cc, so the CC field must be
+ *    well-formed or the address the user typed would vanish without a word.
+ *  - `eventCopy` / `eventSend` — same split for the PO/extra recipients field.
+ */
+const ACTION_GROUPS = {
+  emailCopy: [els.copySubject, els.copyBody],
+  emailSend: [els.openMail, els.openOutlook],
+  eventCopy: [els.copyEventSubject],
+  eventSend: [els.addEventOutlook, els.copyRecipients],
+};
 
-/** Optional email fields that must be blank or well-formed before actions fire.
- *  Each gets an inline error slot injected right after it (reusing .error-line). */
-const EMAIL_FIELDS = [els.lead, els.recipients].map((input) => {
+/** Which groups are live right now. The palette commands bypass the disabled
+ *  buttons, so they check these flags instead (see `guarded`). */
+const actionsEnabled = { emailCopy: false, emailSend: false, eventCopy: false, eventSend: false };
+
+const EMAIL_ERROR =
+  "Enter valid email addresses (comma or semicolon separated), or leave it blank.";
+
+/** Inline error slot for an optional email field, injected right after the input
+ *  (reusing .error-line) and wired up as its description. */
+function attachErrorSlot(input) {
   const error = document.createElement("p");
   error.className = "error-line";
   error.id = `${input.id}-error`;
   error.hidden = true;
   input.setAttribute("aria-describedby", error.id);
   input.insertAdjacentElement("afterend", error);
-  return { input, error };
-});
+  return error;
+}
+
+const leadError = attachErrorSlot(els.lead);
+const recipientsError = attachErrorSlot(els.recipients);
 
 const showToast = makeToast(els.toast);
 
@@ -147,16 +166,21 @@ function render() {
   els.end.min = els.start.value;
 
   // Remote/WFH aren't leave, so no HR email is expected: hide that step. The Outlook
-  // event is then the only step, so drop its "· step 2" suffix.
+  // event is then the only step, so drop its "· step 2" suffix. Reason and CC feed
+  // that email and nothing else, so they go with it — leaving them on screen invited
+  // people to fill in fields that could not reach anywhere.
   const needsEmail = Boolean(TYPES[els.type.value]?.emailApplicable);
   els.emailCard.hidden = !needsEmail;
+  els.reasonField.hidden = !needsEmail;
+  els.leadField.hidden = !needsEmail;
   els.eventTitle.textContent = needsEmail ? "Outlook Event · step 2" : "Outlook Event";
   paintSteps();
 
   const input = readInput();
   // An invalid (but optional) address is flagged by its inline error and the
   // disabled actions; keep it out of the previews so they never show it as sent.
-  if (!isValidEmailList(els.lead.value)) input.teamLead = "";
+  // The Cc goes the same way when the HR step doesn't apply — its field is hidden.
+  if (!needsEmail || !isValidEmailList(els.lead.value)) input.teamLead = "";
   if (!isValidEmailList(els.recipients.value)) input.recipients = "";
   const result = buildLeaveRequest(input);
 
@@ -172,7 +196,7 @@ function render() {
     els.bodyReset.hidden = !bodyDirty;
     els.emailCcBlock.hidden = true;
     els.dateSummary.hidden = true;
-    setActionsEnabled(false);
+    setActionsEnabled(false, needsEmail);
     return;
   }
 
@@ -196,16 +220,22 @@ function render() {
   els.eventSubject.textContent = result.event.subject;
   els.eventRecipients.textContent = result.event.recipients;
 
-  // A malformed (but optional) email must not reach the mailto/event. setActionsEnabled
-  // validates the address fields; if one is off, null `current` too so the palette
-  // commands can't bypass the now-disabled buttons.
-  if (setActionsEnabled(true)) {
-    els.formStatus.textContent =
-      "Ready — copy the parts you need, or open the email in your mail app.";
+  // A malformed (but optional) email must not reach the mailto/event.
+  // setActionsEnabled validates both address fields and disables only the actions
+  // each one would break; `current` already excludes them, so what stays enabled is
+  // safe to fire.
+  const { leadOk, recipientsOk } = setActionsEnabled(true, needsEmail);
+  if (leadOk && recipientsOk) {
+    els.formStatus.textContent = needsEmail
+      ? "Ready — copy the parts you need, or open the email in your mail app."
+      : "Ready — no HR email for this type; add the event to Outlook.";
     els.formStatus.className = "status ok";
   } else {
-    current = null;
-    els.formStatus.textContent = "Fix the highlighted email address to enable the actions.";
+    els.formStatus.textContent = !leadOk && !recipientsOk
+      ? "Fix the highlighted addresses to enable the email and event actions."
+      : leadOk
+      ? "Fix the recipients address to enable the event actions."
+      : "Fix the CC address to enable the email actions.";
     els.formStatus.className = "status bad";
   }
 }
@@ -216,31 +246,39 @@ function paintSteps() {
   els.eventDone.hidden = !stepsDone.event;
 }
 
-function setActionsEnabled(on) {
-  const emailsOk = validateEmails();
-  const enabled = on && emailsOk;
-  for (const button of ACTION_BUTTONS) button.disabled = !enabled;
-  return enabled;
+/**
+ * Validate the optional email fields, paint their inline errors, and enable each
+ * action group that its inputs allow.
+ *
+ * `type=email` alone doesn't block anything, so without this a typo would reach the
+ * mailto/event; and a multi-address list needs per-address checking anyway. A hidden
+ * CC field (Remote/WFH) can't be corrected by the user, so it never blocks — it is
+ * simply left out of the request.
+ * @param {boolean} formOk Whether the request itself builds.
+ * @param {boolean} emailApplies Whether this leave type has an HR email step.
+ * @returns {{ leadOk: boolean, recipientsOk: boolean }}
+ */
+function setActionsEnabled(formOk, emailApplies) {
+  const leadOk = !emailApplies || isValidEmailList(els.lead.value); // blank is valid
+  const recipientsOk = isValidEmailList(els.recipients.value);
+  paintFieldError(els.lead, leadError, !leadOk);
+  paintFieldError(els.recipients, recipientsError, !recipientsOk);
+
+  actionsEnabled.emailCopy = formOk && emailApplies;
+  actionsEnabled.emailSend = formOk && emailApplies && leadOk;
+  actionsEnabled.eventCopy = formOk;
+  actionsEnabled.eventSend = formOk && recipientsOk;
+  for (const [group, buttons] of Object.entries(ACTION_GROUPS)) {
+    for (const button of buttons) button.disabled = !actionsEnabled[group];
+  }
+  return { leadOk, recipientsOk };
 }
 
-/**
- * Validate the optional email fields, show or clear their inline errors, and
- * return whether all are acceptable (blank or a list of well-formed addresses).
- * `type=email` alone doesn't block the actions, so without this a typo would reach
- * the mailto/event; and a multi-address list needs per-address checking anyway.
- */
-function validateEmails() {
-  let allValid = true;
-  for (const { input, error } of EMAIL_FIELDS) {
-    const valid = isValidEmailList(input.value); // blank counts as valid (optional)
-    error.textContent = valid
-      ? ""
-      : "Enter valid email addresses (comma or semicolon separated), or leave it blank.";
-    error.hidden = valid;
-    input.setAttribute("aria-invalid", valid ? "false" : "true");
-    if (!valid) allValid = false;
-  }
-  return allValid;
+/** Show or clear one field's inline error and its invalid styling. */
+function paintFieldError(input, error, invalid) {
+  error.textContent = invalid ? EMAIL_ERROR : "";
+  error.hidden = !invalid;
+  input.setAttribute("aria-invalid", invalid ? "true" : "false");
 }
 
 async function copy(text, label) {
@@ -254,7 +292,7 @@ async function copy(text, label) {
 }
 
 function openMail() {
-  if (!current) return;
+  if (!current || !actionsEnabled.emailSend) return;
   rememberRecipients(els.lead.value);
   stepsDone.email = true;
   paintSteps();
@@ -267,7 +305,7 @@ function openMail() {
 }
 
 function openOutlookWeb() {
-  if (!current) return;
+  if (!current || !actionsEnabled.emailSend) return;
   rememberRecipients(els.lead.value);
   stepsDone.email = true;
   paintSteps();
@@ -293,7 +331,7 @@ function resetBody() {
 }
 
 function addEventToOutlook() {
-  if (!current) return;
+  if (!current || !actionsEnabled.eventSend) return;
   rememberRecipients(els.recipients.value);
   stepsDone.event = true;
   paintSteps();
@@ -508,9 +546,12 @@ function manualSaveRecipients(field) {
 }
 
 // A single floating listbox, reused by both fields. Uses the shared
-// .ac-menu / .ac-item styles.
+// .ac-menu / .ac-item styles. The id lets each field point at it with
+// aria-controls / aria-activedescendant (the ARIA 1.2 combobox pattern).
+const AC_MENU_ID = "recipient-ac";
 const acMenu = document.createElement("div");
 acMenu.className = "ac-menu";
+acMenu.id = AC_MENU_ID;
 acMenu.hidden = true;
 acMenu.setAttribute("role", "listbox");
 acMenu.setAttribute("aria-label", "Saved recipients");
@@ -526,6 +567,12 @@ const isAcOpen = () => !acMenu.hidden;
 
 function closeAc() {
   acMenu.hidden = true;
+  // Report the collapse on the field the menu belonged to, so a screen reader
+  // isn't left believing a listbox is still open.
+  if (acField) {
+    acField.setAttribute("aria-expanded", "false");
+    acField.removeAttribute("aria-activedescendant");
+  }
   acField = undefined;
 }
 
@@ -534,6 +581,7 @@ function renderAc() {
   acItems.forEach((address, index) => {
     const item = document.createElement("div");
     item.className = "ac-item ac-item-recipient" + (index === acIndex ? " is-active" : "");
+    item.id = `${AC_MENU_ID}-opt-${index}`;
     item.setAttribute("role", "option");
     item.setAttribute("aria-selected", String(index === acIndex));
 
@@ -562,6 +610,9 @@ function renderAc() {
     item.append(label, forget);
     acMenu.appendChild(item);
   });
+  // Keyboard focus stays in the input, so the active option is named rather than
+  // focused — that's what aria-activedescendant is for.
+  if (acField) acField.setAttribute("aria-activedescendant", `${AC_MENU_ID}-opt-${acIndex}`);
 }
 
 function positionAc(field) {
@@ -581,6 +632,7 @@ function openAcFor(field) {
   renderAc();
   positionAc(field);
   acMenu.hidden = false;
+  field.setAttribute("aria-expanded", "true");
 }
 
 function acceptAc(address) {
@@ -624,11 +676,23 @@ function onAcKeydown(event) {
 
 /** Wire the recipient autocomplete onto one email field. */
 function attachRecipientAutocomplete(field) {
+  // ARIA 1.2 combobox: the input owns the popup and names the active option, so a
+  // screen reader announces the suggestions the sighted user can see.
+  field.setAttribute("role", "combobox");
+  field.setAttribute("aria-controls", AC_MENU_ID);
+  field.setAttribute("aria-haspopup", "listbox");
+  field.setAttribute("aria-autocomplete", "list");
+  field.setAttribute("aria-expanded", "false");
   field.addEventListener("input", () => openAcFor(field));
   field.addEventListener("focus", () => openAcFor(field));
   field.addEventListener("click", () => openAcFor(field));
   field.addEventListener("keydown", onAcKeydown);
-  field.addEventListener("blur", () => setTimeout(closeAc, 120));
+  // Tabbing between the two fields fires this field's blur *after* the next field's
+  // focus has already reopened the menu, so only close what is still ours.
+  field.addEventListener("blur", () =>
+    setTimeout(() => {
+      if (acField === field) closeAc();
+    }, 120));
 }
 
 globalThis.addEventListener("scroll", closeAc, true);
@@ -653,6 +717,21 @@ attachRecipientAutocomplete(els.recipients);
 els.leadSave.addEventListener("click", () => manualSaveRecipients(els.lead));
 els.recipientsSave.addEventListener("click", () => manualSaveRecipients(els.recipients));
 
+// Every read-only value doubles as a copy target — the toolbar buttons sit in the
+// panel header, far from the value they copy, so clicking the value itself is the
+// shorter path. `data-copy` names it in the toast.
+for (const out of document.querySelectorAll("button.out")) {
+  out.addEventListener("click", () => {
+    const text = out.textContent.trim();
+    // "—" is the placeholder the previews show while the form is incomplete.
+    if (text === "" || text === "—") {
+      showToast("Nothing to copy yet");
+      return;
+    }
+    copy(text, out.dataset.copy ?? "Value");
+  });
+}
+
 els.emailBody.addEventListener("input", onBodyEdited);
 els.bodyReset.addEventListener("click", resetBody);
 els.openMail.addEventListener("click", openMail);
@@ -669,34 +748,55 @@ els.tplSave.addEventListener("click", openSaveForm);
 els.tplSaveCancel.addEventListener("click", closeSaveForm);
 els.tplSaveForm.addEventListener("submit", saveTemplateFromForm);
 
+/**
+ * Palette commands stay listed even when their buttons are disabled, so they check
+ * the same flag — and say why nothing happened instead of failing silently.
+ * @param {keyof typeof actionsEnabled} group
+ * @param {() => void} run
+ */
+function guarded(group, run) {
+  return () => {
+    if (!actionsEnabled[group]) {
+      showToast(els.formStatus.textContent || "Not available yet");
+      return;
+    }
+    run();
+  };
+}
+
 registerCommands([
-  { icon: "✉️", title: "Open HR email in mail app", hint: "action", run: openMail },
+  {
+    icon: "✉️",
+    title: "Open HR email in mail app",
+    hint: "action",
+    run: guarded("emailSend", openMail),
+  },
   {
     icon: "🌐",
     title: "Open HR email in Outlook (web)",
     hint: "action",
     keywords: ["outlook", "owa", "office"],
-    run: openOutlookWeb,
+    run: guarded("emailSend", openOutlookWeb),
   },
   {
     icon: "📋",
     title: "Copy HR email body",
     hint: "action",
-    run: () => copy(els.emailBody.value, "Body"),
+    run: guarded("emailCopy", () => copy(els.emailBody.value, "Body")),
   },
   {
     icon: "📅",
     title: "Copy Outlook event subject",
     hint: "action",
     keywords: ["calendar", "event"],
-    run: () => copy(current?.event.subject, "Event subject"),
+    run: guarded("eventCopy", () => copy(current?.event.subject, "Event subject")),
   },
   {
     icon: "🗓️",
     title: "Add leave event to Outlook (web)",
     hint: "action",
     keywords: ["calendar", "event", "outlook", "owa"],
-    run: addEventToOutlook,
+    run: guarded("eventSend", addEventToOutlook),
   },
 ]);
 
@@ -707,16 +807,18 @@ try {
 } catch {
   /* storage unavailable; start with an empty name */
 }
-// Default the start date to today so the tool shows live output as soon as a
-// name is present. (Browser-only convenience; the pure module stays date-free.)
-// Built from local date parts — toISOString() is UTC, which is yesterday's date
-// during the early morning in timezones ahead of UTC (e.g. before 7am in UTC+7).
+// Default the start date to the next working day (today, when today is one) so the
+// tool shows live output as soon as a name is present — without opening on a
+// weekend warning nobody asked for. (Browser-only convenience; the pure module
+// stays date-free.) Built from local date parts — toISOString() is UTC, which is
+// yesterday's date during the early morning in timezones ahead of UTC (e.g. before
+// 7am in UTC+7).
 const today = new Date();
-els.start.value = [
+els.start.value = nextWorkingDay([
   today.getFullYear(),
   String(today.getMonth() + 1).padStart(2, "0"),
   String(today.getDate()).padStart(2, "0"),
-].join("-");
+].join("-"));
 render();
 renderTemplates();
 els.name.focus();

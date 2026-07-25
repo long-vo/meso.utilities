@@ -365,6 +365,28 @@ function nextDay(isoDate) {
 }
 
 /**
+ * The first Monday–Friday on or after an ISO date — the sensible default start for
+ * a leave request, so the form never opens already warning about a weekend. Leave
+ * is essentially always taken on a working day, and a Saturday default made the
+ * very first render show "⚠️ Falls on a Saturday" before the user touched anything.
+ * UTC-anchored like `nextDay`/`dayOfWeek`, so it never shifts with the runtime
+ * timezone. An unparsable input is returned unchanged (the caller shows the form's
+ * own "Pick a start date." guidance).
+ * @param {string} isoDate ISO date, e.g. "2026-07-25".
+ * @returns {string}
+ */
+export function nextWorkingDay(isoDate) {
+  let date = String(isoDate ?? "").trim();
+  let dow = dayOfWeek(date);
+  if (dow === null) return date;
+  while (dow === 0 || dow === 6) {
+    date = nextDay(date);
+    dow = (dow + 1) % 7;
+  }
+  return date;
+}
+
+/**
  * Day count and weekend feedback for the picked period, shown under the date
  * fields. Catches the two expensive mistakes: an off-by-one range and a request
  * that falls on a weekend. Follows formatPeriod's semantics: half days and an

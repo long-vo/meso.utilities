@@ -14,6 +14,7 @@ import {
   filterRecipientSuggestions,
   isValidEmailList,
   mailtoUrl,
+  nextWorkingDay,
   outlookComposeUrl,
   parseEmails,
   recipientTokenAt,
@@ -577,4 +578,18 @@ Deno.test("summarizePeriod: weekend endpoints warn", () => {
     text: "2 days — 2 weekend days",
     warning: "Starts on a Saturday. Ends on a Sunday.",
   });
+});
+
+Deno.test("nextWorkingDay: weekdays pass through, weekends roll to Monday", () => {
+  // 2024-01-01 was a Monday, 2024-01-05 a Friday.
+  assertEquals(nextWorkingDay("2024-01-01"), "2024-01-01", "Monday is already a working day");
+  assertEquals(nextWorkingDay("2024-01-05"), "2024-01-05", "Friday is already a working day");
+  // 2024-01-06 Saturday and 2024-01-07 Sunday both roll to Monday the 8th.
+  assertEquals(nextWorkingDay("2024-01-06"), "2024-01-08", "Saturday rolls forward");
+  assertEquals(nextWorkingDay("2024-01-07"), "2024-01-08", "Sunday rolls forward");
+  // Rolling across a month/year boundary: 2023-12-30 was a Saturday.
+  assertEquals(nextWorkingDay("2023-12-30"), "2024-01-01", "rolls across the year boundary");
+  // Unparsable input comes back untouched — the form shows its own guidance.
+  assertEquals(nextWorkingDay(""), "", "blank stays blank");
+  assertEquals(nextWorkingDay("not-a-date"), "not-a-date", "garbage is returned as-is");
 });

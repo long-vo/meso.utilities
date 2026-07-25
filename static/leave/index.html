@@ -99,18 +99,24 @@
         <p class="hint date-summary" id="date-summary" hidden></p>
       </div>
 
-      <div class="field">
+      <!-- Reason and CC feed the HR email only; app.js hides both for Remote/WFH,
+           which have no HR email step. -->
+      <div class="field" id="reason-field">
         <label for="reason">Reason <span class="hint" style="display:inline">— optional, HR email only</span></label>
         <input type="text" id="reason" placeholder="Family trip" />
       </div>
 
-      <div class="field">
+      <div class="field" id="lead-field">
         <label for="lead">CC email <span class="hint" style="display:inline">— optional, for HR mail</span></label>
         <input type="email" id="lead" multiple placeholder="lead@mesoneer.io, lead2@mesoneer.io"
           spellcheck="false" autocomplete="off" />
         <div class="recipient-row">
           <p class="hint">Comma/semicolon separated for more than one.</p>
-          <button type="button" id="lead-save" class="btn btn-ghost btn-small">＋ Save recipients</button>
+          <!-- Both fields have a "Save recipients" button; the aria-label keeps the
+               visible text (WCAG 2.5.3) while telling the two apart out of context. -->
+          <button type="button" id="lead-save" class="btn btn-ghost btn-small"
+            aria-label="Save recipients from CC email"><span
+              aria-hidden="true">＋</span> Save recipients</button>
         </div>
       </div>
 
@@ -120,7 +126,9 @@
           spellcheck="false" autocomplete="off" />
         <div class="recipient-row">
           <p class="hint">Comma/semicolon separated for more than one.</p>
-          <button type="button" id="recipients-save" class="btn btn-ghost btn-small">＋ Save recipients</button>
+          <button type="button" id="recipients-save" class="btn btn-ghost btn-small"
+            aria-label="Save recipients for the event"><span
+              aria-hidden="true">＋</span> Save recipients</button>
         </div>
       </div>
 
@@ -139,14 +147,19 @@
         </div>
       </div>
 
+      <!-- Every read-only value is a button: clicking it copies it (app.js wires
+           `button.out` generically, using data-copy for the toast label). -->
       <div class="out-label">To</div>
-      <p class="out" id="email-to">hr.vn@mesoneer.io</p>
+      <button type="button" class="out" id="email-to" data-copy="Address"
+        title="Copy to clipboard">hr.vn@mesoneer.io</button>
       <div id="email-cc-block" hidden>
         <div class="out-label">Cc</div>
-        <p class="out" id="email-cc"></p>
+        <button type="button" class="out" id="email-cc" data-copy="Cc"
+          title="Copy to clipboard"></button>
       </div>
       <div class="out-label">Subject</div>
-      <p class="out" id="email-subject">—</p>
+      <button type="button" class="out" id="email-subject" data-copy="Subject"
+        title="Copy to clipboard">—</button>
       <div class="out-label">Body</div>
       <textarea class="out-area" id="email-body" spellcheck="false"
         aria-label="HR email body"></textarea>
@@ -181,9 +194,11 @@
       </div>
 
       <div class="out-label">Subject</div>
-      <p class="out" id="event-subject">—</p>
+      <button type="button" class="out" id="event-subject" data-copy="Event subject"
+        title="Copy to clipboard">—</button>
       <div class="out-label">Recipients</div>
-      <p class="out" id="event-recipients">—</p>
+      <button type="button" class="out" id="event-recipients" data-copy="Recipients"
+        title="Copy to clipboard">—</button>
       <div class="out-label">Event settings</div>
       <div class="chips">
         <span class="chip chip-ok" title="Set for you by ‘Add to Outlook (web)’">All day</span>

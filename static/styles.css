@@ -2543,6 +2543,44 @@ kbd {
   padding: 12px 14px;
   color: var(--text);
 }
+/* Read-only values are real <button>s so the whole value is one click-to-copy
+   target that is also keyboard-reachable and announced. These rules only undo the
+   UA button look (centred text, shrink-to-fit, native appearance) — the panel,
+   font and colours still come from .out above. The right padding reserves room for
+   the hover "Copy" hint so a long value never runs under it. */
+button.out {
+  display: block;
+  width: 100%;
+  position: relative;
+  text-align: left;
+  padding-right: 62px;
+  cursor: pointer;
+  appearance: none;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+button.out::after {
+  content: "Copy";
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  font-family: var(--sans);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--accent);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+button.out:hover,
+button.out:focus-visible {
+  border-color: var(--accent);
+}
+button.out:hover::after,
+button.out:focus-visible::after {
+  opacity: 1;
+}
 /* Editable HR email body — same look as .out, but a resizable textarea. */
 .out-area {
   width: 100%;

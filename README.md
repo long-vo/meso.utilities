@@ -95,11 +95,12 @@ page mandates: the **HR leave-request email** (step 1) and the **Outlook calenda
 Nothing is sent — the buttons hand off to your own mail app and to Outlook on the web.
 
 - **Leave types.** Annual, Sick and Core leave produce both artifacts. **Remote** and **WFH** aren't
-  leave, so the HR-email step is hidden and only the calendar event remains. Core leave is full-day
-  only; Annual and Sick leave (and Remote/WFH) can be taken as a **Morning** or **Afternoon** half
-  day.
+  leave, so the HR-email step is hidden — along with the two fields that only feed it (**Reason**
+  and **Cc**) — and only the calendar event remains. Core leave is full-day only; Annual and Sick
+  leave (and Remote/WFH) can be taken as a **Morning** or **Afternoon** half day.
 - **Dates.** A full day takes a **From/To** range for a multi-day period; a half day collapses to a
-  single date tagged with the time of day.
+  single date tagged with the time of day. The start date opens on the next working day, and a
+  summary line under the fields counts the days and warns about weekend endpoints.
 - **HR email.** Addressed to `hr.vn@mesoneer.io`, with an optional **Cc** (one or more addresses,
   comma- or semicolon-separated); the subject and body (`Date off`, `Leave type`, `Reason`) are
   generated for you. The body is editable — tweak it and the hand-offs use your version, or hit
@@ -119,6 +120,11 @@ Nothing is sent — the buttons hand off to your own mail app and to Outlook on 
 - **Templates.** Save the reusable fields (everything except the dates) as a named preset — one
   click refills the form for the next request. Templates and your name persist in `localStorage`;
   the dates always start fresh.
+- **Copying.** Every read-only value (To, Cc, both subjects, the recipients) is itself a button —
+  click it to copy just that value; the toolbar buttons above each card still copy the same things.
+- **Optional addresses.** A malformed address only blocks what it would break: a bad **Cc** disables
+  the two email hand-offs (which would otherwise drop it silently) but leaves the copy buttons and
+  the whole event step working, and a bad **PO/extra recipient** does the mirror image.
 
 > Everything runs in your browser. Your details are never uploaded — the mail and calendar buttons
 > just hand off to your own apps.
