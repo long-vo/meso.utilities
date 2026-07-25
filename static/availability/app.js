@@ -6,6 +6,8 @@ import { readWorkbook } from "./xlsx.mjs";
 import {
   applyLocationHolidays,
   codeInfo,
+  decodeShare,
+  encodeShare,
   HOLIDAYS_CH_ZURICH,
   mergeModels,
   mondayOf,
@@ -51,6 +53,7 @@ const els = {
   legendRail: $("legend-rail"),
   exportJson: $("export-json"),
   exportView: $("export-view"),
+  shareLink: $("share-link"),
   importJson: $("import-json"),
   jsonInput: $("json-input"),
   clearData: $("clear-data"),
@@ -582,6 +585,72 @@ function exportViewJson() {
   toast(`Exported ${people.length} ${people.length === 1 ? "person" : "people"} (current view)`);
 }
 
+/**
+ * Copy a link that carries the current view's data in its URL fragment.
+ * Fragments are never sent in HTTP requests, so nothing reaches the (public)
+ * host — but the link itself is the data: whoever holds it can read it.
+ */
+async function copyShareLink() {
+  if (state.model === null) {
+    toast("Import the workbook first");
+    return;
+  }
+  const people = visiblePeople(state.model);
+  if (people.length === 0) {
+    toast("Nothing matches the current filter");
+    return;
+  }
+  const names = new Set(people.map((p) => p.name));
+  const tags = Object.fromEntries(
+    Object.entries(state.tags).filter(([name]) => names.has(name)),
+  );
+  const payload = {
+    v: 1,
+    year: state.year,
+    tags,
+    // Warnings describe the original workbook — noise for a recipient.
+    model: packModel({ people, days: state.model.days, warnings: [] }),
+  };
+  const url = `${location.origin}${location.pathname}#share=${await encodeShare(payload)}`;
+  try {
+    await navigator.clipboard.writeText(url);
+  } catch {
+    toast("Could not copy — clipboard unavailable");
+    return;
+  }
+  const kb = (url.length / 1024).toFixed(1);
+  const scope = people.length === state.model.people.length ? "everyone" : "current view";
+  const size = url.length > 8000 ? ` · long link (${kb} KB), some apps truncate` : ` · ${kb} KB`;
+  toast(`Link copied — ${people.length} people (${scope})${size}. Anyone with it can read them.`);
+}
+
+/** Import the payload an opened `#share=` link carries — after asking. */
+async function consumeShareFragment() {
+  const match = /^#share=(.+)$/.exec(location.hash);
+  if (match === null) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  const payload = await decodeShare(match[1]);
+  const model = payload === null ? null : unpackModel(payload.model);
+  if (model === null || model.people.length === 0) {
+    toast("This share link is corrupted or from a newer version");
+    return;
+  }
+  const teams = [...new Set(model.people.map((p) => p.team).filter((t) => t !== ""))];
+  const who = teams.length > 0 ? ` (${teams.slice(0, 6).join(", ")})` : "";
+  const ok = confirm(
+    `This link carries availability for ${model.people.length} people${who}.\n\n` +
+      "Merge it into the data in this browser?",
+  );
+  if (!ok) return;
+  state.model = state.model === null ? model : mergeModels(state.model, model);
+  if (Number.isInteger(payload.year)) state.year = payload.year;
+  if (payload.tags && typeof payload.tags === "object") {
+    state.tags = { ...state.tags, ...payload.tags };
+  }
+  toast(`Imported ${model.people.length} people from the link`);
+  renderAll();
+}
+
 function importJsonFile(file) {
   file.text().then((text) => {
     try {
@@ -687,6 +756,7 @@ function bulkTag(loc) {
 
 els.exportJson.addEventListener("click", exportJson);
 els.exportView.addEventListener("click", exportViewJson);
+els.shareLink.addEventListener("click", copyShareLink);
 els.importJson.addEventListener("click", () => els.jsonInput.click());
 els.jsonInput.addEventListener("change", () => {
   const file = els.jsonInput.files?.[0];
@@ -752,8 +822,15 @@ registerCommands([
     icon: "⬇️",
     title: "Export current view (filtered)",
     hint: "action",
-    keywords: ["team", "slice", "share"],
+    keywords: ["team", "slice"],
     run: exportViewJson,
+  },
+  {
+    icon: "🔗",
+    title: "Copy share link (current view)",
+    hint: "action",
+    keywords: ["share", "url", "link", "send"],
+    run: copyShareLink,
   },
 ]);
 
@@ -762,3 +839,7 @@ registerCommands([
 loadState();
 renderLegend();
 setViewMode(state.view.mode); // also triggers the first renderAll()
+consumeShareFragment(); // async — re-renders if a #share= link is accepted
+// Clicking a share link while already on this page changes only the hash
+// (same-document navigation, no reload) — handle that arrival too.
+addEventListener("hashchange", consumeShareFragment);

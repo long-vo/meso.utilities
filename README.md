@@ -157,9 +157,12 @@ days.
 Everything (model, tags, filters) persists in this browser's `localStorage` and can be exported to /
 imported from `availability.json` — either the full model, or (**Export view**, shown while a
 team/name filter is active) just the visible slice with tags pruned to the included people, e.g. one
-team's plan for its lead. There is deliberately no share-URL: the roster is personal data and the
-site is public. The `.xlsx` itself is read by a small values-only zip/XML reader
-(`static/availability/xlsx.mjs`) — no third-party library.
+team's plan for its lead. **Share link** copies a URL that carries the same slice gzip-compressed in
+the URL fragment — like Slidedown's and Shortlink's share links, the fragment is never sent to any
+server, and opening it asks before merging into that browser's data. One caveat, stated on the
+button too: the link _is_ the data, so anyone who obtains it can read those names and absences —
+share it only where you'd share the roster itself. The `.xlsx` itself is read by a small values-only
+zip/XML reader (`static/availability/xlsx.mjs`) — no third-party library.
 
 > The workbook is parsed entirely in your browser. Names and absences are never uploaded.
 

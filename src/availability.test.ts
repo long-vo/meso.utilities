@@ -15,6 +15,8 @@ import {
   codeInfo,
   CODES,
   daysInQuarter,
+  decodeShare,
+  encodeShare,
   HOLIDAYS_CH_ZURICH,
   mergeModels,
   mondayOf,
@@ -460,6 +462,35 @@ Deno.test("unpackModel: rejects malformed or future payloads with null", () => {
   assertEquals(unpackModel("nope"), null);
   assertEquals(unpackModel({ v: 2, days: "", people: [] }), null);
   assertEquals(unpackModel({ v: 1, days: "", people: [{ name: 1, codes: "" }] }), null);
+});
+
+Deno.test("encodeShare/decodeShare: fragment-safe gzip round-trip", async () => {
+  const rows = grid({
+    people: [
+      ["Long Vo", "mortal", Array(92).fill("w")],
+      ["Anh Pham", "mortal", ["p", "v", "sm"]],
+    ],
+    nDays: 92,
+  });
+  const model = parseVacationWorkbook([{ name: "3rd quarter", rows }], { year: 2026 });
+  const payload = { v: 1, year: 2026, tags: { "Long Vo": "CH" }, model: packModel(model) };
+  const encoded = await encodeShare(payload);
+  assertEquals(/^[A-Za-z0-9_-]+$/.test(encoded), true, "base64url only — no +, / or =");
+  assertEquals(
+    encoded.length < JSON.stringify(payload).length / 3,
+    true,
+    "repetitive day codes must compress well",
+  );
+  const decoded = await decodeShare(encoded);
+  assertEquals(decoded, payload, "payload survives the round-trip");
+  assertEquals(unpackModel((decoded as { model: unknown }).model), model);
+});
+
+Deno.test("decodeShare: garbage in, null out", async () => {
+  assertEquals(await decodeShare("definitely not a share link"), null);
+  assertEquals(await decodeShare(""), null);
+  // Valid base64url, but the bytes are not gzip.
+  assertEquals(await decodeShare(btoa("plain text").replace(/=+$/, "")), null);
 });
 
 Deno.test("mergeModels: reconciles like the workbook parser, purely", () => {

@@ -618,6 +618,49 @@ export function unpackModel(packed) {
 }
 
 /**
+ * Encode a share payload for a URL fragment: JSON → gzip → base64url. Day
+ * codes are extremely repetitive, so gzip typically shrinks the payload by
+ * an order of magnitude. Fragments never leave the browser (they are not
+ * sent in HTTP requests), so the data stays client-side — but anyone holding
+ * the finished link can read it.
+ *
+ * @param {object} payload JSON-serializable share payload
+ * @returns {Promise<string>} base64url text, safe inside `#share=…`
+ */
+export async function encodeShare(payload) {
+  const json = new TextEncoder().encode(JSON.stringify(payload));
+  const stream = new Blob([json]).stream().pipeThrough(new CompressionStream("gzip"));
+  const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(bin).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}
+
+/**
+ * Inverse of {@link encodeShare}. Returns the parsed payload object, or null
+ * for anything that does not decode — garbage, truncated links, non-gzip
+ * data. Callers still validate the payload's shape (e.g. via
+ * {@link unpackModel}).
+ *
+ * @param {string} encoded
+ * @returns {Promise<object | null>}
+ */
+export async function decodeShare(encoded) {
+  try {
+    const b64 = String(encoded).replaceAll("-", "+").replaceAll("_", "/");
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+    const json = new TextDecoder().decode(await new Response(stream).arrayBuffer());
+    const payload = JSON.parse(json);
+    return payload !== null && typeof payload === "object" ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Merge a partial model into an existing one — the CSV path imports one
  * quarter at a time. Same reconciliation rules as the workbook parser: match
  * by name, the incoming team label wins when present, incoming days win per
