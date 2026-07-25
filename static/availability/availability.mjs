@@ -491,6 +491,50 @@ export function outInRange(model, from, to) {
 }
 
 /**
+ * Compress one person's out-days (as {@link outInRange} lists them) into
+ * ranges of consecutive days sharing one code — `27.07.–31.07. c` instead of
+ * five single-day entries. Gaps consisting solely of weekend days are
+ * bridged: being off Friday and Monday reads as one absence.
+ *
+ * @param {Array<{ date: string, code: string, kind: string, label: string, weight: number }>}
+ *   entries one person's out-days, ascending
+ * @returns {Array<{ from: string, to: string, code: string, kind: string, label: string,
+ *   weight: number }>}
+ */
+export function groupOutDates(entries) {
+  const groups = [];
+  for (const entry of entries) {
+    const last = groups[groups.length - 1];
+    if (
+      last !== undefined && entry.code === last.code && onlyWeekendsBetween(last.to, entry.date)
+    ) {
+      last.to = entry.date;
+    } else {
+      groups.push({
+        from: entry.date,
+        to: entry.date,
+        code: entry.code,
+        kind: entry.kind,
+        label: entry.label,
+        weight: entry.weight,
+      });
+    }
+  }
+  return groups;
+}
+
+/** True when `b` follows `a` with nothing but weekend days in between. */
+function onlyWeekendsBetween(a, b) {
+  let d = nextDate(a);
+  while (d < b) {
+    const dow = new Date(`${d}T00:00:00Z`).getUTCDay();
+    if (dow !== 0 && dow !== 6) return false;
+    d = nextDate(d);
+  }
+  return d === b;
+}
+
+/**
  * Available person-days per team over `from..to` (inclusive). `available`
  * sums the day weights (weekends and holidays weigh 0), `out` sums the
  * missing fraction of known non-weekend days, so `available + out` equals

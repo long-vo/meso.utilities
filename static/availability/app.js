@@ -8,6 +8,7 @@ import {
   codeInfo,
   decodeShare,
   encodeShare,
+  groupOutDates,
   HOLIDAYS_CH_ZURICH,
   mergeModels,
   mondayOf,
@@ -104,6 +105,18 @@ function el(tag, className, text) {
 function prettyDay(iso) {
   const day = WEEKDAYS[new Date(`${iso}T00:00:00Z`).getUTCDay()];
   return `${day} ${iso.slice(8)}.${iso.slice(5, 7)}.`;
+}
+
+/** "27.07." — the strip's compact day form. */
+function shortDay(iso) {
+  return `${iso.slice(8)}.${iso.slice(5, 7)}.`;
+}
+
+/** One person's grouped out-days as compact text: "27.07.–31.07. c, 03.08. p". */
+function groupedDatesText(dates) {
+  return groupOutDates(dates)
+    .map((g) => `${shortDay(g.from)}${g.from === g.to ? "" : `–${shortDay(g.to)}`} ${g.code}`)
+    .join(", ");
 }
 
 /* ------------------------------- state ------------------------------- */
@@ -337,10 +350,10 @@ function renderStrip(model) {
   const weekBox = section(`Next 7 days (${week.length})`);
   if (week.length === 0) weekBox.appendChild(el("span", "hint", "No absences planned."));
   for (const person of week) {
-    const dates = person.dates
-      .map((d) => `${prettyDay(d.date).slice(3)} ${d.code}`)
-      .join(", ");
-    const chip = stripEntryChip({ ...person, kind: person.dates[0].kind }, dates);
+    const chip = stripEntryChip(
+      { ...person, kind: person.dates[0].kind },
+      groupedDatesText(person.dates),
+    );
     weekBox.appendChild(chip);
   }
 }
@@ -362,8 +375,7 @@ function summaryText(model) {
   if (week.length > 0) {
     lines.push("Next 7 days:");
     for (const person of week) {
-      const dates = person.dates.map((d) => `${d.date.slice(8)}.${d.date.slice(5, 7)}. ${d.code}`);
-      lines.push(`  ${person.name}: ${dates.join(", ")}`);
+      lines.push(`  ${person.name}: ${groupedDatesText(person.dates)}`);
     }
   }
   return lines.join("\n");

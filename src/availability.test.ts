@@ -17,6 +17,7 @@ import {
   daysInQuarter,
   decodeShare,
   encodeShare,
+  groupOutDates,
   HOLIDAYS_CH_ZURICH,
   mergeModels,
   mondayOf,
@@ -324,6 +325,45 @@ Deno.test("outInRange: collects each person's not-fully-available days", () => {
   ]);
   assertEquals(range[1].name, "Tho Bui");
   assertEquals(range[1].dates.map((d) => [d.date, d.code]), [["2026-07-02", "h"]]);
+});
+
+Deno.test("groupOutDates: same-code runs collapse, weekends bridge, changes split", () => {
+  const entry = (date: string, code: string) => ({
+    date,
+    code,
+    kind: codeInfo(code).kind,
+    label: codeInfo(code).label,
+    weight: codeInfo(code).weight,
+  });
+  // 2026-07-01 is a Wednesday; 04/05 are the weekend.
+  const grouped = groupOutDates([
+    entry("2026-07-01", "p"),
+    entry("2026-07-02", "p"),
+    entry("2026-07-03", "p"), // Friday …
+    entry("2026-07-06", "p"), // … Monday — weekend gap bridges
+    entry("2026-07-07", "sm"), // code change splits
+    entry("2026-07-09", "p"), // Wednesday 08.07 is a working-day gap — no bridge
+  ]);
+  assertEquals(grouped.map((g) => [g.from, g.to, g.code]), [
+    ["2026-07-01", "2026-07-06", "p"],
+    ["2026-07-07", "2026-07-07", "sm"],
+    ["2026-07-09", "2026-07-09", "p"],
+  ]);
+  assertEquals(grouped[0].label, "Annual leave");
+  assertEquals(groupOutDates([]), []);
+});
+
+Deno.test("groupOutDates: accepts outInRange output directly", () => {
+  const rows = grid({
+    people: [["Cuong Ngo", "dexi", ["c", "c", "c", "e", "e", "c", "v"]]],
+    nDays: 92,
+  });
+  const model = parseVacationWorkbook([{ name: "3rd quarter", rows }], { year: 2026 });
+  const [person] = outInRange(model, "2026-07-01", "2026-07-07");
+  assertEquals(groupOutDates(person.dates).map((g) => [g.from, g.to, g.code]), [
+    ["2026-07-01", "2026-07-06", "c"],
+    ["2026-07-07", "2026-07-07", "v"],
+  ]);
 });
 
 Deno.test("teamCapacity: hand-computed sums, case-insensitive team grouping", () => {
