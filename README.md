@@ -13,6 +13,11 @@ everything here runs entirely in your browser and deploys to GitHub Pages.
 - **Leave Request** (`/leave/`) — fill one small form and get the two artifacts the team's leave
   process needs: the pre-formatted HR leave-request email (step 1) and the Outlook calendar event
   (step 2), with one-click hand-offs to your mail app and to Outlook. Runs fully client-side.
+- **Team Availability** (`/availability/`) — drop the team's vacation workbook
+  (`mesoneer-Vacation-<year>.xlsx`) and see who's out when: a people × days heatmap with month and
+  quarter views, an out-today/this-week strip with a copyable standup summary, and per-team capacity
+  numbers. CH-based colleagues can be tagged so Zürich public holidays apply. Runs fully
+  client-side.
 - **Shortlink** (`/shortlink/`) — give a URL a memorable name and open it via `/shortlink/#name`.
   Links can be organized into groups, live in your browser's `localStorage` (personal only) and can
   be exported to / imported from a local `shortlinks.json`. Runs fully client-side.
@@ -128,6 +133,33 @@ Nothing is sent — the buttons hand off to your own mail app and to Outlook on 
 
 > Everything runs in your browser. Your details are never uploaded — the mail and calendar buttons
 > just hand off to your own apps.
+
+## How Team Availability works
+
+Drop the team's vacation workbook (or paste one quarter sheet as CSV) and the tool rebuilds it as
+one people × days model, entirely in your browser. Parsing is deliberately distrustful of the
+sheet's own headers: dates derive from quarter + column position + the workbook year (the file's
+date headers carry stale years), the trailing per-week aggregate columns and per-team summary rows
+are ignored, and any cell that isn't a known day code
+(`w e h v p m a c s sm sa r rm ra ch si cm
+ca`) lands in a warnings panel — with its sheet and cell
+reference — and counts as working, so dirty data never silently shrinks capacity. Rosters are
+reconciled across quarters by name; the latest quarter's team label wins.
+
+The heatmap draws one row per person and one column per day (month or quarter zoom), with weekends
+hatched, today outlined and half-day codes as split cells. Above it, the out-today strip groups
+who's off, on a half day, or remote/onsite right now — one click copies a plain-text summary for
+standup or Slack. Below, the capacity table sums each team's available person-days per week (a half
+day counts 0.5; remote and onsite count as working). People or whole teams can be tagged
+**VN**/**CH**; CH-tagged people get the built-in canton Zürich holiday set overlaid on their working
+days.
+
+Everything (model, tags, filters) persists in this browser's `localStorage` and can be exported to /
+imported from `availability.json`. There is deliberately no share-URL: the roster is personal data
+and the site is public. The `.xlsx` itself is read by a small values-only zip/XML reader
+(`static/availability/xlsx.mjs`) — no third-party library.
+
+> The workbook is parsed entirely in your browser. Names and absences are never uploaded.
 
 ## How Shortlink works
 
@@ -280,6 +312,10 @@ src/
   shortlink.test.ts   shortlink logic tests (import the module from static/shortlink/)
   transform.test.ts   text-transform tests (import the modules from static/transform/)
   reorder.test.ts     hub card-ordering tests (import the module from static/)
+  xlsx.test.ts        minimal xlsx-reader tests (import the module from static/availability/)
+  availability.test.ts  vacation-model + aggregation tests (from static/availability/)
+  testdata/
+    vacation-mini.xlsx  hand-built workbook fixture for the xlsx reader
 static/
   index.html          hub / master page (lists all tools)
   styles.css          shared theme + hub + tool styles
@@ -305,6 +341,11 @@ static/
     index.html        Leave Request UI
     app.js            leave UI logic (imports ./leave.mjs)
     leave.mjs         HR-email + Outlook-event builder (imported by browser and tests)
+  availability/
+    index.html        Team Availability UI
+    app.js            availability UI logic (imports ./availability.mjs + ./xlsx.mjs)
+    availability.mjs  vacation-workbook model + aggregations (browser and tests)
+    xlsx.mjs          minimal values-only .xlsx reader (browser and tests)
   shortlink/
     index.html        Shortlink UI
     app.js            shortlink UI logic (imports ./shortlink.mjs)

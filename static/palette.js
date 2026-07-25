@@ -50,6 +50,17 @@ export const TOOL_ICONS = {
     '<circle class="i1" cx="8" cy="13" r="1.6" />' +
     '<path class="is1" d="M8 13C7 8 9.5 4.5 13.5 4M8 13c1-5-1.5-8.5-5-9.5M8 13c0-6 3-6.5 2.5-11" ' +
     'stroke-width="1.6" stroke-linecap="round" /></svg></span>',
+  availability: '<span class="crumb-icon card--lime">' +
+    '<svg width="14" height="14" viewBox="0 0 16 16">' +
+    '<rect class="i1" x="2" y="2" width="3.4" height="3.4" rx="1" />' +
+    '<rect class="i2" x="6.3" y="2" width="3.4" height="3.4" rx="1" />' +
+    '<rect class="i1" x="10.6" y="2" width="3.4" height="3.4" rx="1" />' +
+    '<rect class="i1" x="2" y="6.3" width="3.4" height="3.4" rx="1" />' +
+    '<rect class="i1" x="6.3" y="6.3" width="3.4" height="3.4" rx="1" />' +
+    '<rect class="i2" x="10.6" y="6.3" width="3.4" height="3.4" rx="1" />' +
+    '<rect class="i2" x="2" y="10.6" width="3.4" height="3.4" rx="1" />' +
+    '<rect class="i1" x="6.3" y="10.6" width="3.4" height="3.4" rx="1" />' +
+    '<rect class="i1" x="10.6" y="10.6" width="3.4" height="3.4" rx="1" /></svg></span>',
   shortlink: '<span class="crumb-icon card--coral">' +
     '<svg width="14" height="14" viewBox="0 0 16 16">' +
     '<rect class="is1" x="1.5" y="5.5" width="8" height="5" rx="2.5" stroke-width="1.8" />' +
@@ -87,6 +98,12 @@ const TOOL_LINKS = [
     title: "Leave Request",
     href: "leave/",
     keywords: ["leave", "holiday", "vacation", "time off", "annual", "sick", "wfh", "remote", "hr"],
+  },
+  {
+    icon: TOOL_ICONS.availability,
+    title: "Team Availability",
+    href: "availability/",
+    keywords: ["heatmap", "vacation", "absence", "out", "capacity", "team", "calendar", "who"],
   },
   {
     icon: TOOL_ICONS.shortlink,
