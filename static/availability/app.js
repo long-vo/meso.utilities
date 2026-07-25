@@ -112,10 +112,18 @@ function shortDay(iso) {
   return `${iso.slice(8)}.${iso.slice(5, 7)}.`;
 }
 
-/** One person's grouped out-days as compact text: "27.07.–31.07. c, 03.08. p". */
+/** One person's grouped out-days, dates only: "27.07.–31.07., 03.08." — the
+ * chip's kind dot and tooltip carry the why. */
 function groupedDatesText(dates) {
   return groupOutDates(dates)
-    .map((g) => `${shortDay(g.from)}${g.from === g.to ? "" : `–${shortDay(g.to)}`} ${g.code}`)
+    .map((g) => `${shortDay(g.from)}${g.from === g.to ? "" : `–${shortDay(g.to)}`}`)
+    .join(", ");
+}
+
+/** Same ranges with their reason spelled out: "27.07.–31.07. Annual leave". */
+function groupedDatesLabelText(dates) {
+  return groupOutDates(dates)
+    .map((g) => `${shortDay(g.from)}${g.from === g.to ? "" : `–${shortDay(g.to)}`} ${g.label}`)
     .join(", ");
 }
 
@@ -308,12 +316,11 @@ function renderLegend() {
   }
 }
 
-function stripEntryChip(entry, withDates) {
+function stripEntryChip(entry, detail, titleDetail) {
   const chip = el("span", "chip strip-chip");
   chip.append(el("span", `dot dot-${entry.kind}`), ` ${entry.name} `);
-  const detail = withDates ?? entry.label;
-  chip.append(el("span", "strip-detail", detail));
-  chip.title = `${entry.team} — ${detail}`;
+  chip.append(el("span", "strip-detail", detail ?? entry.label));
+  chip.title = `${entry.team} — ${titleDetail ?? detail ?? entry.label}`;
   return chip;
 }
 
@@ -353,6 +360,7 @@ function renderStrip(model) {
     const chip = stripEntryChip(
       { ...person, kind: person.dates[0].kind },
       groupedDatesText(person.dates),
+      groupedDatesLabelText(person.dates),
     );
     weekBox.appendChild(chip);
   }
@@ -375,7 +383,7 @@ function summaryText(model) {
   if (week.length > 0) {
     lines.push("Next 7 days:");
     for (const person of week) {
-      lines.push(`  ${person.name}: ${groupedDatesText(person.dates)}`);
+      lines.push(`  ${person.name}: ${groupedDatesLabelText(person.dates)}`);
     }
   }
   return lines.join("\n");
