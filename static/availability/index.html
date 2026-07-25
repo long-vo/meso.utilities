@@ -66,7 +66,7 @@
         <textarea id="csv-text" class="code-area csv-area" spellcheck="false"
           placeholder="Export a quarter sheet as CSV and paste it here"></textarea>
         <div class="btn-row">
-          <select id="csv-quarter" class="select" aria-label="Which quarter the CSV covers">
+          <select id="csv-quarter" aria-label="Which quarter the CSV covers">
             <option value="1">1st quarter</option>
             <option value="2">2nd quarter</option>
             <option value="3" selected>3rd quarter</option>
@@ -78,12 +78,12 @@
 
       <div class="field">
         <label for="year-input">Workbook year</label>
-        <input id="year-input" class="select year-input" type="number" min="2000" max="2100" step="1" />
+        <input id="year-input" type="number" min="2000" max="2100" step="1" />
         <p class="hint">Used when a filename or CSV has no year. Dates always derive from
           quarter + column position — never from the sheet's own date headers.</p>
       </div>
 
-      <div class="field">
+      <div class="field needs-model">
         <label>View</label>
         <div class="mode-switch" role="tablist" aria-label="Zoom">
           <button id="view-month" class="mode-btn is-active" role="tab" aria-selected="true" type="button">Month</button>
@@ -96,18 +96,18 @@
         </div>
       </div>
 
-      <div class="field">
+      <div class="field needs-model">
         <label>Teams</label>
         <div id="team-chips" class="chips" role="group" aria-label="Filter by team"></div>
         <p class="hint">Click to filter — nothing selected shows everyone.</p>
       </div>
 
-      <div class="field">
+      <div class="field needs-model">
         <label for="name-filter">Find a person</label>
-        <input id="name-filter" class="select" type="search" placeholder="Filter by name…" />
+        <input id="name-filter" type="search" placeholder="Filter by name…" />
       </div>
 
-      <details id="tags-details" class="field">
+      <details id="tags-details" class="field needs-model">
         <summary>Locations <span class="hint-inline">(CH people get Zürich holidays)</span></summary>
         <div class="btn-row tag-bulk">
           <select id="bulk-team" class="select" aria-label="Team to tag"></select>
@@ -122,7 +122,7 @@
         <ul id="warnings-list" class="warnings-list"></ul>
       </details>
 
-      <div class="field">
+      <div class="field needs-model">
         <label>Legend</label>
         <div id="legend" class="chips legend"></div>
       </div>
@@ -141,7 +141,7 @@
         <h2>Out today &amp; this week</h2>
         <div class="result-tools">
           <span id="strip-status" class="status"></span>
-          <button id="copy-strip" class="btn btn-small" type="button"
+          <button id="copy-strip" class="btn btn-small needs-model" type="button"
             title="Copy a plain-text summary for standup or Slack">📋 Copy summary</button>
         </div>
       </div>
@@ -158,8 +158,8 @@
       <div id="heatmap-wrap" class="hm-wrap" tabindex="0" aria-label="Availability heatmap, scrollable">
         <div id="heatmap" class="hm" role="grid" aria-rowcount="0"></div>
       </div>
-      <h3 class="cap-title">Team capacity <span class="hint-inline">available person-days per week</span></h3>
-      <div id="capacity" class="cap-wrap"></div>
+      <h3 class="cap-title needs-model">Team capacity <span class="hint-inline">available person-days per week</span></h3>
+      <div id="capacity" class="cap-wrap needs-model"></div>
     </section>
   </main>
 

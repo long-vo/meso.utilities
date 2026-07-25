@@ -3392,6 +3392,21 @@ button.out:focus-visible::after {
    fixed colors chosen to read on both themes; the surfaces underneath come
    from theme tokens. */
 
+/* The strip panel is short: without explicit rows, the tall sticky sidebar
+   (spanning both rows) inflates the first auto row and strands the heatmap
+   panel far below the strip. Scoped per the CLAUDE.md stylesheet gotcha. */
+@media (min-width: 1081px) {
+  .page-availability .layout {
+    grid-template-rows: auto 1fr;
+  }
+}
+
+/* Most controls mean nothing until a workbook is imported — app.js flips
+   `has-model` on <body>. */
+.page-availability:not(.has-model) .needs-model {
+  display: none;
+}
+
 .page-availability {
   --hm-cell: 17px;
   --hm-name-w: 200px;
@@ -3427,19 +3442,23 @@ button.out:focus-visible::after {
   background: color-mix(in srgb, var(--accent) 12%, var(--bg-inset));
 }
 
-.page-availability .select {
+/* Inputs and selects take the shared element styles (incl. the select
+   chevron — a background shorthand here would break its sizing); only the
+   search input needs them replicated, being absent from the global list. */
+.page-availability input[type="search"] {
   width: 100%;
-  padding: 7px 9px;
+  background: var(--bg-inset);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--bg-inset);
   color: var(--text);
-  font: inherit;
-  font-size: 13px;
+  padding: 10px 12px;
+  font-family: var(--sans);
+  font-size: 14px;
 }
-.page-availability .btn-row .select {
+.page-availability .btn-row select {
   width: auto;
   flex: 1;
+  min-width: 0;
 }
 .page-availability .csv-area {
   min-height: 90px;

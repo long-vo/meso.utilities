@@ -194,6 +194,7 @@ function visibleRange() {
 
 function renderAll() {
   const model = displayModel();
+  document.body.classList.toggle("has-model", model !== null);
   renderImportStatus();
   renderTeamChips(model);
   renderTags(model);
