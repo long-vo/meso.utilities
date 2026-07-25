@@ -104,12 +104,12 @@ function el(tag, className, text) {
 
 function prettyDay(iso) {
   const day = WEEKDAYS[new Date(`${iso}T00:00:00Z`).getUTCDay()];
-  return `${day} ${iso.slice(8)}.${iso.slice(5, 7)}.`;
+  return `${day} ${iso.slice(8)}.${iso.slice(5, 7)}`;
 }
 
-/** "27.07." — the strip's compact day form. */
+/** "27.07" — the strip's compact day form. */
 function shortDay(iso) {
-  return `${iso.slice(8)}.${iso.slice(5, 7)}.`;
+  return `${iso.slice(8)}.${iso.slice(5, 7)}`;
 }
 
 /** One person's grouped out-days, dates only: "27.07.–31.07., 03.08." — the
