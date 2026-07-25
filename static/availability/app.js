@@ -48,6 +48,7 @@ const els = {
   warningsSummary: $("warnings-summary"),
   warningsList: $("warnings-list"),
   legend: $("legend"),
+  legendRail: $("legend-rail"),
   exportJson: $("export-json"),
   importJson: $("import-json"),
   jsonInput: $("json-input"),
@@ -195,6 +196,7 @@ function visibleRange() {
 function renderAll() {
   const model = displayModel();
   document.body.classList.toggle("has-model", model !== null);
+  els.legendRail.hidden = model === null; // the layout drops the rail column too
   renderImportStatus();
   renderTeamChips(model);
   renderTags(model);
@@ -278,10 +280,13 @@ function renderWarnings() {
 function renderLegend() {
   els.legend.textContent = "";
   for (const [kind, label, codes] of KIND_LEGEND) {
-    const chip = el("span", "chip legend-chip");
-    const dot = el("span", `dot dot-${kind}`);
-    chip.append(dot, ` ${label} `, el("span", "legend-codes", codes));
-    els.legend.appendChild(chip);
+    const row = el("div", "legend-row");
+    row.append(
+      el("span", `dot dot-${kind}`),
+      el("span", "", label),
+      el("span", "legend-codes", codes),
+    );
+    els.legend.appendChild(row);
   }
 }
 

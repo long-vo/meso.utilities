@@ -122,11 +122,6 @@
         <ul id="warnings-list" class="warnings-list"></ul>
       </details>
 
-      <div class="field needs-model">
-        <label>Legend</label>
-        <div id="legend" class="chips legend"></div>
-      </div>
-
       <div class="field btn-row">
         <button id="export-json" class="btn btn-ghost btn-small" type="button"
           title="Download everything (model, tags, year) as availability.json">Export data</button>
@@ -160,6 +155,15 @@
       </div>
       <h3 class="cap-title needs-model">Team capacity <span class="hint-inline">available person-days per week</span></h3>
       <div id="capacity" class="cap-wrap needs-model"></div>
+    </section>
+
+    <section id="legend-rail" class="panel legend-rail" aria-label="Legend" hidden>
+      <div class="panel-head">
+        <h2>Legend</h2>
+      </div>
+      <div id="legend" class="legend"></div>
+      <p class="hint">Half-coloured cells are half days (left = morning). Dotted cells have no
+        data for that day.</p>
     </section>
   </main>
 

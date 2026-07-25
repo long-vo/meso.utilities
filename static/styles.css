@@ -3392,12 +3392,66 @@ button.out:focus-visible::after {
    fixed colors chosen to read on both themes; the surfaces underneath come
    from theme tokens. */
 
-/* The strip panel is short: without explicit rows, the tall sticky sidebar
-   (spanning both rows) inflates the first auto row and strands the heatmap
-   panel far below the strip. Scoped per the CLAUDE.md stylesheet gotcha. */
+/* ---- Team Availability: legend rail ----
+   Same three-column pattern as .page-leave (templates) and .page-transform
+   (favourites): a sticky 260px column on the right. Spelled out at matching
+   specificity for the collapsed-sidebar state, so the shared
+   `:root[data-controls-collapsed] .layout` rule never drops the legend area.
+   The rail is [hidden] until a workbook is imported — the :has() variants
+   drop its column so no empty track remains. Explicit rows keep the short
+   strip panel from being inflated by the tall sticky sidebar. */
+.page-availability .legend-rail {
+  grid-area: legend;
+}
 @media (min-width: 1081px) {
   .page-availability .layout {
+    /* 100px over the shared 1440 cap so the flexible middle column keeps its
+       width once the fixed 260px rail is added. */
+    max-width: 1540px;
+    grid-template-columns: var(--controls-w, 320px) minmax(0, 1fr) 260px;
+    grid-template-areas:
+      "controls editor legend"
+      "controls result legend";
     grid-template-rows: auto 1fr;
+  }
+  .page-availability .layout:has(> .legend-rail[hidden]) {
+    max-width: 1440px;
+    grid-template-columns: var(--controls-w, 320px) minmax(0, 1fr);
+    grid-template-areas:
+      "controls editor"
+      "controls result";
+  }
+  :root[data-controls-collapsed] .page-availability .layout {
+    grid-template-columns: minmax(0, 1fr) 260px;
+    grid-template-areas:
+      "editor legend"
+      "result legend";
+  }
+  :root[data-controls-collapsed] .page-availability .layout:has(> .legend-rail[hidden]) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "editor"
+      "result";
+  }
+  .page-availability .legend-rail {
+    position: sticky;
+    top: 86px;
+  }
+}
+/* Stacked (single-column) layout keeps the legend panel last. */
+@media (max-width: 1080px) {
+  .page-availability .layout {
+    grid-template-areas:
+      "controls"
+      "editor"
+      "result"
+      "legend";
+  }
+  :root[data-controls-collapsed] .page-availability .layout {
+    grid-template-areas:
+      "editor"
+      "result"
+      "legend";
   }
 }
 
@@ -3577,10 +3631,22 @@ button.out:focus-visible::after {
 .page-availability .dot-unknown {
   --c: var(--av-unknown);
 }
-.page-availability .legend-chip .legend-codes {
+.page-availability .legend {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.page-availability .legend-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+}
+.page-availability .legend-row .legend-codes {
+  margin-left: auto;
   color: var(--text-faint);
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11px;
 }
 
 /* Out today / this week strip. */
