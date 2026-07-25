@@ -50,9 +50,10 @@
 
   <main class="layout" id="main" tabindex="-1">
     <section id="controls" class="panel controls" aria-label="Mode, about and examples">
-      <div class="mode-switch" role="tablist" aria-label="Direction">
-        <button id="mode-decode" class="mode-btn is-active" role="tab" aria-selected="true" type="button">Decode</button>
-        <button id="mode-encode" class="mode-btn" role="tab" aria-selected="false" type="button">Encode</button>
+      <!-- Toggle buttons, not tabs: there is no tabpanel to select. -->
+      <div class="mode-switch" role="group" aria-label="Direction">
+        <button id="mode-decode" class="mode-btn is-active" type="button" aria-pressed="true">Decode</button>
+        <button id="mode-encode" class="mode-btn" type="button" aria-pressed="false">Encode</button>
       </div>
 
       <div class="field only-decode">

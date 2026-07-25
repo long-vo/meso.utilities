@@ -3677,6 +3677,50 @@ button.out:focus-visible::after {
   font-size: 11.5px;
 }
 
+/* The strip's day picker, in the panel head beside Copy summary. The shared
+   input rule sizes date fields for a sidebar field, so shrink it back. */
+.page-availability .day-pick {
+  width: auto;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+/* Per-day index over the week's by-person chips: "27.07 · 8". Each cell also
+   retargets the strip, which makes day-picking keyboard-reachable. */
+.page-availability .day-index {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 9px;
+}
+.page-availability .day-index-cell {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+  color: var(--text-dim);
+  font-family: var(--sans);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.page-availability .day-index-cell:hover {
+  border-color: var(--accent);
+}
+.page-availability .day-index-cell .di-count {
+  color: var(--text);
+  font-weight: 700;
+}
+.page-availability .day-index-cell.is-holiday .di-count {
+  color: var(--av-holiday);
+}
+.page-availability .day-index-cell.is-current {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* The heatmap. Each row is its own grid with identical fixed tracks, so the
    sticky name column and the sticky header stay aligned while the wrapper
    scrolls in both directions. */
@@ -3695,12 +3739,36 @@ button.out:focus-visible::after {
   display: grid;
   grid-template-columns: var(--hm-name-w) repeat(var(--hm-cols, 0), var(--hm-cell));
 }
-.page-availability .hm-head-row {
+/* Two stacked sticky header rows: months at the top, day numbers under them at
+   the month row's own height. */
+.page-availability .hm-month-row {
   position: sticky;
   top: 0;
   z-index: 3;
   background: var(--bg-elev);
+}
+.page-availability .hm-head-row {
+  position: sticky;
+  top: 20px;
+  z-index: 3;
+  background: var(--bg-elev);
   box-shadow: 0 1px 0 var(--border);
+}
+.page-availability .hm-month {
+  display: flex;
+  align-items: center;
+  height: 20px;
+  padding-left: 8px;
+  border-left: 2px solid var(--border-strong);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.page-availability .hm-corner-month {
+  height: 20px;
 }
 .page-availability .hm-corner,
 .page-availability .hm-name {
@@ -3742,6 +3810,20 @@ button.out:focus-visible::after {
 }
 .page-availability .hm-head.is-today {
   color: var(--accent);
+}
+/* Clicking a day header points the strip at that day; Enter does the same for
+   keyboard users, who reach it through the grid's arrow-key navigation. */
+.page-availability .hm-head {
+  cursor: pointer;
+}
+.page-availability .hm-head:hover {
+  color: var(--accent);
+  opacity: 1;
+}
+.page-availability .hm-head.is-picked {
+  color: var(--accent);
+  box-shadow: inset 0 -2px 0 var(--accent);
+  opacity: 1;
 }
 .page-availability .hm-name {
   z-index: 2;
@@ -3835,9 +3917,91 @@ button.out:focus-visible::after {
 .page-availability .hm-cell.is-today {
   box-shadow: inset 0 0 0 1.5px var(--accent);
 }
+/* The picked day gets rails down its column rather than a full outline, so it
+   reads as a column and not as 70 selected cells. */
+.page-availability .hm-cell.is-picked {
+  box-shadow: inset 1.5px 0 0 var(--accent), inset -1.5px 0 0 var(--accent);
+}
 .page-availability .hm-cell.m-start,
 .page-availability .hm-head.m-start {
   border-left: 2px solid var(--border-strong);
+}
+/* Rows are sorted team-then-name — a rule between teams turns 70 rows into a
+   handful of blocks you can actually scan. */
+.page-availability .hm-row.is-team-start .hm-name,
+.page-availability .hm-row.is-team-start .hm-cell {
+  border-top: 2px solid var(--border-strong);
+}
+
+/* Arrow-key navigation focuses cells directly. Two things that needs: a ring
+   readable on a 17px cell (drawn inside, and lifted so neighbouring cells'
+   backgrounds don't clip it), and scroll margins clearing the sticky month +
+   day header rows and the sticky name column — otherwise focusing a cell
+   scrolls it to a spot those already cover. */
+/* `:focus`, not `:focus-visible`. Clicking a day header re-renders the grid and
+   restores focus by calling .focus() from script — a programmatic move whose
+   last real interaction was a mouse click, which :focus-visible correctly
+   declines to ring, leaving the focused cell invisible until the next keypress.
+   These cells are only reachable by Tab + arrows or a direct click, so ringing
+   on click too is honest feedback rather than noise. */
+.page-availability .hm-cell:focus,
+.page-availability .hm-head:focus {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.page-availability .hm-cell,
+.page-availability .hm-head {
+  scroll-margin-top: 58px;
+  scroll-margin-left: calc(var(--hm-name-w) + 12px);
+}
+
+/* Crosshair on hover. Reading across ~6,400 cells otherwise means tracking a
+   column with a finger on the screen.
+
+   Both halves are overlays bounded to their own element, and that is the whole
+   trick. Every overlay here lives inside `.hm-wrap`, which scrolls — and an
+   absolutely positioned box contributes to its scroll container's scrollable
+   overflow. One tall band painted out of a single hovered cell therefore *grew*
+   the grid's scroll height, and since scrolling moved the pointer onto a lower
+   cell the band moved down and grew it again: the heatmap scrolled without end.
+   `app.js` marks every cell of the hovered column instead (see setHoverColumn),
+   so nothing ever reaches past the grid's own bounds.
+
+   `position: relative` is scoped away from the header rows on purpose: they set
+   `position: sticky` at equal specificity, and a blanket `.hm-row` rule here
+   would win on order and silently unstick both. */
+.page-availability .hm-cell,
+.page-availability .hm-head {
+  position: relative;
+}
+.page-availability .hm-cell.is-col-hover::after,
+.page-availability .hm-head.is-col-hover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  pointer-events: none;
+}
+.page-availability .hm-row:not(.hm-head-row):not(.hm-month-row) {
+  position: relative;
+}
+/* The row half is an overlay too, not a background: a leave cell's own solid
+   background-image would hide any background-colour tint underneath it. */
+.page-availability .hm-row:not(.hm-head-row):not(.hm-month-row):hover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  pointer-events: none;
+}
+/* The name column is sticky and opaque, so it needs tinting in its own right. */
+.page-availability .hm-row:not(.hm-head-row):not(.hm-month-row):hover .hm-name {
+  background: color-mix(in srgb, var(--accent) 13%, var(--bg-elev));
+}
+.page-availability .hm-row:not(.hm-head-row):not(.hm-month-row):hover .hm-person {
+  color: var(--text);
 }
 .page-availability .hm-empty {
   padding: 22px;
@@ -3872,4 +4036,63 @@ button.out:focus-visible::after {
   position: sticky;
   left: 0;
   background: var(--bg-elev);
+}
+/* Available person-days over the week's theoretical maximum — the denominator
+   is what tells a part week apart from a team that lost half its capacity. */
+.page-availability .cap-have {
+  font-variant-numeric: tabular-nums;
+}
+.page-availability .cap-of {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.page-availability .cap-nodata {
+  color: var(--text-faint);
+}
+/* A month's edge week shows only part of itself; the header says which. */
+.page-availability .cap-table th.is-partial {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+/* A team-week under the threshold — the point of the whole table. */
+.page-availability .cap-table td.is-low {
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 45%, transparent);
+}
+.page-availability .cap-table td.is-low .cap-have {
+  color: var(--warn);
+  font-weight: 700;
+}
+.page-availability .cap-warn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 12.5px;
+}
+.page-availability .cap-warn-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border: 1px solid color-mix(in srgb, var(--warn) 50%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
+  font-weight: 600;
+  cursor: help;
+}
+.page-availability .cap-warn-mark {
+  font-size: 11px;
+}
+.page-availability .cap-warn-list {
+  color: var(--text-dim);
+}
+/* The threshold slider's live read-out sits in its own label. */
+.page-availability .thresh-out {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
 }

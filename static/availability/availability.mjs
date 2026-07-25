@@ -109,6 +109,24 @@ export const HOLIDAYS_VN = [
   { date: "2026-11-24", name: "Vietnam Cultural Day (company)" },
 ];
 
+/**
+ * Which public holiday falls on `iso` for someone in `location` — the reason
+ * both sets above carry names. VN holidays reach the model as `h` codes and CH
+ * ones through {@link applyLocationHolidays}; either way the code alone says
+ * only "public holiday", and this says *which*.
+ *
+ * Null when the relevant set doesn't list that date, which is normal outside
+ * the years it covers (VN: 2026 only) — callers fall back to the generic label.
+ *
+ * @param {string} iso
+ * @param {"VN" | "CH"} location
+ * @returns {string | null}
+ */
+export function holidayName(iso, location) {
+  const set = location === "CH" ? HOLIDAYS_CH_ZURICH : HOLIDAYS_VN;
+  return set.find((h) => h.date === iso)?.name ?? null;
+}
+
 // --- small date helpers --------------------------------------------------------
 
 /** @param {number} year @param {number} month 1-based */
@@ -116,7 +134,11 @@ function daysInMonth(year, month) {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
-/** Working span of one quarter. @param {number} year @param {number} quarter 1–4 */
+/**
+ * Calendar days in one quarter — 90/91 for Q1, 91, 92, 92. This is the number
+ * of date columns a quarter sheet has, not a count of working days.
+ * @param {number} year @param {number} quarter 1–4
+ */
 export function daysInQuarter(year, quarter) {
   const first = (quarter - 1) * 3 + 1;
   return daysInMonth(year, first) + daysInMonth(year, first + 1) + daysInMonth(year, first + 2);
@@ -142,6 +164,45 @@ export function quarterDates(year, quarter) {
 export function nextDate(iso) {
   const t = Date.parse(`${iso}T00:00:00Z`) + 86_400_000;
   return new Date(t).toISOString().slice(0, 10);
+}
+
+/** `iso` shifted by `n` calendar days (negative shifts back). @param {string} iso */
+export function addDays(iso, n) {
+  const t = Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000;
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+/**
+ * True when `iso` is a Saturday or Sunday. The `e` day code says the same
+ * thing for the cells the workbook filled in; this answers for the ones it
+ * did not — a blank or mis-coded weekend cell must not read as a working day.
+ *
+ * @param {string} iso
+ */
+export function isWeekend(iso) {
+  const dow = new Date(`${iso}T00:00:00Z`).getUTCDay();
+  return dow === 0 || dow === 6;
+}
+
+/** Two-letter weekday names, indexed by `getUTCDay()`. */
+export const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** `"2026-07-25"` → `"Sa 25.07"` — the day heading the strip and tooltips use. */
+export function prettyDay(iso) {
+  const day = WEEKDAYS[new Date(`${iso}T00:00:00Z`).getUTCDay()];
+  return `${day} ${iso.slice(8)}.${iso.slice(5, 7)}`;
+}
+
+/** `"2026-07-25"` → `"25.07"` — the compact form used inside chips. */
+export function shortDay(iso) {
+  return `${iso.slice(8)}.${iso.slice(5, 7)}`;
+}
+
+/** A half-day-capable person-day count for display: `6.5`, `8`, never `8.0`. */
+export function trimNumber(n) {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
 
 /** The Monday of the week containing `iso` (capacity groups by week). @param {string} iso */
@@ -527,11 +588,107 @@ export function groupOutDates(entries) {
 function onlyWeekendsBetween(a, b) {
   let d = nextDate(a);
   while (d < b) {
-    const dow = new Date(`${d}T00:00:00Z`).getUTCDay();
-    if (dow !== 0 && dow !== 6) return false;
+    if (!isWeekend(d)) return false;
     d = nextDate(d);
   }
   return d === b;
+}
+
+/** One person's grouped out-days, dates only: `"27.07–31.07, 03.08"`.
+ * @param {Parameters<typeof groupOutDates>[0]} dates */
+export function outDatesText(dates) {
+  return groupOutDates(dates)
+    .map((g) => `${shortDay(g.from)}${g.from === g.to ? "" : `–${shortDay(g.to)}`}`)
+    .join(", ");
+}
+
+/** The same ranges with their reason spelled out: `"27.07–31.07 Annual leave"`.
+ * @param {Parameters<typeof groupOutDates>[0]} dates */
+export function outDatesLabelText(dates) {
+  return groupOutDates(dates)
+    .map((g) => `${shortDay(g.from)}${g.from === g.to ? "" : `–${shortDay(g.to)}`} ${g.label}`)
+    .join(", ");
+}
+
+/**
+ * Split an {@link outOn} list into the public-holiday cohort and everyone
+ * else. On a VN public holiday every VN person carries `h`, which would
+ * otherwise bury the day's real absences under sixty identical chips.
+ *
+ * @param {ReturnType<typeof outOn>} entries
+ * @returns {{ holiday: ReturnType<typeof outOn>, other: ReturnType<typeof outOn> }}
+ */
+export function splitHoliday(entries) {
+  return {
+    holiday: entries.filter((e) => e.kind === "holiday"),
+    other: entries.filter((e) => e.kind !== "holiday"),
+  };
+}
+
+/**
+ * How many people are out on each working day of `from..to` — the strip's
+ * per-day index over a week of by-person chips. Weekend days are left out
+ * (there is nothing to be absent from) and the public-holiday cohort is
+ * counted separately, so a holiday reads as a holiday and not as "70 out".
+ *
+ * @param {Model} model
+ * @param {string} from ISO @param {string} to ISO
+ * @returns {Array<{ date: string, count: number, holiday: number }>}
+ */
+export function dayCounts(model, from, to) {
+  const counts = [];
+  for (let d = from; d <= to; d = nextDate(d)) {
+    if (isWeekend(d)) continue;
+    const { holiday, other } = splitHoliday(outOn(model, d));
+    counts.push({ date: d, count: other.length, holiday: holiday.length });
+  }
+  return counts;
+}
+
+/**
+ * The plain-text standup summary for `date` — what the 📋 button copies.
+ * Weekends and public holidays are named rather than reported as "nobody",
+ * and the per-day index lets a reader find the day they care about before
+ * reading the seventy per-person lines under it.
+ *
+ * @param {Model} model
+ * @param {string} date ISO
+ * @returns {string}
+ */
+export function summaryText(model, date) {
+  const { holiday, other } = splitHoliday(outOn(model, date));
+  const away = remoteOn(model, date);
+  const lines = [`Availability ${prettyDay(date)}`];
+  if (isWeekend(date)) {
+    lines.push("Weekend — nobody scheduled");
+  } else {
+    if (holiday.length > 0) lines.push(`Public holiday — ${holiday.length} off`);
+    if (other.length > 0) {
+      lines.push(`Out: ${other.map((o) => `${o.name} (${o.label})`).join(", ")}`);
+    } else if (holiday.length === 0) {
+      lines.push("Out: nobody");
+    }
+    if (away.length > 0) {
+      lines.push(`Remote/onsite: ${away.map((a) => `${a.name} (${a.label})`).join(", ")}`);
+    }
+  }
+  const to = addDays(date, 6);
+  const counts = dayCounts(model, date, to);
+  if (counts.length > 0) {
+    lines.push(
+      `Per day: ${
+        counts
+          .map((c) => `${shortDay(c.date)} ${c.holiday > 0 && c.count === 0 ? "holiday" : c.count}`)
+          .join(" · ")
+      }`,
+    );
+  }
+  const week = outInRange(model, date, to);
+  if (week.length > 0) {
+    lines.push("Next 7 days:");
+    for (const person of week) lines.push(`  ${person.name}: ${outDatesLabelText(person.dates)}`);
+  }
+  return lines.join("\n");
 }
 
 /**
@@ -569,6 +726,161 @@ export function teamCapacity(model, from, to) {
   return [...teams.values()].sort((a, b) => a.team.localeCompare(b.team));
 }
 
+// --- view framing ----------------------------------------------------------------
+// The day axis the heatmap draws, and how the capacity table carves it up.
+
+/**
+ * Every ISO date one view shows: the anchor's whole month, or its whole
+ * quarter. The anchor is any date inside the period.
+ *
+ * @param {"month" | "quarter"} mode
+ * @param {string} anchor ISO
+ * @returns {string[]}
+ */
+export function viewDates(mode, anchor) {
+  const year = Number(anchor.slice(0, 4));
+  const month = Number(anchor.slice(5, 7));
+  if (mode === "quarter") return quarterDates(year, Math.floor((month - 1) / 3) + 1);
+  const dates = [];
+  for (let d = 1; d <= daysInMonth(year, month); d++) {
+    dates.push(`${anchor.slice(0, 7)}-${String(d).padStart(2, "0")}`);
+  }
+  return dates;
+}
+
+/**
+ * Carve a view's day axis into calendar weeks, each clamped to the axis.
+ * `from`/`to` are the week's first and last *visible* day, so a month's edge
+ * week is a three-day stub — which the capacity table must label by `from`,
+ * not by a `monday` that is not on screen at all.
+ *
+ * @param {string[]} dates ascending, as {@link viewDates} returns them
+ * @returns {Array<{ monday: string, from: string, to: string, days: number }>}
+ */
+export function weekSlices(dates) {
+  const inRange = new Set(dates);
+  const slices = [];
+  for (const monday of [...new Set(dates.map((d) => mondayOf(d)))]) {
+    let from = "";
+    let to = "";
+    let days = 0;
+    for (let d = monday, i = 0; i < 7; d = nextDate(d), i++) {
+      if (!inRange.has(d)) continue;
+      if (from === "") from = d;
+      to = d;
+      days++;
+    }
+    slices.push({ monday, from, to, days });
+  }
+  return slices;
+}
+
+/**
+ * The month runs across a view's day axis, for the heatmap's month header
+ * row: `[{ month: "2026-07", label: "Jul 2026", days: 31 }]`. A quarter view
+ * gets three spans, a month view one.
+ *
+ * @param {string[]} dates ascending
+ * @returns {Array<{ month: string, label: string, days: number }>}
+ */
+export function monthSpans(dates) {
+  const spans = [];
+  for (const date of dates) {
+    const month = date.slice(0, 7);
+    const last = spans[spans.length - 1];
+    if (last !== undefined && last.month === month) {
+      last.days++;
+      continue;
+    }
+    spans.push({
+      month,
+      label: `${MONTHS[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`,
+      days: 1,
+    });
+  }
+  return spans;
+}
+
+/**
+ * Pull `anchor` into the span `days` covers — the nearest end wins, an anchor
+ * already inside is returned unchanged. Without this, importing a workbook
+ * for any year but the current one lands the heatmap on an empty month.
+ *
+ * @param {string} anchor ISO
+ * @param {string[]} days the model's day axis, ascending
+ * @returns {string}
+ */
+export function clampAnchor(anchor, days) {
+  if (days.length === 0) return anchor;
+  const first = days[0];
+  const last = days[days.length - 1];
+  if (anchor < first) return first;
+  if (anchor > last) return last;
+  return anchor;
+}
+
+/**
+ * The capacity table's grid: one row per team, one cell per week of `weeks`.
+ * A cell is `null` when nothing was imported for that week — a zero maximum is
+ * missing data, not a team with no capacity, and the two must never render
+ * alike. Rows come back sorted by team label.
+ *
+ * @param {Model} model
+ * @param {ReturnType<typeof weekSlices>} weeks
+ * @returns {Array<{ team: string, members: number,
+ *   cells: Array<{ available: number, possible: number } | null> }>}
+ */
+export function capacityGrid(model, weeks) {
+  /** @type {Map<string, { team: string, members: number, cells: Array<object | null> }>} */
+  const rows = new Map();
+  weeks.forEach((week, index) => {
+    for (const team of teamCapacity(model, week.from, week.to)) {
+      let row = rows.get(team.team.toLowerCase());
+      if (row === undefined) {
+        row = { team: team.team, members: team.members, cells: [] };
+        rows.set(team.team.toLowerCase(), row);
+      }
+      // `available + out` is the week's theoretical maximum: without it a part
+      // week's smaller number reads as a capacity collapse.
+      const possible = team.available + team.out;
+      row.cells[index] = possible === 0 ? null : { available: team.available, possible };
+    }
+  });
+  return [...rows.values()].sort((a, b) => a.team.localeCompare(b.team));
+}
+
+/**
+ * The team-weeks in a {@link capacityGrid} that fall below `threshold` of their
+ * own maximum — the conclusion the capacity numbers imply but never state.
+ * `threshold` is a fraction (0.6 = 60%); 0 reports nothing.
+ *
+ * @param {ReturnType<typeof capacityGrid>} grid
+ * @param {ReturnType<typeof weekSlices>} weeks
+ * @param {number} threshold
+ * @returns {Array<{ team: string, from: string, to: string, available: number,
+ *   possible: number, ratio: number }>}
+ */
+export function lowCoverage(grid, weeks, threshold) {
+  const low = [];
+  for (const row of grid) {
+    weeks.forEach((week, index) => {
+      const cell = row.cells[index];
+      if (cell === null || cell === undefined) return;
+      const ratio = cell.available / cell.possible;
+      if (ratio >= threshold) return;
+      low.push({
+        team: row.team,
+        from: week.from,
+        to: week.to,
+        available: cell.available,
+        possible: cell.possible,
+        ratio,
+      });
+    });
+  }
+  return low;
+}
+
 // --- CH overlay ------------------------------------------------------------------
 
 /**
@@ -592,8 +904,12 @@ export function applyLocationHolidays(model, tags, holidays) {
     /** @type {Record<string, string>} */
     const days = { ...person.days };
     for (const date of dates) {
-      const info = codeInfo(days[date] ?? "");
-      if (days[date] !== undefined && info.weight >= 1) days[date] = "h";
+      const code = days[date];
+      // Only *known* working codes convert. An unknown code also weighs 1, but
+      // its warning says "counted as working" — quietly turning it into a
+      // holiday would contradict that and destroy the value the warning cites.
+      if (code === undefined || CODES[code] === undefined) continue;
+      if (codeInfo(code).weight >= 1) days[date] = "h";
     }
     return { ...person, location, days };
   });

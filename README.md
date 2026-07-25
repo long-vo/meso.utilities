@@ -15,9 +15,9 @@ everything here runs entirely in your browser and deploys to GitHub Pages.
   (step 2), with one-click hand-offs to your mail app and to Outlook. Runs fully client-side.
 - **Team Availability** (`/availability/`) — drop the team's vacation workbook
   (`mesoneer-Vacation-<year>.xlsx`) and see who's out when: a people × days heatmap with month and
-  quarter views, an out-today/this-week strip with a copyable standup summary, and per-team capacity
-  numbers. CH-based colleagues can be tagged so Zürich public holidays apply. Runs fully
-  client-side.
+  quarter views, a who's-out strip for today or any day you pick — with a copyable standup summary —
+  and per-team capacity numbers against each week's maximum. CH-based colleagues can be tagged so
+  Zürich public holidays apply. Runs fully client-side.
 - **Shortlink** (`/shortlink/`) — give a URL a memorable name and open it via `/shortlink/#name`.
   Links can be organized into groups, live in your browser's `localStorage` (personal only) and can
   be exported to / imported from a local `shortlinks.json`. Runs fully client-side.
@@ -146,23 +146,40 @@ ca`) lands in a warnings panel — with its sheet and cell
 reference — and counts as working, so dirty data never silently shrinks capacity. Rosters are
 reconciled across quarters by name; the latest quarter's team label wins.
 
-The heatmap draws one row per person and one column per day (month or quarter zoom), with weekends
-hatched, today outlined and half-day codes as split cells. Above it, the out-today strip groups
-who's off, on a half day, or remote/onsite right now — one click copies a plain-text summary for
-standup or Slack. Below, the capacity table sums each team's available person-days per week (a half
-day counts 0.5; remote and onsite count as working). People or whole teams can be tagged
-**VN**/**CH**; CH-tagged people get the built-in canton Zürich holiday set overlaid on their working
-days.
+The heatmap draws one row per person and one column per day (month or quarter zoom) under a sticky
+month/day header, with weekends hatched, today outlined, half-day codes as split cells and a rule
+between teams. It's a real ARIA grid: **Tab** enters it once, the **arrow keys** move between cells
+(**Page Up/Down** by ten rows, **Ctrl + Home/End** to the corners), and **Enter** on a day header
+reports on that day. Each cell announces the person, the date and the reason — naming the holiday
+(`Tet Holiday`, `Bundesfeier`) where the built-in sets know it. Hovering lights up the cell's whole
+row and column, so reading across ninety-odd columns doesn't mean tracking one with a finger. Above
+it, the strip groups who's off, on a half day, or remote/onsite — for today by default, or for **any
+day** you pick from the date field, a heatmap day header or the week index; one click copies a
+plain-text summary for standup or Slack. A weekend says so instead of reporting "nobody out", and a
+public holiday collapses to a single chip rather than listing the whole roster. The week section
+keeps its per-person chips and adds a per-day count line (`27.07 · 8   28.07 · 11`) to scan first.
+Below, the capacity table shows each team's available person-days per week **over the week's
+theoretical maximum** (a half day counts 0.5; remote and onsite count as working), labels a month's
+part weeks by their first visible day, and prints `–` rather than `0` for a week nothing was
+imported for. It also draws the conclusion those numbers only imply: any team-week whose available
+person-days fall under a **threshold you set** (default 60% of that week's maximum; slide to 0 to
+switch it off) is marked in the table, and a line above it counts them and names the thinnest first.
+People or whole teams can be tagged **VN**/**CH**; CH-tagged people get the built-in canton Zürich
+holiday set overlaid on their working days.
 
 Everything (model, tags, filters) persists in this browser's `localStorage` and can be exported to /
 imported from `availability.json` — either the full model, or (**Export view**, shown while a
 team/name filter is active) just the visible slice with tags pruned to the included people, e.g. one
-team's plan for its lead. **Share link** copies a URL that carries the same slice gzip-compressed in
-the URL fragment — like Slidedown's and Shortlink's share links, the fragment is never sent to any
-server, and opening it asks before merging into that browser's data. One caveat, stated on the
-button too: the link _is_ the data, so anyone who obtains it can read those names and absences —
-share it only where you'd share the roster itself. The `.xlsx` itself is read by a small values-only
-zip/XML reader (`static/availability/xlsx.mjs`) — no third-party library.
+team's plan for its lead. The drop zone takes whichever of the three you give it (`.xlsx`, a quarter
+`.csv`, an `availability.json` export) and routes it. A workbook covers the whole year, so it
+_replaces_ what's loaded and asks first; every partial payload — CSV quarter, JSON export, share
+link — _merges_ by name, so importing one team's slice never drops the rest of the roster. **Share
+link** copies a URL that carries the same slice gzip-compressed in the URL fragment — like
+Slidedown's and Shortlink's share links, the fragment is never sent to any server, and opening it
+asks before merging into that browser's data. One caveat, stated on the button too: the link _is_
+the data, so anyone who obtains it can read those names and absences — share it only where you'd
+share the roster itself. The `.xlsx` itself is read by a small values-only zip/XML reader
+(`static/availability/xlsx.mjs`) — no third-party library.
 
 > The workbook is parsed entirely in your browser. Names and absences are never uploaded.
 

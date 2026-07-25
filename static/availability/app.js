@@ -1,27 +1,42 @@
 // meso.utilities — Team Availability UI wiring. All parsing, date math and
 // aggregation live in ./availability.mjs and ./xlsx.mjs (pure, parity-tested);
 // this file only moves data between them, the DOM and localStorage. Names and
-// absences are personal data: they stay in this browser (no share-URLs).
+// absences are personal data: nothing here is ever sent to a server, but
+// `copyShareLink` packs a filtered slice of them *into a URL*, which whoever
+// holds the link can read — that is the one way data leaves this browser.
 import { readWorkbook } from "./xlsx.mjs";
 import {
+  addDays,
   applyLocationHolidays,
+  capacityGrid,
+  clampAnchor,
   codeInfo,
+  dayCounts,
   decodeShare,
   encodeShare,
-  groupOutDates,
+  holidayName,
   HOLIDAYS_CH_ZURICH,
+  isWeekend,
+  lowCoverage,
   mergeModels,
-  mondayOf,
-  nextDate,
+  monthSpans,
+  outDatesLabelText,
+  outDatesText,
   outInRange,
   outOn,
   packModel,
   parseQuarterCsv,
   parseVacationWorkbook,
-  quarterDates,
+  prettyDay,
   remoteOn,
-  teamCapacity,
+  shortDay,
+  splitHoliday,
+  summaryText,
+  trimNumber,
   unpackModel,
+  viewDates,
+  WEEKDAYS,
+  weekSlices,
   yearFromFilename,
 } from "./availability.mjs";
 import { registerCommands } from "../palette.js";
@@ -60,15 +75,25 @@ const els = {
   clearData: $("clear-data"),
   stripStatus: $("strip-status"),
   copyStrip: $("copy-strip"),
+  dayPick: $("day-pick"),
+  dayReset: $("day-reset"),
   strip: $("strip"),
   rangeLabel: $("range-label"),
   heatmap: $("heatmap"),
   capacity: $("capacity"),
+  capWarn: $("cap-warn"),
+  lowThreshold: $("low-threshold"),
+  lowThresholdOut: $("low-threshold-out"),
 };
 const toast = makeToast($("toast"));
 
 const STORE_KEY = "meso-availability";
-const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+/**
+ * Past this many people on public holiday, the strip shows one chip for the
+ * whole cohort instead of one per person: a VN holiday puts the entire roster
+ * in that list, which buries the day's real absences.
+ */
+const HOLIDAY_COLLAPSE_AT = 4;
 const KIND_LEGEND = [
   ["working", "In office", "w"],
   ["remote", "Remote", "r rm ra"],
@@ -89,42 +114,11 @@ function todayIso() {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-function addDays(iso, n) {
-  let d = iso;
-  for (let i = 0; i < n; i++) d = nextDate(d);
-  return d;
-}
-
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
-}
-
-function prettyDay(iso) {
-  const day = WEEKDAYS[new Date(`${iso}T00:00:00Z`).getUTCDay()];
-  return `${day} ${iso.slice(8)}.${iso.slice(5, 7)}`;
-}
-
-/** "27.07" — the strip's compact day form. */
-function shortDay(iso) {
-  return `${iso.slice(8)}.${iso.slice(5, 7)}`;
-}
-
-/** One person's grouped out-days, dates only: "27.07.–31.07., 03.08." — the
- * chip's kind dot and tooltip carry the why. */
-function groupedDatesText(dates) {
-  return groupOutDates(dates)
-    .map((g) => `${shortDay(g.from)}${g.from === g.to ? "" : `–${shortDay(g.to)}`}`)
-    .join(", ");
-}
-
-/** Same ranges with their reason spelled out: "27.07.–31.07. Annual leave". */
-function groupedDatesLabelText(dates) {
-  return groupOutDates(dates)
-    .map((g) => `${shortDay(g.from)}${g.from === g.to ? "" : `–${shortDay(g.to)}`} ${g.label}`)
-    .join(", ");
 }
 
 /* ------------------------------- state ------------------------------- */
@@ -136,7 +130,134 @@ const state = {
   teams: [], // selected team keys (lowercase); empty = everyone
   view: { mode: "month", anchor: todayIso() },
   nameFilter: "",
+  pickedDay: null, // the day the strip reports on; null = today
+  focus: null, // heatmap cell holding the grid's single tab stop; see markFocusable
+  // Percent of a week's maximum below which a team-week is flagged thin. What
+  // counts as thin is a team's own call, so it is a control, not a constant;
+  // 0 turns the flagging off.
+  lowThreshold: 60,
 };
+
+/**
+ * Dimensions of the last-rendered heatmap. The keyboard handler needs them on
+ * every arrow press and must not re-derive the model to get them.
+ */
+let gridDims = { rows: 0, cols: 0, dates: [] };
+
+/**
+ * The ARIA grid pattern wants one tab stop for the whole grid, not 6,400 of
+ * them: every cell is focusable but only the one at `state.focus` is reachable
+ * by Tab, and the arrow keys move that. Row -1 is the day-header row, where
+ * Enter picks the day.
+ */
+function markFocusable(cell, row, col) {
+  cell.dataset.r = String(row);
+  cell.dataset.c = String(col);
+  cell.tabIndex = state.focus.row === row && state.focus.col === col ? 0 : -1;
+}
+
+function gridCell(row, col) {
+  return els.heatmap.querySelector(`[data-r="${row}"][data-c="${col}"]`);
+}
+
+/**
+ * Column half of the hover crosshair. CSS cannot select "every cell in column
+ * N" across sibling row grids, and the obvious workaround — one tall band
+ * painted out of the hovered cell — is absolutely positioned inside the
+ * scrolling wrapper, so it extends the scrollable area and the grid scrolls
+ * forever. Marking the column's own cells keeps every overlay inside the grid.
+ *
+ * @param {string | null} col the cells' `data-c`, or null to clear
+ */
+let hoverCol = null;
+function setHoverColumn(col) {
+  if (col === hoverCol) return; // pointer moved within one column — nothing to do
+  for (const cell of els.heatmap.querySelectorAll(".is-col-hover")) {
+    cell.classList.remove("is-col-hover");
+  }
+  hoverCol = col;
+  if (col === null) return;
+  for (const cell of els.heatmap.querySelectorAll(`[data-c="${col}"]`)) {
+    cell.classList.add("is-col-hover");
+  }
+}
+
+/** Hand the tab stop and DOM focus to `state.focus`, taking both off `from`. */
+function moveGridFocus(from) {
+  const previous = gridCell(from.row, from.col);
+  if (previous !== null) previous.tabIndex = -1;
+  const next = gridCell(state.focus.row, state.focus.col);
+  if (next !== null) {
+    next.tabIndex = 0;
+    next.focus();
+  }
+}
+
+/** Arrow-key navigation over the heatmap, per the ARIA grid pattern. */
+function onGridKeydown(event) {
+  const { rows, cols, dates } = gridDims;
+  if (cols === 0 || state.focus === null) return;
+  const from = state.focus;
+  let { row, col } = from;
+  switch (event.key) {
+    case "ArrowLeft":
+      col--;
+      break;
+    case "ArrowRight":
+      col++;
+      break;
+    case "ArrowUp":
+      row--;
+      break;
+    case "ArrowDown":
+      row++;
+      break;
+    case "PageUp":
+      row -= 10;
+      break;
+    case "PageDown":
+      row += 10;
+      break;
+    case "Home":
+      col = 0;
+      if (event.ctrlKey) row = -1;
+      break;
+    case "End":
+      col = cols - 1;
+      if (event.ctrlKey) row = rows - 1;
+      break;
+    case "Enter":
+    case " ":
+      if (from.row !== -1) return; // only the header row picks a day
+      event.preventDefault();
+      pickDay(dates[from.col]);
+      return;
+    default:
+      return;
+  }
+  event.preventDefault();
+  state.focus = {
+    row: Math.max(-1, Math.min(rows - 1, row)),
+    col: Math.max(0, Math.min(cols - 1, col)),
+  };
+  moveGridFocus(from);
+}
+
+/** The day the strip reports on. Transient like the view anchor — not saved. */
+function stripDay() {
+  return state.pickedDay ?? todayIso();
+}
+
+/**
+ * Point the strip at `date`; picking today is the same as picking nothing.
+ * The heatmap follows, so the strip and the grid never disagree about which
+ * day is under discussion — a no-op when the day was clicked in the grid.
+ */
+function pickDay(date) {
+  state.pickedDay = date === todayIso() ? null : date;
+  state.view.anchor = date;
+  renderAll();
+}
 
 function loadState() {
   try {
@@ -150,6 +271,15 @@ function loadState() {
     if (Array.isArray(saved.teams)) state.teams = saved.teams.filter((t) => typeof t === "string");
     if (saved.view && (saved.view.mode === "month" || saved.view.mode === "quarter")) {
       state.view.mode = saved.view.mode;
+    }
+    if (Number.isInteger(saved.lowThreshold) && saved.lowThreshold >= 0) {
+      state.lowThreshold = Math.min(100, saved.lowThreshold);
+    }
+    // The anchor is not persisted, so a reload starts it at today — clamp it the
+    // same way an import does, or a stored other-year workbook reopens on an
+    // empty month.
+    if (state.model !== null) {
+      state.view.anchor = clampAnchor(state.view.anchor, state.model.days);
     }
   } catch {
     /* corrupted or unavailable storage — start fresh */
@@ -165,6 +295,7 @@ function saveState() {
         year: state.year,
         tags: state.tags,
         teams: state.teams,
+        lowThreshold: state.lowThreshold,
         view: { mode: state.view.mode },
         model: state.model === null ? null : packModel(state.model),
       }),
@@ -178,6 +309,20 @@ function saveState() {
 function displayModel() {
   if (state.model === null) return null;
   return applyLocationHolidays(state.model, state.tags, HOLIDAYS_CH_ZURICH);
+}
+
+/** A team's display name. The workbook has people with the team cell empty, and
+ *  an unlabelled row reads as a rendering fault rather than as missing data. */
+function teamLabel(team) {
+  return team === "" ? "(no team)" : team;
+}
+
+/** What one heatmap cell means, naming the holiday when a built-in set knows
+ *  it — "Public holiday" alone doesn't say whether it's Tet or Bundesfeier. */
+function cellMeaning(info, code, date, location) {
+  if (info === null) return "no data";
+  const named = info.kind === "holiday" ? holidayName(date, location) : null;
+  return named === null ? `${info.label} (${code})` : `${named} — ${info.label} (${code})`;
 }
 
 /** Team key → display label, latest spelling wins (labels drift per quarter). */
@@ -201,19 +346,7 @@ function visiblePeople(model) {
 
 /** The dates the heatmap currently shows. */
 function visibleRange() {
-  const anchor = state.view.anchor;
-  const year = Number(anchor.slice(0, 4));
-  const month = Number(anchor.slice(5, 7));
-  if (state.view.mode === "quarter") {
-    return quarterDates(year, Math.floor((month - 1) / 3) + 1);
-  }
-  const dates = [];
-  let d = `${anchor.slice(0, 7)}-01`;
-  while (d.slice(0, 7) === anchor.slice(0, 7)) {
-    dates.push(d);
-    d = nextDate(d);
-  }
-  return dates;
+  return viewDates(state.view.mode, state.view.anchor);
 }
 
 /* ------------------------------- rendering ------------------------------- */
@@ -239,9 +372,9 @@ function renderImportStatus() {
     els.importStatus.textContent = "Nothing imported yet.";
     return;
   }
-  const n = state.model.people.length;
-  els.importStatus.textContent =
-    `${n} people · ${state.model.days.length} days · year ${state.year}`;
+  els.importStatus.textContent = `${
+    peopleCount(state.model.people.length)
+  } · ${state.model.days.length} days · year ${state.year}`;
 }
 
 function renderTeamChips(model) {
@@ -324,74 +457,114 @@ function stripEntryChip(entry, detail, titleDetail) {
   return chip;
 }
 
+/** One chip standing in for a whole public-holiday cohort; names go in the
+ *  tooltip, because on a VN holiday there are sixty of them. */
+function holidayChip(entries) {
+  const chip = el("span", "chip strip-chip");
+  chip.append(el("span", "dot dot-holiday"), " Public holiday ");
+  chip.append(el("span", "strip-detail", `${entries.length} people`));
+  chip.title = entries.map((e) => e.name).join(", ");
+  return chip;
+}
+
+/**
+ * The scannable "27.07 · 8   28.07 · 11" index over the week's by-person
+ * chips: how many are out each working day, and a click to report on that day.
+ */
+function dayIndexRow(model, from, to) {
+  const row = el("div", "day-index");
+  const current = stripDay();
+  for (const entry of dayCounts(model, from, to)) {
+    const cell = el("button", "day-index-cell");
+    cell.type = "button";
+    const allOff = entry.holiday > 0 && entry.count === 0;
+    cell.append(
+      el("span", "di-day", shortDay(entry.date)),
+      el("span", "di-count", allOff ? "hol" : String(entry.count)),
+    );
+    cell.title = `${prettyDay(entry.date)} — ${entry.count} out` +
+      (entry.holiday > 0 ? `, ${entry.holiday} on public holiday` : "") +
+      " · click to report on this day";
+    if (entry.date === current) cell.classList.add("is-current");
+    if (allOff) cell.classList.add("is-holiday");
+    cell.addEventListener("click", () => pickDay(entry.date));
+    row.appendChild(cell);
+  }
+  return row;
+}
+
 function renderStrip(model) {
   els.strip.textContent = "";
   if (model === null) {
     els.stripStatus.textContent = "";
+    els.dayPick.value = "";
+    els.dayReset.hidden = true;
     els.strip.appendChild(el("p", "hint", "Import the workbook to see who's out."));
     return;
   }
-  const today = todayIso();
-  const week = outInRange(model, today, addDays(today, 6));
-  const out = outOn(model, today);
-  const away = remoteOn(model, today);
-  els.stripStatus.textContent = prettyDay(today);
+  const day = stripDay();
+  const isToday = day === todayIso();
+  const weekend = isWeekend(day);
+  const { holiday, other } = splitHoliday(outOn(model, day));
+  const away = remoteOn(model, day);
+  const to = addDays(day, 6);
+  const week = outInRange(model, day, to);
+  els.stripStatus.textContent = prettyDay(day);
+  els.dayPick.value = day;
+  els.dayReset.hidden = isToday;
 
   const section = (title) => {
     const wrap = el("div", "strip-group");
     wrap.appendChild(el("h3", "strip-title", title));
+    els.strip.appendChild(wrap);
+    return wrap;
+  };
+  const chipsIn = (wrap) => {
     const box = el("div", "chips");
     wrap.appendChild(box);
-    els.strip.appendChild(wrap);
     return box;
   };
+  // "today" reads better than the date when it *is* today, which it usually is.
+  const when = isToday ? "today" : prettyDay(day);
+  const nothingScheduled = () => el("span", "hint", "Weekend — nobody scheduled.");
 
-  const outBox = section(`Out today (${out.length})`);
-  if (out.length === 0) outBox.appendChild(el("span", "hint", "Everyone's available."));
-  for (const entry of out) outBox.appendChild(stripEntryChip(entry));
+  const outBox = chipsIn(section(`Out ${when} (${holiday.length + other.length})`));
+  if (weekend) outBox.appendChild(nothingScheduled());
+  if (holiday.length > HOLIDAY_COLLAPSE_AT) outBox.appendChild(holidayChip(holiday));
+  else for (const entry of holiday) outBox.appendChild(stripEntryChip(entry));
+  for (const entry of other) outBox.appendChild(stripEntryChip(entry));
+  if (!weekend && holiday.length === 0 && other.length === 0) {
+    outBox.appendChild(el("span", "hint", "Everyone's available."));
+  }
 
-  const awayBox = section(`Remote / onsite today (${away.length})`);
-  if (away.length === 0) awayBox.appendChild(el("span", "hint", "Nobody remote."));
+  const awayBox = chipsIn(section(`Remote / onsite ${when} (${away.length})`));
+  if (away.length === 0) {
+    awayBox.appendChild(weekend ? nothingScheduled() : el("span", "hint", "Nobody remote."));
+  }
   for (const entry of away) awayBox.appendChild(stripEntryChip(entry));
 
-  const weekBox = section(`Next 7 days (${week.length})`);
+  const weekWrap = section(
+    isToday ? `Next 7 days (${week.length})` : `7 days from ${shortDay(day)} (${week.length})`,
+  );
+  weekWrap.appendChild(dayIndexRow(model, day, to));
+  const weekBox = chipsIn(weekWrap);
   if (week.length === 0) weekBox.appendChild(el("span", "hint", "No absences planned."));
   for (const person of week) {
-    const chip = stripEntryChip(
+    weekBox.appendChild(stripEntryChip(
       { ...person, kind: person.dates[0].kind },
-      groupedDatesText(person.dates),
-      groupedDatesLabelText(person.dates),
-    );
-    weekBox.appendChild(chip);
+      outDatesText(person.dates),
+      outDatesLabelText(person.dates),
+    ));
   }
-}
-
-function summaryText(model) {
-  const today = todayIso();
-  const out = outOn(model, today);
-  const away = remoteOn(model, today);
-  const week = outInRange(model, today, addDays(today, 6));
-  const lines = [`Availability ${prettyDay(today)}`];
-  lines.push(
-    out.length === 0
-      ? "Out today: nobody"
-      : `Out today: ${out.map((o) => `${o.name} (${o.label})`).join(", ")}`,
-  );
-  if (away.length > 0) {
-    lines.push(`Remote/onsite: ${away.map((a) => `${a.name} (${a.label})`).join(", ")}`);
-  }
-  if (week.length > 0) {
-    lines.push("Next 7 days:");
-    for (const person of week) {
-      lines.push(`  ${person.name}: ${groupedDatesLabelText(person.dates)}`);
-    }
-  }
-  return lines.join("\n");
 }
 
 function renderHeatmap(model) {
+  // Re-rendering replaces every cell, so a keyboard user mid-navigation would
+  // lose focus to <body>; only steal it back if they had it to begin with.
+  const hadFocus = els.heatmap.contains(document.activeElement);
   els.heatmap.textContent = "";
   if (model === null) {
+    gridDims = { rows: 0, cols: 0, dates: [] };
     els.rangeLabel.textContent = "";
     els.heatmap.appendChild(
       el("p", "hint hm-empty", "The heatmap appears here once a workbook is imported."),
@@ -401,123 +574,256 @@ function renderHeatmap(model) {
   const dates = visibleRange();
   const people = visiblePeople(model);
   const today = todayIso();
+  const picked = state.pickedDay;
+  // Row -1 is the day-header row; 0.. are people. Clamped every render because
+  // filtering and month navigation change the grid under the focused cell.
+  if (state.focus === null) state.focus = { row: 0, col: Math.max(0, dates.indexOf(today)) };
+  state.focus = {
+    row: Math.max(-1, Math.min(people.length - 1, state.focus.row)),
+    col: Math.max(0, Math.min(dates.length - 1, state.focus.col)),
+  };
+  gridDims = { rows: people.length, cols: dates.length, dates };
+  hoverCol = null; // the marked cells are about to be replaced
   els.heatmap.style.setProperty("--hm-cols", String(dates.length));
+  // The month row is decorative — each day header carries the full date — so it
+  // is left out of the a11y tree and out of these counts.
   els.heatmap.setAttribute("aria-rowcount", String(people.length + 1));
+  els.heatmap.setAttribute("aria-colcount", String(dates.length + 1));
   const frag = document.createDocumentFragment();
+
+  // Month labels above the day numbers: a 92-column quarter view otherwise
+  // gives no clue which month a column belongs to.
+  const monthRow = el("div", "hm-row hm-month-row");
+  monthRow.setAttribute("role", "presentation");
+  monthRow.appendChild(el("div", "hm-corner hm-corner-month"));
+  for (const span of monthSpans(dates)) {
+    const cell = el("div", "hm-month", span.label);
+    cell.style.gridColumn = `span ${span.days}`;
+    monthRow.appendChild(cell);
+  }
+  frag.appendChild(monthRow);
 
   const head = el("div", "hm-row hm-head-row");
   head.setAttribute("role", "row");
+  head.setAttribute("aria-rowindex", "1");
   const corner = el("div", "hm-corner", "Person");
   corner.setAttribute("role", "columnheader");
+  corner.setAttribute("aria-colindex", "1");
   head.appendChild(corner);
-  for (const date of dates) {
+  dates.forEach((date, col) => {
     const wd = new Date(`${date}T00:00:00Z`).getUTCDay();
     const cell = el("div", "hm-head");
     cell.setAttribute("role", "columnheader");
-    cell.append(el("span", "hm-dom", date.slice(8)), el("span", "hm-dow", WEEKDAYS[wd][0]));
-    if (wd === 0 || wd === 6) cell.classList.add("is-weekend");
+    cell.setAttribute("aria-colindex", String(col + 2));
+    // Two letters, not one: a bare "T" is both Tuesday and Thursday.
+    cell.append(el("span", "hm-dom", date.slice(8)), el("span", "hm-dow", WEEKDAYS[wd]));
+    if (isWeekend(date)) cell.classList.add("is-weekend");
     if (date === today) cell.classList.add("is-today");
+    if (date === picked) cell.classList.add("is-picked");
     if (date.endsWith("-01")) cell.classList.add("m-start");
-    cell.title = date;
+    cell.title = `${prettyDay(date)} — report on this day`;
+    cell.setAttribute(
+      "aria-label",
+      `${prettyDay(date)}${
+        date === picked ? ", reporting on this day" : ", press Enter to report"
+      }`,
+    );
+    markFocusable(cell, -1, col);
+    cell.addEventListener("click", () => pickDay(date));
     head.appendChild(cell);
-  }
+  });
   frag.appendChild(head);
 
-  for (const person of people) {
+  let lastTeam = null;
+  people.forEach((person, r) => {
     const row = el("div", "hm-row");
     row.setAttribute("role", "row");
+    row.setAttribute("aria-rowindex", String(r + 2));
+    // Rows are sorted team-then-name; a rule between teams turns 70 rows into
+    // a handful of readable blocks.
+    const teamKey = person.team.toLowerCase();
+    if (lastTeam !== null && teamKey !== lastTeam) row.classList.add("is-team-start");
+    lastTeam = teamKey;
     const name = el("div", "hm-name");
     name.setAttribute("role", "rowheader");
+    name.setAttribute("aria-colindex", "1");
     name.append(el("span", "hm-person", person.name), el("span", "hm-team", person.team));
     if (person.location === "CH") name.appendChild(el("span", "hm-loc", "CH"));
     row.appendChild(name);
-    for (const date of dates) {
+    dates.forEach((date, col) => {
       const code = person.days[date];
       const info = code === undefined ? null : codeInfo(code);
       const cell = el("div", "hm-cell");
       cell.setAttribute("role", "gridcell");
+      cell.setAttribute("aria-colindex", String(col + 2));
       if (info === null) cell.classList.add("is-blank");
       else {
         cell.classList.add(`k-${info.kind}`);
         if (info.half !== null) cell.classList.add(`half-${info.half}`);
       }
       if (date === today) cell.classList.add("is-today");
+      if (date === picked) cell.classList.add("is-picked");
       if (date.endsWith("-01")) cell.classList.add("m-start");
-      const what = info === null ? "no data" : `${info.label} (${code})`;
-      cell.title = `${person.name} — ${prettyDay(date)} — ${what}`;
+      cell.title = `${person.name} — ${prettyDay(date)} — ${
+        cellMeaning(info, code, date, person.location)
+      }`;
       cell.setAttribute("aria-label", cell.title);
+      markFocusable(cell, r, col);
       row.appendChild(cell);
-    }
+    });
     frag.appendChild(row);
-  }
+  });
   els.heatmap.appendChild(frag);
-  els.rangeLabel.textContent = `${dates[0]} → ${dates[dates.length - 1]} · ${people.length} people`;
+  if (hadFocus) gridCell(state.focus.row, state.focus.col)?.focus();
+  els.rangeLabel.textContent = `${dates[0]} → ${dates[dates.length - 1]} · ${
+    peopleCount(people.length)
+  }`;
+}
+
+/**
+ * The line beside the capacity heading — the tool's actual conclusion, which
+ * the raw numbers only imply. Names the thinnest weeks first, because that is
+ * the one a reader wants.
+ */
+function renderCoverageWarning(low) {
+  els.capWarn.textContent = "";
+  els.capWarn.hidden = low.length === 0;
+  if (low.length === 0) return;
+  const worst = [...low].sort((a, b) => a.ratio - b.ratio);
+  const badge = el("span", "cap-warn-badge");
+  badge.append(
+    el("span", "cap-warn-mark", "⚠"),
+    ` ${low.length} team-${low.length === 1 ? "week" : "weeks"} below ${state.lowThreshold}%`,
+  );
+  badge.title = worst
+    .map((l) =>
+      `${teamLabel(l.team)} ${shortDay(l.from)}: ${trimNumber(l.available)}/${
+        trimNumber(l.possible)
+      } (${Math.round(l.ratio * 100)}%)`
+    )
+    .join("\n");
+  els.capWarn.appendChild(badge);
+  const worstFew = worst.slice(0, 3)
+    .map((l) => `${teamLabel(l.team)} ${shortDay(l.from)} (${Math.round(l.ratio * 100)}%)`)
+    .join(", ");
+  els.capWarn.appendChild(
+    el("span", "cap-warn-list", worstFew + (worst.length > 3 ? ", …" : "")),
+  );
 }
 
 function renderCapacity(model) {
   els.capacity.textContent = "";
   if (model === null) return;
-  const dates = visibleRange();
-  const inRange = new Set(dates);
-  const weeks = [...new Set(dates.map((d) => mondayOf(d)))];
+  const weeks = weekSlices(visibleRange());
   const filtered = { ...model, people: visiblePeople(model) };
 
   const table = el("table", "cap-table");
   const thead = el("thead");
   const headRow = el("tr");
   headRow.append(el("th", "cap-team", "Team"), el("th", "", "People"));
-  for (const monday of weeks) headRow.appendChild(el("th", "", prettyDay(monday).slice(3)));
+  for (const week of weeks) {
+    // Labelled by the week's first *visible* day. Naming a month's edge week
+    // after its Monday pointed at a date that isn't on screen — a three-day
+    // stub read as "29.06", right next to full weeks.
+    const th = el("th", "", shortDay(week.from));
+    th.title = `${prettyDay(week.from)} – ${prettyDay(week.to)}` +
+      (week.days < 7 ? ` · part week, ${week.days} of 7 days in view` : "");
+    if (week.days < 7) th.classList.add("is-partial");
+    headRow.appendChild(th);
+  }
   thead.appendChild(headRow);
   table.appendChild(thead);
 
-  /** @type {Map<string, { label: string, members: number, cells: number[] }>} */
-  const rows = new Map();
-  weeks.forEach((monday, index) => {
-    // Clamp each week to the visible range so edge weeks don't leak out of it.
-    let from = monday;
-    while (!inRange.has(from) && from <= dates[dates.length - 1]) from = nextDate(from);
-    let to = from;
-    for (let d = from; d <= addDays(monday, 6); d = nextDate(d)) if (inRange.has(d)) to = d;
-    for (const team of teamCapacity(filtered, from, to)) {
-      let row = rows.get(team.team.toLowerCase());
-      if (row === undefined) {
-        row = { label: team.team, members: team.members, cells: [] };
-        rows.set(team.team.toLowerCase(), row);
-      }
-      row.cells[index] = team.available;
-    }
-  });
+  const grid = capacityGrid(filtered, weeks);
+  const threshold = state.lowThreshold / 100;
+  const low = lowCoverage(grid, weeks, threshold);
+  const lowKeys = new Set(low.map((l) => `${l.team.toLowerCase()}|${l.from}`));
+  renderCoverageWarning(low);
 
   const tbody = el("tbody");
-  for (const row of [...rows.values()].sort((a, b) => a.label.localeCompare(b.label))) {
+  for (const row of grid) {
     const tr = el("tr");
-    tr.append(el("td", "cap-team", row.label), el("td", "", String(row.members)));
-    for (let i = 0; i < weeks.length; i++) {
-      const value = row.cells[i];
-      tr.appendChild(el("td", "", value === undefined ? "–" : trimNumber(value)));
-    }
+    tr.append(el("td", "cap-team", teamLabel(row.team)), el("td", "", String(row.members)));
+    weeks.forEach((week, i) => {
+      const cell = row.cells[i] ?? null;
+      // Nothing imported for that week; printing a bare 0 would read as "this
+      // team has no capacity at all".
+      if (cell === null) {
+        const td = el("td", "cap-nodata", "–");
+        td.title = "No data imported for this week";
+        tr.appendChild(td);
+        return;
+      }
+      const td = el("td");
+      const share = Math.round((cell.available / cell.possible) * 100);
+      td.append(
+        el("span", "cap-have", trimNumber(cell.available)),
+        el("span", "cap-of", `/${trimNumber(cell.possible)}`),
+      );
+      td.title = `${trimNumber(cell.available)} of ${
+        trimNumber(cell.possible)
+      } person-days available — ${share}%`;
+      if (lowKeys.has(`${row.team.toLowerCase()}|${week.from}`)) {
+        td.classList.add("is-low");
+        td.title += ` · below the ${state.lowThreshold}% mark`;
+      }
+      tr.appendChild(td);
+    });
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
   els.capacity.appendChild(table);
 }
 
-function trimNumber(n) {
-  return Number.isInteger(n) ? String(n) : n.toFixed(1);
-}
-
 /* ------------------------------- imports ------------------------------- */
 
+/**
+ * Adopt a freshly parsed model. The workbook is a whole year and `replace`s;
+ * every partial payload (a CSV quarter, a JSON export, a share link) merges by
+ * name, so importing one team's slice never drops the rest of the roster.
+ * Either way the view is pulled onto data that exists.
+ *
+ * @param {ReturnType<typeof parseVacationWorkbook>} incoming
+ * @param {number} year @param {boolean} replace
+ */
+function adoptModel(incoming, year, replace) {
+  state.model = replace || state.model === null ? incoming : mergeModels(state.model, incoming);
+  state.year = year;
+  state.view.anchor = clampAnchor(state.view.anchor, state.model.days);
+  state.pickedDay = null; // the old pick may not exist in the new data
+}
+
+/** "1 person" / "7 people" — import toasts routinely carry a count of one. */
+function peopleCount(n) {
+  return `${n} ${n === 1 ? "person" : "people"}`;
+}
+
+/** Send a dropped or chosen file to the importer its extension implies — the
+ *  drop zone used to hand a .json export straight to the zip reader. */
+function routeFile(file) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".json")) return importJsonFile(file);
+  if (name.endsWith(".csv")) return importCsvFile(file);
+  if (name.endsWith(".xlsx")) return importWorkbookFile(file);
+  toast(`Don't know how to read ${file.name} — drop an .xlsx, .csv or .json`);
+}
+
 async function importWorkbookFile(file) {
+  const loaded = state.model === null ? 0 : state.model.people.length;
+  if (
+    loaded > 0 && !confirm(
+      `Replace the ${loaded} people already loaded with ${file.name}?\n\n` +
+        "A workbook covers the whole year, so it replaces rather than merges.",
+    )
+  ) return;
   els.importStatus.textContent = `Parsing ${file.name}…`;
   try {
     const sheets = await readWorkbook(await file.arrayBuffer());
     const year = yearFromFilename(file.name) ?? (Number(els.year.value) || state.year);
     const model = parseVacationWorkbook(sheets, { year });
-    state.model = model;
-    state.year = year;
+    adoptModel(model, year, true);
     toast(
-      `Imported ${model.people.length} people` +
+      `Imported ${peopleCount(model.people.length)}` +
         (model.warnings.length > 0 ? ` · ${model.warnings.length} warnings` : ""),
     );
   } catch (err) {
@@ -526,24 +832,41 @@ async function importWorkbookFile(file) {
   renderAll();
 }
 
-function importCsv() {
-  const text = els.csvText.value;
+/**
+ * Import one quarter of CSV; the panel's quarter picker says which.
+ * @returns {boolean} whether it parsed — the paste box only clears on success.
+ */
+function importCsvText(text) {
   if (text.trim() === "") {
     toast("Paste a quarter sheet as CSV first");
-    return;
+    return false;
   }
+  let ok = false;
   try {
     const quarter = Number(els.csvQuarter.value);
     const year = Number(els.year.value) || state.year;
     const incoming = parseQuarterCsv(text, { year, quarter });
-    state.model = state.model === null ? incoming : mergeModels(state.model, incoming);
-    state.year = year;
-    els.csvText.value = "";
-    toast(`Imported Q${quarter} (${incoming.people.length} people)`);
+    // A sheet without the `No. + h w v p c s r` header parses to nobody rather
+    // than throwing — reporting that as an import would be a false success.
+    if (incoming.people.length === 0) {
+      throw new Error("no roster rows found — is this a quarter sheet?");
+    }
+    adoptModel(incoming, year, false);
+    toast(`Imported Q${quarter} (${peopleCount(incoming.people.length)})`);
+    ok = true;
   } catch (err) {
     toast(`CSV import failed: ${err instanceof Error ? err.message : err}`);
   }
   renderAll();
+  return ok;
+}
+
+async function importCsvFile(file) {
+  importCsvText(await file.text());
+}
+
+function importCsv() {
+  if (importCsvText(els.csvText.value)) els.csvText.value = "";
 }
 
 function downloadJson(payload, filename) {
@@ -602,7 +925,7 @@ function exportViewJson() {
     },
     `availability-${state.year}-${slug}.json`,
   );
-  toast(`Exported ${people.length} ${people.length === 1 ? "person" : "people"} (current view)`);
+  toast(`Exported ${peopleCount(people.length)} (current view)`);
 }
 
 /**
@@ -648,7 +971,6 @@ async function copyShareLink() {
 async function consumeShareFragment() {
   const match = /^#share=(.+)$/.exec(location.hash);
   if (match === null) return;
-  history.replaceState(null, "", location.pathname + location.search);
   const payload = await decodeShare(match[1]);
   const model = payload === null ? null : unpackModel(payload.model);
   if (model === null || model.people.length === 0) {
@@ -662,12 +984,14 @@ async function consumeShareFragment() {
       "Merge it into the data in this browser?",
   );
   if (!ok) return;
-  state.model = state.model === null ? model : mergeModels(state.model, model);
-  if (Number.isInteger(payload.year)) state.year = payload.year;
+  // Only drop the fragment once it has actually been taken. Clearing it before
+  // the question left a declined link with nothing to retry or bookmark.
+  history.replaceState(null, "", location.pathname + location.search);
+  adoptModel(model, Number.isInteger(payload.year) ? payload.year : state.year, false);
   if (payload.tags && typeof payload.tags === "object") {
     state.tags = { ...state.tags, ...payload.tags };
   }
-  toast(`Imported ${model.people.length} people from the link`);
+  toast(`Imported ${peopleCount(model.people.length)} from the link`);
   renderAll();
 }
 
@@ -677,10 +1001,13 @@ function importJsonFile(file) {
       const payload = JSON.parse(text);
       const model = unpackModel(payload.model);
       if (model === null) throw new Error("not an availability export");
-      state.model = model;
-      if (Number.isInteger(payload.year)) state.year = payload.year;
-      if (payload.tags && typeof payload.tags === "object") state.tags = payload.tags;
-      toast(`Loaded ${model.people.length} people from ${file.name}`);
+      // Merged, not replaced: an "Export view" slice is one team out of many,
+      // and it must not wipe the roster it is imported into.
+      adoptModel(model, Number.isInteger(payload.year) ? payload.year : state.year, false);
+      if (payload.tags && typeof payload.tags === "object") {
+        state.tags = { ...state.tags, ...payload.tags };
+      }
+      toast(`Merged ${peopleCount(model.people.length)} from ${file.name}`);
     } catch (err) {
       toast(`Import failed: ${err instanceof Error ? err.message : err}`);
     }
@@ -711,11 +1038,11 @@ els.dropZone.addEventListener("keydown", (e) => {
 );
 els.dropZone.addEventListener("drop", (e) => {
   const file = e.dataTransfer?.files?.[0];
-  if (file) importWorkbookFile(file);
+  if (file) routeFile(file);
 });
 els.fileInput.addEventListener("change", () => {
   const file = els.fileInput.files?.[0];
-  if (file) importWorkbookFile(file);
+  if (file) routeFile(file);
   els.fileInput.value = "";
 });
 els.csvImport.addEventListener("click", importCsv);
@@ -724,16 +1051,37 @@ els.year.addEventListener("change", () => {
   const year = Number(els.year.value);
   if (Number.isInteger(year) && year >= 2000 && year <= 2100) {
     state.year = year;
-    saveState();
+    renderAll(); // the status line reports the year — saveState alone left it stale
   }
 });
+
+els.heatmap.addEventListener("keydown", onGridKeydown);
+els.heatmap.addEventListener("pointerover", (event) => {
+  const cell = event.target.closest?.("[data-c]") ?? null;
+  setHoverColumn(cell === null ? null : cell.dataset.c);
+});
+els.heatmap.addEventListener("pointerleave", () => setHoverColumn(null));
+
+els.lowThreshold.addEventListener("input", () => {
+  const percent = Number(els.lowThreshold.value);
+  if (!Number.isFinite(percent)) return;
+  state.lowThreshold = Math.max(0, Math.min(100, Math.round(percent)));
+  els.lowThresholdOut.textContent = state.lowThreshold === 0 ? "off" : `${state.lowThreshold}%`;
+  renderCapacity(displayModel());
+  saveState();
+});
+
+els.dayPick.addEventListener("change", () => {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(els.dayPick.value)) pickDay(els.dayPick.value);
+});
+els.dayReset.addEventListener("click", () => pickDay(todayIso()));
 
 function setViewMode(mode) {
   state.view.mode = mode;
   els.viewMonth.classList.toggle("is-active", mode === "month");
-  els.viewMonth.setAttribute("aria-selected", String(mode === "month"));
+  els.viewMonth.setAttribute("aria-pressed", String(mode === "month"));
   els.viewQuarter.classList.toggle("is-active", mode === "quarter");
-  els.viewQuarter.setAttribute("aria-selected", String(mode === "quarter"));
+  els.viewQuarter.setAttribute("aria-pressed", String(mode === "quarter"));
   renderAll();
 }
 els.viewMonth.addEventListener("click", () => setViewMode("month"));
@@ -789,6 +1137,8 @@ els.clearData.addEventListener("click", () => {
   state.tags = {};
   state.teams = [];
   state.nameFilter = "";
+  state.pickedDay = null;
+  state.focus = null;
   els.nameFilter.value = "";
   try {
     localStorage.removeItem(STORE_KEY);
@@ -805,7 +1155,7 @@ async function copySummary() {
     return;
   }
   try {
-    await navigator.clipboard.writeText(summaryText(model));
+    await navigator.clipboard.writeText(summaryText(model, stripDay()));
     toast("Summary copied");
   } catch {
     toast("Could not copy — clipboard unavailable");
@@ -816,11 +1166,19 @@ els.copyStrip.addEventListener("click", copySummary);
 registerCommands([
   {
     icon: "📥",
-    title: "Import vacation workbook…",
+    title: "Import workbook, CSV or export…",
     hint: "action",
+    keywords: ["xlsx", "csv", "json"],
     run: () => els.fileInput.click(),
   },
-  { icon: "📋", title: "Copy out-today summary", hint: "action", run: copySummary },
+  { icon: "📋", title: "Copy who's-out summary", hint: "action", run: copySummary },
+  {
+    icon: "📆",
+    title: "Report on today",
+    hint: "action",
+    keywords: ["day", "pick", "strip"],
+    run: () => pickDay(todayIso()),
+  },
   {
     icon: "🔁",
     title: "Switch Month / Quarter view",
@@ -857,6 +1215,8 @@ registerCommands([
 /* ------------------------------- boot ------------------------------- */
 
 loadState();
+els.lowThreshold.value = String(state.lowThreshold);
+els.lowThresholdOut.textContent = state.lowThreshold === 0 ? "off" : `${state.lowThreshold}%`;
 renderLegend();
 setViewMode(state.view.mode); // also triggers the first renderAll()
 consumeShareFragment(); // async — re-renders if a #share= link is accepted

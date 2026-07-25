@@ -11,27 +11,45 @@
  * Dependency-free on purpose (no remote std import) so it runs offline.
  */
 import {
+  addDays,
   applyLocationHolidays,
+  capacityGrid,
+  clampAnchor,
   codeInfo,
   CODES,
+  dayCounts,
   daysInQuarter,
   decodeShare,
   encodeShare,
   groupOutDates,
+  holidayName,
   HOLIDAYS_CH_ZURICH,
+  HOLIDAYS_VN,
+  isWeekend,
+  lowCoverage,
   mergeModels,
   mondayOf,
+  monthSpans,
   nextDate,
+  outDatesLabelText,
+  outDatesText,
   outInRange,
   outOn,
   packModel,
   parseCsv,
   parseQuarterCsv,
   parseVacationWorkbook,
+  prettyDay,
   quarterDates,
   remoteOn,
+  shortDay,
+  splitHoliday,
+  summaryText,
   teamCapacity,
+  trimNumber,
   unpackModel,
+  viewDates,
+  weekSlices,
   yearFromFilename,
 } from "../static/availability/availability.mjs";
 
@@ -414,6 +432,43 @@ Deno.test("applyLocationHolidays: CH overlay rewrites working days only, purely"
   assertEquals(person(model, "Long Vo").location, "VN");
 });
 
+Deno.test("applyLocationHolidays: a dirty code survives a CH holiday untouched", () => {
+  // An unknown code weighs 1 like `w` does, but its warning promised the cell
+  // would be "counted as working" and kept visible — the overlay must not eat it.
+  const rows = grid({
+    people: [["Long Vo", "mortal", ["w", "w+AQ54", "r"]]],
+    nDays: 92,
+  });
+  const model = parseVacationWorkbook([{ name: "3rd quarter", rows }], { year: 2026 });
+  assertEquals(model.warnings.length, 1, "the dirty cell warned");
+  const tagged = applyLocationHolidays(
+    model,
+    { "Long Vo": "CH" },
+    ["2026-07-01", "2026-07-02", "2026-07-03"],
+  );
+  const long = person(tagged, "Long Vo");
+  assertEquals(long.days["2026-07-01"], "h", "a known working code still converts");
+  assertEquals(long.days["2026-07-02"], "w+aq54", "the dirty code is left alone");
+  assertEquals(long.days["2026-07-03"], "h", "remote converts too");
+});
+
+Deno.test("holidayName: names the day per location, null outside the built-in sets", () => {
+  assertEquals(holidayName("2026-08-01", "CH"), "Bundesfeier");
+  assertEquals(holidayName("2026-02-16", "VN"), "Tet Holiday");
+  assertEquals(holidayName("2026-11-24", "VN"), "Vietnam Cultural Day (company)");
+  assertEquals(holidayName("2026-08-01", "VN"), null, "Swiss national day is not a VN holiday");
+  assertEquals(holidayName("2026-07-15", "CH"), null, "an ordinary working day");
+  assertEquals(holidayName("2031-01-01", "CH"), null, "beyond the maintained years");
+});
+
+Deno.test("HOLIDAYS_VN: every entry is a named ISO date", () => {
+  assertEquals(HOLIDAYS_VN.length > 0, true);
+  for (const h of HOLIDAYS_VN) {
+    assertEquals(/^\d{4}-\d{2}-\d{2}$/.test(h.date), true, h.date);
+    assertEquals(h.name.length > 0, true, h.date);
+  }
+});
+
 Deno.test("HOLIDAYS: object form plugs straight into the overlay; dates are ISO", () => {
   for (const h of HOLIDAYS_CH_ZURICH) {
     assertEquals(/^\d{4}-\d{2}-\d{2}$/.test(h.date), true, h.date);
@@ -531,6 +586,243 @@ Deno.test("decodeShare: garbage in, null out", async () => {
   assertEquals(await decodeShare(""), null);
   // Valid base64url, but the bytes are not gzip.
   assertEquals(await decodeShare(btoa("plain text").replace(/=+$/, "")), null);
+});
+
+/* -------- helpers that moved out of app.js (were untested there) -------- */
+
+Deno.test("addDays: shifts both ways across months, years and leap days", () => {
+  assertEquals(addDays("2026-07-25", 6), "2026-07-31");
+  assertEquals(addDays("2026-07-25", 7), "2026-08-01");
+  assertEquals(addDays("2026-07-25", 0), "2026-07-25");
+  assertEquals(addDays("2026-01-01", -1), "2025-12-31");
+  assertEquals(addDays("2028-02-28", 1), "2028-02-29", "leap year");
+  assertEquals(addDays("2026-02-28", 1), "2026-03-01");
+});
+
+Deno.test("isWeekend: answers from the calendar, not from the `e` day code", () => {
+  // 2026-07-25 is a Saturday, 26th the Sunday, 27th the Monday.
+  assertEquals([24, 25, 26, 27].map((d) => isWeekend(`2026-07-${d}`)), [
+    false,
+    true,
+    true,
+    false,
+  ]);
+});
+
+Deno.test("prettyDay / shortDay / trimNumber: display forms", () => {
+  assertEquals(prettyDay("2026-07-25"), "Sa 25.07");
+  assertEquals(prettyDay("2026-07-01"), "We 01.07");
+  assertEquals(shortDay("2026-07-01"), "01.07");
+  assertEquals(trimNumber(8), "8", "whole days carry no decimal");
+  assertEquals(trimNumber(6.5), "6.5");
+  assertEquals(trimNumber(0), "0");
+});
+
+Deno.test("viewDates: a whole month or a whole quarter around the anchor", () => {
+  const july = viewDates("month", "2026-07-25");
+  assertEquals([july.length, july[0], july[30]], [31, "2026-07-01", "2026-07-31"]);
+  assertEquals(viewDates("month", "2026-02-10").length, 28);
+  assertEquals(viewDates("month", "2028-02-10").length, 29, "leap February");
+  const q3 = viewDates("quarter", "2026-08-14");
+  assertEquals([q3.length, q3[0], q3[91]], [92, "2026-07-01", "2026-09-30"]);
+  assertEquals(viewDates("quarter", "2026-01-31")[0], "2026-01-01");
+});
+
+Deno.test("weekSlices: edge weeks are clamped to the view, `from` is on screen", () => {
+  // July 2026 starts on a Wednesday and ends on a Friday, so both edge weeks
+  // are stubs — the capacity table used to label the first one "29.06".
+  const slices = weekSlices(viewDates("month", "2026-07-25"));
+  assertEquals(slices.map((s) => [s.monday, s.from, s.to, s.days]), [
+    ["2026-06-29", "2026-07-01", "2026-07-05", 5],
+    ["2026-07-06", "2026-07-06", "2026-07-12", 7],
+    ["2026-07-13", "2026-07-13", "2026-07-19", 7],
+    ["2026-07-20", "2026-07-20", "2026-07-26", 7],
+    ["2026-07-27", "2026-07-27", "2026-07-31", 5],
+  ]);
+  assertEquals(slices.reduce((n, s) => n + s.days, 0), 31, "every day lands in exactly one week");
+  assertEquals(weekSlices([]), []);
+  assertEquals(weekSlices(["2026-07-25"]), [{
+    monday: "2026-07-20",
+    from: "2026-07-25",
+    to: "2026-07-25",
+    days: 1,
+  }]);
+});
+
+Deno.test("monthSpans: one span per month run, in view order", () => {
+  assertEquals(monthSpans(viewDates("quarter", "2026-08-14")), [
+    { month: "2026-07", label: "Jul 2026", days: 31 },
+    { month: "2026-08", label: "Aug 2026", days: 31 },
+    { month: "2026-09", label: "Sep 2026", days: 30 },
+  ]);
+  assertEquals(monthSpans(viewDates("month", "2026-02-01")), [
+    { month: "2026-02", label: "Feb 2026", days: 28 },
+  ]);
+  assertEquals(monthSpans([]), []);
+});
+
+Deno.test("clampAnchor: pulls the view into the imported span", () => {
+  const days = ["2026-07-01", "2026-08-15", "2026-09-30"];
+  assertEquals(clampAnchor("2027-03-04", days), "2026-09-30", "anchor after the data");
+  assertEquals(clampAnchor("2025-01-01", days), "2026-07-01", "anchor before the data");
+  assertEquals(clampAnchor("2026-08-20", days), "2026-08-20", "already inside — untouched");
+  assertEquals(clampAnchor("2027-03-04", []), "2027-03-04", "nothing imported — untouched");
+});
+
+Deno.test("splitHoliday: the public-holiday cohort separates from real absences", () => {
+  const rows = grid({
+    people: [
+      ["Mai Bui", "a", ["p"]],
+      ["Tho Bui", "a", ["h"]],
+      ["Duc Le", "b", ["h"]],
+    ],
+    nDays: 92,
+  });
+  const model = parseVacationWorkbook([{ name: "3rd quarter", rows }], { year: 2026 });
+  const { holiday, other } = splitHoliday(outOn(model, "2026-07-01"));
+  assertEquals(holiday.map((h) => h.name), ["Duc Le", "Tho Bui"]);
+  assertEquals(other.map((o) => o.name), ["Mai Bui"]);
+  assertEquals(splitHoliday([]), { holiday: [], other: [] });
+});
+
+Deno.test("dayCounts: weekends skipped, holidays counted apart from absences", () => {
+  // Indices run 2026-07-01 (We) … 04/05 are the weekend, 06 the Monday.
+  const rows = grid({
+    people: [
+      ["Mai Bui", "a", ["p", "p", "w", "e", "e", "p", "w"]],
+      ["Tho Bui", "a", ["h", "w", "w", "e", "e", "w", "w"]],
+    ],
+    nDays: 92,
+  });
+  const model = parseVacationWorkbook([{ name: "3rd quarter", rows }], { year: 2026 });
+  assertEquals(dayCounts(model, "2026-07-01", "2026-07-07"), [
+    { date: "2026-07-01", count: 1, holiday: 1 },
+    { date: "2026-07-02", count: 1, holiday: 0 },
+    { date: "2026-07-03", count: 0, holiday: 0 },
+    { date: "2026-07-06", count: 1, holiday: 0 },
+    { date: "2026-07-07", count: 0, holiday: 0 },
+  ]);
+});
+
+Deno.test("outDatesText / outDatesLabelText: chip text from grouped out-days", () => {
+  const rows = grid({
+    people: [["Mai Bui", "a", ["p", "p", "p", "e", "e", "p", "sm"]]],
+    nDays: 92,
+  });
+  const model = parseVacationWorkbook([{ name: "3rd quarter", rows }], { year: 2026 });
+  const [mai] = outInRange(model, "2026-07-01", "2026-07-07");
+  assertEquals(outDatesText(mai.dates), "01.07–06.07, 07.07");
+  assertEquals(
+    outDatesLabelText(mai.dates),
+    "01.07–06.07 Annual leave, 07.07 Sick leave (morning)",
+  );
+  assertEquals(outDatesText([]), "");
+});
+
+/* -------- capacity grid & low-coverage flagging -------- */
+
+/**
+ * Two teams over the first ten days of Q3 2026 (01.07 is a Wednesday, so the
+ * first week is a 5-day stub covering 01–05.07 with only 3 working days).
+ * `thin` is deliberately gutted in the second week, `solid` is not.
+ */
+function coverageModel() {
+  const rows = grid({
+    people: [
+      // 01,02,03 | 04,05 weekend | 06,07,08,09,10
+      ["Thin One", "thin", ["w", "w", "w", "e", "e", "p", "p", "p", "p", "w"]],
+      ["Thin Two", "thin", ["w", "w", "w", "e", "e", "p", "p", "c", "w", "w"]],
+      ["Solid One", "solid", ["w", "w", "w", "e", "e", "w", "w", "w", "r", "w"]],
+    ],
+    nDays: 92,
+  });
+  return parseVacationWorkbook([{ name: "3rd quarter", rows }], { year: 2026 });
+}
+
+Deno.test("capacityGrid: one row per team, part weeks keep their own maximum", () => {
+  const weeks = weekSlices(viewDates("month", "2026-07-10"));
+  const rows = capacityGrid(coverageModel(), weeks);
+  assertEquals(rows.map((r) => [r.team, r.members]), [["solid", 1], ["thin", 2]]);
+  // Week 1 = 01–05.07: 3 working days. Week 2 = 06–12.07: 5 working days.
+  assertEquals(
+    rows[1].cells[0],
+    { available: 6, possible: 6 },
+    "thin, stub week: 2 people × 3 days",
+  );
+  assertEquals(rows[1].cells[1], { available: 3, possible: 10 }, "thin, week 2: 7 of 10 lost");
+  assertEquals(rows[0].cells[1], { available: 5, possible: 5 }, "solid, week 2: remote counts");
+  assertEquals(rows[0].cells[2], null, "no data past 10.07 — null, never a zero");
+  assertEquals(capacityGrid(coverageModel(), []), []);
+});
+
+Deno.test("lowCoverage: flags team-weeks under the threshold, ignores no-data weeks", () => {
+  const weeks = weekSlices(viewDates("month", "2026-07-10"));
+  const rows = capacityGrid(coverageModel(), weeks);
+  const low = lowCoverage(rows, weeks, 0.6);
+  assertEquals(low.map((l) => [l.team, l.from, l.available, l.possible]), [
+    ["thin", "2026-07-06", 3, 10],
+  ], "only thin's second week is under 60%");
+  assertEquals(low[0].ratio, 0.3);
+  // A full week at exactly the threshold is not "below" it.
+  assertEquals(lowCoverage(rows, weeks, 0.3).length, 0, "0.3 is not < 0.3");
+  assertEquals(lowCoverage(rows, weeks, 0.31).length, 1);
+  assertEquals(lowCoverage(rows, weeks, 0), [], "a zero threshold reports nothing");
+  // The other three non-null cells sit at exactly 100%, and 1 is not < 1.
+  assertEquals(lowCoverage(rows, weeks, 1).length, 1, "a fully covered week is never below 100%");
+});
+
+Deno.test("lowCoverage: an entirely unimported range yields nothing, not everything", () => {
+  const weeks = weekSlices(viewDates("month", "2026-01-15"));
+  const rows = capacityGrid(coverageModel(), weeks);
+  assertEquals(rows.every((r) => r.cells.every((c) => c === null)), true);
+  assertEquals(lowCoverage(rows, weeks, 0.6), []);
+});
+
+/* -------- the copied standup summary -------- */
+
+/** 2026-07-01 is a Wednesday; 04/05 are the weekend, 09.07 a Thursday. */
+function summaryModel() {
+  const rows = grid({
+    people: [
+      ["Mai Bui", "a", ["p", "p", "p", "e", "e", "p", "w", "w", "h"]],
+      ["Tho Bui", "a", ["h", "w", "w", "e", "e", "w", "w", "w", "h"]],
+      ["Duc Le", "b", ["r", "w", "w", "e", "e", "w", "w", "w", "h"]],
+    ],
+    nDays: 92,
+  });
+  return parseVacationWorkbook([{ name: "3rd quarter", rows }], { year: 2026 });
+}
+
+Deno.test("summaryText: a working day names absences, remotes and the per-day index", () => {
+  assertEquals(summaryText(summaryModel(), "2026-07-01").split("\n"), [
+    "Availability We 01.07",
+    "Public holiday — 1 off",
+    "Out: Mai Bui (Annual leave)",
+    "Remote/onsite: Duc Le (Working remotely)",
+    "Per day: 01.07 1 · 02.07 1 · 03.07 1 · 06.07 1 · 07.07 0",
+    "Next 7 days:",
+    "  Mai Bui: 01.07–06.07 Annual leave",
+    "  Tho Bui: 01.07 Public holiday",
+  ]);
+});
+
+Deno.test("summaryText: a weekend says so instead of 'Out: nobody'", () => {
+  const lines = summaryText(summaryModel(), "2026-07-04").split("\n");
+  assertEquals(lines[0], "Availability Sa 04.07");
+  assertEquals(lines[1], "Weekend — nobody scheduled");
+  assertEquals(lines.some((l) => l.startsWith("Out:")), false, "no misleading 'nobody'");
+  assertEquals(
+    lines[2],
+    "Per day: 06.07 1 · 07.07 0 · 08.07 0 · 09.07 holiday · 10.07 0",
+    "a day everyone is off reads as the holiday it is, not as 3 absences",
+  );
+});
+
+Deno.test("summaryText: a full public holiday collapses to one line", () => {
+  const lines = summaryText(summaryModel(), "2026-07-09").split("\n");
+  assertEquals(lines[0], "Availability Th 09.07");
+  assertEquals(lines[1], "Public holiday — 3 off");
+  assertEquals(lines.some((l) => l.startsWith("Out:")), false, "everyone off is not 'Out: nobody'");
 });
 
 Deno.test("mergeModels: reconciles like the workbook parser, purely", () => {

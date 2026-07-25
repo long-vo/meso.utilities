@@ -28,7 +28,7 @@
       <span class="crumb-current"><span class="crumb-icon card--lime" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><rect class="i1" x="2" y="2" width="3.4" height="3.4" rx="1" /><rect class="i2" x="6.3" y="2" width="3.4" height="3.4" rx="1" /><rect class="i1" x="10.6" y="2" width="3.4" height="3.4" rx="1" /><rect class="i1" x="2" y="6.3" width="3.4" height="3.4" rx="1" /><rect class="i1" x="6.3" y="6.3" width="3.4" height="3.4" rx="1" /><rect class="i2" x="10.6" y="6.3" width="3.4" height="3.4" rx="1" /><rect class="i2" x="2" y="10.6" width="3.4" height="3.4" rx="1" /><rect class="i1" x="6.3" y="10.6" width="3.4" height="3.4" rx="1" /><rect class="i1" x="10.6" y="10.6" width="3.4" height="3.4" rx="1" /></svg></span> Team Availability</span>
     </nav>
     <div class="topbar-actions">
-      <span class="pill pill-privacy" title="The workbook is parsed locally. Names and absences never leave this machine.">
+      <span class="pill pill-privacy" title="The workbook is parsed locally and never uploaded. Share link is the one way data leaves — it travels inside the link itself, not to any server.">
         <span aria-hidden="true">🛡️</span> Runs in your browser
       </span>
       <button id="palette-open" class="icon-btn palette-hint" type="button"
@@ -53,11 +53,12 @@
       <div class="field">
         <label for="file-input">Vacation workbook</label>
         <div id="drop-zone" class="drop-zone" role="button" tabindex="0"
-          aria-label="Import the vacation workbook (.xlsx)">
+          aria-label="Import the vacation workbook (.xlsx), one quarter as .csv, or an availability.json export">
           <strong>Drop the .xlsx here</strong>
-          <span class="hint">or click to choose — e.g. mesoneer-Vacation-2026.xlsx</span>
+          <span class="hint">or click to choose — a quarter .csv or an availability.json
+            export works too</span>
         </div>
-        <input id="file-input" type="file" accept=".xlsx" hidden />
+        <input id="file-input" type="file" accept=".xlsx,.csv,.json,application/json" hidden />
         <p id="import-status" class="hint" aria-live="polite">Nothing imported yet.</p>
       </div>
 
@@ -85,9 +86,11 @@
 
       <div class="field needs-model">
         <label>View</label>
-        <div class="mode-switch" role="tablist" aria-label="Zoom">
-          <button id="view-month" class="mode-btn is-active" role="tab" aria-selected="true" type="button">Month</button>
-          <button id="view-quarter" class="mode-btn" role="tab" aria-selected="false" type="button">Quarter</button>
+        <!-- Toggle buttons, not tabs: there is no tabpanel to select, so
+             aria-pressed is the honest state (same for sanitize and decode). -->
+        <div class="mode-switch" role="group" aria-label="Zoom">
+          <button id="view-month" class="mode-btn is-active" type="button" aria-pressed="true">Month</button>
+          <button id="view-quarter" class="mode-btn" type="button" aria-pressed="false">Quarter</button>
         </div>
         <div class="btn-row nav-row">
           <button id="nav-prev" class="btn btn-ghost btn-small" type="button" aria-label="Previous period">‹ Prev</button>
@@ -105,6 +108,15 @@
       <div class="field needs-model">
         <label for="name-filter">Find a person</label>
         <input id="name-filter" type="search" placeholder="Filter by name…" />
+      </div>
+
+      <div class="field needs-model">
+        <label for="low-threshold">Flag thin weeks below
+          <output id="low-threshold-out" for="low-threshold" class="thresh-out">60%</output>
+        </label>
+        <input id="low-threshold" type="range" min="0" max="100" step="5" value="60" />
+        <p class="hint">A team-week whose available person-days fall under this share of the week's
+          maximum is marked in the capacity table. Drag to 0 to switch it off.</p>
       </div>
 
       <details id="tags-details" class="field needs-model">
@@ -137,8 +149,12 @@
 
     <section class="panel editor" aria-label="Who's out">
       <div class="panel-head">
-        <h2>Out today &amp; this week</h2>
+        <h2>Who's out</h2>
         <div class="result-tools">
+          <input id="day-pick" class="day-pick needs-model" type="date"
+            aria-label="Report on this day" title="Report on any day — the heatmap's day headers and the week index below pick one too" />
+          <button id="day-reset" class="btn btn-ghost btn-small needs-model" type="button" hidden
+            title="Back to today">Today</button>
           <span id="strip-status" class="status"></span>
           <button id="copy-strip" class="btn btn-small needs-model" type="button"
             title="Copy a plain-text summary for standup or Slack">📋 Copy summary</button>
@@ -154,10 +170,12 @@
           <span id="range-label" class="status"></span>
         </div>
       </div>
-      <div id="heatmap-wrap" class="hm-wrap" tabindex="0" aria-label="Availability heatmap, scrollable">
-        <div id="heatmap" class="hm" role="grid" aria-rowcount="0"></div>
+      <div id="heatmap-wrap" class="hm-wrap">
+        <div id="heatmap" class="hm" role="grid" aria-label="Availability heatmap"
+          aria-rowcount="0" aria-colcount="0"></div>
       </div>
-      <h3 class="cap-title needs-model">Team capacity <span class="hint-inline">available person-days per week</span></h3>
+      <h3 class="cap-title needs-model">Team capacity <span class="hint-inline">available person-days per week, over the week's maximum</span></h3>
+      <p id="cap-warn" class="cap-warn needs-model" role="status" hidden></p>
       <div id="capacity" class="cap-wrap needs-model"></div>
     </section>
 
@@ -166,14 +184,19 @@
         <h2>Legend</h2>
       </div>
       <div id="legend" class="legend"></div>
-      <p class="hint">Half-coloured cells are half days (left = morning). Dotted cells have no
-        data for that day.</p>
+      <p class="hint">Half-coloured cells describe half a day (left = morning) — the other half is
+        worked. <code>rm</code>/<code>ra</code> are therefore full days: remote for one half, in the
+        office for the other. Dotted cells have no data for that day.</p>
+      <p class="hint">Tab into the grid, then move with the arrow keys (Page&nbsp;Up/Down by ten
+        rows, Ctrl&nbsp;+&nbsp;Home/End to the corners). Press Enter on a day header — or click it —
+        to report on that day.</p>
     </section>
   </main>
 
   <footer class="footer">
-    The workbook is parsed entirely in your browser — names and absences stay on this machine,
-    in this browser's storage. Nothing is uploaded.
+    The workbook is parsed entirely in your browser and stays in this browser's storage — nothing
+    is uploaded. <strong>Share link</strong> is the one exception: it packs the names and absences
+    you filtered into the link itself, so treat that link like the roster.
   </footer>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
