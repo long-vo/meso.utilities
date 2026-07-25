@@ -3461,6 +3461,33 @@ button.out:focus-visible::after {
   display: none;
 }
 
+/* The arriving-share offer. Sits between the topbar and the layout so it reads
+   as a decision about the page rather than a widget inside it, and so its
+   buttons are ordinary DOM a script can click — the reason it exists. */
+.page-availability .share-offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px auto 0;
+  padding: 12px 16px;
+  max-width: 1540px;
+  width: calc(100% - 32px);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev));
+}
+.page-availability .share-offer[hidden] {
+  display: none;
+}
+.page-availability .share-offer-text {
+  margin: 0;
+  font-size: 13px;
+  min-width: 0;
+  flex: 1;
+}
+
 .page-availability {
   --hm-cell: 17px;
   --hm-name-w: 200px;

@@ -581,6 +581,24 @@ Deno.test("encodeShare/decodeShare: fragment-safe gzip round-trip", async () => 
   assertEquals(unpackModel((decoded as { model: unknown }).model), model);
 });
 
+Deno.test("encodeShare: a replace flag survives the round trip, absence means merge", async () => {
+  // The scheduled workbook refresh marks its payload `replace` so a whole-year
+  // import drops people who left; a shared slice omits it and merges.
+  const rows = grid({ people: [["Long Vo", "mortal", ["w", "p"]]], nDays: 92 });
+  const model = parseVacationWorkbook([{ name: "3rd quarter", rows }], { year: 2026 });
+  const packed = packModel(model);
+  const refresh = { v: 1, year: 2026, tags: {}, replace: true, model: packed };
+  const slice = { v: 1, year: 2026, tags: {}, model: packed };
+  const decodedRefresh = await decodeShare(await encodeShare(refresh)) as { replace?: unknown };
+  const decodedSlice = await decodeShare(await encodeShare(slice)) as { replace?: unknown };
+  assertEquals(decodedRefresh.replace, true);
+  assertEquals(decodedSlice.replace, undefined, "an old link carries no flag");
+  // The page reads it as `payload.replace === true`, so anything else merges.
+  assertEquals(decodedSlice.replace === true, false);
+  // The flag rides alongside the model without disturbing it.
+  assertEquals(unpackModel((decodedRefresh as { model: unknown }).model), model);
+});
+
 Deno.test("decodeShare: garbage in, null out", async () => {
   assertEquals(await decodeShare("definitely not a share link"), null);
   assertEquals(await decodeShare(""), null);

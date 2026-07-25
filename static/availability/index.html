@@ -48,6 +48,18 @@
     </div>
   </header>
 
+  <!-- An arriving #share= payload is offered here rather than through confirm():
+       a native dialog can only be dismissed by a human hand, which rules out
+       the scheduled workbook refresh (see scripts/availability-share-url.ts). -->
+  <div id="share-offer" class="share-offer" role="alertdialog" aria-labelledby="share-offer-text"
+    hidden>
+    <p id="share-offer-text" class="share-offer-text"></p>
+    <div class="btn-row">
+      <button id="share-offer-load" class="btn btn-small" type="button">Load</button>
+      <button id="share-offer-discard" class="btn btn-ghost btn-small" type="button">Discard</button>
+    </div>
+  </div>
+
   <main class="layout" id="main" tabindex="-1">
     <section id="controls" class="panel controls" aria-label="Import, filters and options">
       <div class="field">

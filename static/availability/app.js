@@ -84,6 +84,10 @@ const els = {
   capWarn: $("cap-warn"),
   lowThreshold: $("low-threshold"),
   lowThresholdOut: $("low-threshold-out"),
+  shareOffer: $("share-offer"),
+  shareOfferText: $("share-offer-text"),
+  shareOfferLoad: $("share-offer-load"),
+  shareOfferDiscard: $("share-offer-discard"),
 };
 const toast = makeToast($("toast"));
 
@@ -967,7 +971,15 @@ async function copyShareLink() {
   toast(`Link copied — ${people.length} people (${scope})${size}. Anyone with it can read them.`);
 }
 
-/** Import the payload an opened `#share=` link carries — after asking. */
+/**
+ * The share payload waiting on the banner's Load button, or null. Held here
+ * rather than resolved inline because the question is answered by a DOM click
+ * now: a native `confirm()` blocks the renderer and can only be dismissed by
+ * hand, which made the scheduled workbook refresh impossible to finish.
+ */
+let pendingShare = null;
+
+/** Offer the payload an opened `#share=` link carries, for review. */
 async function consumeShareFragment() {
   const match = /^#share=(.+)$/.exec(location.hash);
   if (match === null) return;
@@ -977,22 +989,43 @@ async function consumeShareFragment() {
     toast("This share link is corrupted or from a newer version");
     return;
   }
+  // A whole-workbook refresh sets `replace`; a shared slice leaves it off and
+  // merges, so one team's export can never wipe the roster it lands in.
+  const replace = payload.replace === true;
   const teams = [...new Set(model.people.map((p) => p.team).filter((t) => t !== ""))];
   const who = teams.length > 0 ? ` (${teams.slice(0, 6).join(", ")})` : "";
-  const ok = confirm(
-    `This link carries availability for ${model.people.length} people${who}.\n\n` +
-      "Merge it into the data in this browser?",
-  );
-  if (!ok) return;
+  pendingShare = { model, payload, replace };
+  els.shareOfferText.textContent =
+    `This link carries availability for ${peopleCount(model.people.length)}${who}. ` +
+    (replace
+      ? "Loading it replaces the data in this browser; your location tags are kept."
+      : "Loading it merges into the data already in this browser.");
+  els.shareOfferLoad.textContent = replace ? "Replace" : "Merge";
+  els.shareOffer.hidden = false;
+  els.shareOfferLoad.focus();
+}
+
+/** Take the offered payload. */
+function acceptShare() {
+  if (pendingShare === null) return;
+  const { model, payload, replace } = pendingShare;
+  pendingShare = null;
+  els.shareOffer.hidden = true;
   // Only drop the fragment once it has actually been taken. Clearing it before
   // the question left a declined link with nothing to retry or bookmark.
   history.replaceState(null, "", location.pathname + location.search);
-  adoptModel(model, Number.isInteger(payload.year) ? payload.year : state.year, false);
+  adoptModel(model, Number.isInteger(payload.year) ? payload.year : state.year, replace);
   if (payload.tags && typeof payload.tags === "object") {
     state.tags = { ...state.tags, ...payload.tags };
   }
-  toast(`Imported ${peopleCount(model.people.length)} from the link`);
+  toast(`${replace ? "Loaded" : "Merged"} ${peopleCount(model.people.length)} from the link`);
   renderAll();
+}
+
+/** Decline it — the fragment stays put so the link can still be retried. */
+function discardShare() {
+  pendingShare = null;
+  els.shareOffer.hidden = true;
 }
 
 function importJsonFile(file) {
@@ -1053,6 +1086,12 @@ els.year.addEventListener("change", () => {
     state.year = year;
     renderAll(); // the status line reports the year — saveState alone left it stale
   }
+});
+
+els.shareOfferLoad.addEventListener("click", acceptShare);
+els.shareOfferDiscard.addEventListener("click", discardShare);
+els.shareOffer.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") discardShare();
 });
 
 els.heatmap.addEventListener("keydown", onGridKeydown);
