@@ -144,6 +144,13 @@ export function nextDate(iso) {
   return new Date(t).toISOString().slice(0, 10);
 }
 
+/** The Monday of the week containing `iso` (capacity groups by week). @param {string} iso */
+export function mondayOf(iso) {
+  const t = new Date(`${iso}T00:00:00Z`);
+  const sinceMonday = (t.getUTCDay() + 6) % 7;
+  return new Date(t.getTime() - sinceMonday * 86_400_000).toISOString().slice(0, 10);
+}
+
 /**
  * Pull the workbook year out of a filename like `mesoneer-Vacation-2026.xlsx`
  * (the last 19xx/20xx group wins). Null when there is none.
@@ -427,6 +434,36 @@ export function outOn(model, date) {
 }
 
 /**
+ * Everyone working away from the office on `date` — remote or onsite codes.
+ * The out-today strip shows this as its own group: these people are available,
+ * just not in the building.
+ *
+ * @param {Model} model
+ * @param {string} date ISO
+ * @returns {Array<{ name: string, team: string, location: string, code: string,
+ *   kind: string, label: string, half: "am" | "pm" | null }>}
+ */
+export function remoteOn(model, date) {
+  const away = [];
+  for (const person of model.people) {
+    const code = person.days[date];
+    if (code === undefined) continue;
+    const info = codeInfo(code);
+    if (info.kind !== "remote" && info.kind !== "onsite") continue;
+    away.push({
+      name: person.name,
+      team: person.team,
+      location: person.location,
+      code,
+      kind: info.kind,
+      label: info.label,
+      half: info.half,
+    });
+  }
+  return away.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
  * Per person, every not-fully-available day in `from..to` (inclusive,
  * weekends excluded). People with nothing to report are omitted.
  *
@@ -517,4 +554,96 @@ export function applyLocationHolidays(model, tags, holidays) {
     return { ...person, location, days };
   });
   return { people, days: model.days, warnings: model.warnings };
+}
+
+// --- persistence & merging ---------------------------------------------------------
+
+/**
+ * Compact JSON form for localStorage: one comma-joined code string per person,
+ * aligned to the model's day axis (roughly 10× smaller than the raw model).
+ * Codes are URI-encoded so even a dirty cell containing a comma survives.
+ *
+ * @param {Model} model
+ * @returns {{ v: 1, days: string, warnings: Warning[],
+ *   people: Array<{ name: string, team: string, location: string, codes: string }> }}
+ */
+export function packModel(model) {
+  return {
+    v: 1,
+    days: model.days.join(","),
+    people: model.people.map((person) => ({
+      name: person.name,
+      team: person.team,
+      location: person.location,
+      codes: model.days.map((d) => encodeURIComponent(person.days[d] ?? "")).join(","),
+    })),
+    warnings: model.warnings,
+  };
+}
+
+/**
+ * Inverse of {@link packModel}. Returns null for anything malformed or from
+ * a future version — callers fall back to an empty state instead of crashing
+ * on a stale localStorage entry.
+ *
+ * @param {unknown} packed
+ * @returns {Model | null}
+ */
+export function unpackModel(packed) {
+  if (packed === null || typeof packed !== "object") return null;
+  const p = /** @type {{ v?: unknown, days?: unknown, people?: unknown, warnings?: unknown }} */ (
+    packed
+  );
+  if (p.v !== 1 || typeof p.days !== "string" || !Array.isArray(p.people)) return null;
+  const axis = p.days === "" ? [] : p.days.split(",");
+  const people = [];
+  for (const q of p.people) {
+    if (q === null || typeof q !== "object") return null;
+    if (typeof q.name !== "string" || typeof q.codes !== "string") return null;
+    /** @type {Record<string, string>} */
+    const days = {};
+    const codes = q.codes.split(",");
+    for (let i = 0; i < axis.length; i++) {
+      const code = codes[i];
+      if (code !== undefined && code !== "") days[axis[i]] = decodeURIComponent(code);
+    }
+    people.push({
+      name: q.name,
+      team: typeof q.team === "string" ? q.team : "",
+      location: q.location === "CH" ? "CH" : "VN",
+      days,
+    });
+  }
+  return { people, days: axis, warnings: Array.isArray(p.warnings) ? p.warnings : [] };
+}
+
+/**
+ * Merge a partial model into an existing one — the CSV path imports one
+ * quarter at a time. Same reconciliation rules as the workbook parser: match
+ * by name, the incoming team label wins when present, incoming days win per
+ * date. Pure: neither input is mutated.
+ *
+ * @param {Model} base
+ * @param {Model} incoming
+ * @returns {Model}
+ */
+export function mergeModels(base, incoming) {
+  /** @type {Map<string, Person>} */
+  const byName = new Map(
+    base.people.map((person) => [person.name, { ...person, days: { ...person.days } }]),
+  );
+  for (const person of incoming.people) {
+    const existing = byName.get(person.name);
+    if (existing === undefined) {
+      byName.set(person.name, { ...person, days: { ...person.days } });
+    } else {
+      if (person.team !== "") existing.team = person.team;
+      Object.assign(existing.days, person.days);
+    }
+  }
+  return {
+    people: [...byName.values()],
+    days: [...new Set([...base.days, ...incoming.days])].sort(),
+    warnings: [...base.warnings, ...incoming.warnings],
+  };
 }

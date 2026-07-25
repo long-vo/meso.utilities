@@ -503,6 +503,17 @@ a.card:hover .card-go {
   --card-mid: #85b7eb;
   --card-deep: #0c447c;
 }
+.card--lime {
+  --card-tint: #263a06;
+  --card-ink: #d3f284;
+  --card-sub: #a4d631;
+  --card-paper: #d3f284;
+  --card-art1: #84b515;
+  --card-art2: #5c8110;
+  --card-art3: #3f5c07;
+  --card-mid: #a4d631;
+  --card-deep: #3f5c07;
+}
 
 :root[data-theme="light"] .card--purple {
   --card-tint: #eeedfe;
@@ -566,6 +577,15 @@ a.card:hover .card-go {
   --card-art2: #85b7eb;
   --card-art3: #b5d4f4;
   --card-deep: #185fa5;
+}
+:root[data-theme="light"] .card--lime {
+  --card-tint: #eff7dd;
+  --card-ink: #263a06;
+  --card-sub: #5c8110;
+  --card-paper: #ffffff;
+  --card-art2: #a4d631;
+  --card-art3: #d3f284;
+  --card-deep: #5c8110;
 }
 
 body.page-hub .cards {
@@ -3364,4 +3384,397 @@ button.out:focus-visible::after {
    like their emoji siblings. */
 .palette-icon .crumb-icon {
   vertical-align: -2px;
+}
+
+/* ---------------------------- Team Availability ---------------------------- */
+/* Scoped to .page-availability throughout — the shared .layout grid is never
+   overridden (see the stylesheet gotcha in CLAUDE.md). The day-kind hues are
+   fixed colors chosen to read on both themes; the surfaces underneath come
+   from theme tokens. */
+
+.page-availability {
+  --hm-cell: 17px;
+  --hm-name-w: 200px;
+  --av-remote: #3f8cf3;
+  --av-onsite: #8b5cf6;
+  --av-leave: #ef4444;
+  --av-planned: #f9820a;
+  --av-core: #eab308;
+  --av-sick: #ec4899;
+  --av-social: #a855f7;
+  --av-holiday: #14b8a6;
+  --av-unknown: #ff00dd;
+  --av-grid: color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.page-availability .drop-zone {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  text-align: center;
+  padding: 16px 12px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+  cursor: pointer;
+}
+.page-availability .drop-zone:hover,
+.page-availability .drop-zone:focus-visible,
+.page-availability .drop-zone.is-drag {
+  border-color: var(--accent);
+}
+.page-availability .drop-zone.is-drag {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-inset));
+}
+
+.page-availability .select {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.page-availability .btn-row .select {
+  width: auto;
+  flex: 1;
+}
+.page-availability .csv-area {
+  min-height: 90px;
+  margin-top: 8px;
+}
+.page-availability .nav-row {
+  margin-top: 8px;
+}
+.page-availability details.field > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.page-availability details.field[open] > summary {
+  margin-bottom: 8px;
+}
+.page-availability .hint-inline {
+  color: var(--text-faint);
+  font-weight: 400;
+  font-size: 11.5px;
+}
+.page-availability .chip-btn {
+  cursor: pointer;
+}
+.page-availability .chip.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.page-availability .tag-bulk {
+  margin-bottom: 8px;
+}
+.page-availability .tag-list {
+  display: grid;
+  gap: 4px;
+  max-height: 260px;
+  overflow: auto;
+}
+.page-availability .tag-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.page-availability .tag-who {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.page-availability .tag-who > :first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-availability .tag-team {
+  color: var(--text-faint);
+  font-size: 11px;
+  flex: none;
+}
+.page-availability .tag-pair .btn.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.page-availability .warnings-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--warn);
+}
+.page-availability .warnings-list li {
+  margin: 3px 0;
+}
+
+/* Day-kind dots — legend and strip chips. */
+.page-availability .dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  background: var(--c, transparent);
+  flex: none;
+}
+.page-availability .dot-working {
+  border: 1px solid var(--border-strong);
+}
+.page-availability .dot-weekend {
+  background: repeating-linear-gradient(45deg, transparent 0 2px, var(--border-strong) 2px 3px);
+}
+.page-availability .dot-remote {
+  --c: var(--av-remote);
+}
+.page-availability .dot-onsite {
+  --c: var(--av-onsite);
+}
+.page-availability .dot-leave {
+  --c: var(--av-leave);
+}
+.page-availability .dot-planned {
+  --c: var(--av-planned);
+}
+.page-availability .dot-core {
+  --c: var(--av-core);
+}
+.page-availability .dot-sick {
+  --c: var(--av-sick);
+}
+.page-availability .dot-social {
+  --c: var(--av-social);
+}
+.page-availability .dot-holiday {
+  --c: var(--av-holiday);
+}
+.page-availability .dot-unknown {
+  --c: var(--av-unknown);
+}
+.page-availability .legend-chip .legend-codes {
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+
+/* Out today / this week strip. */
+.page-availability .strip {
+  display: grid;
+  gap: 14px;
+}
+.page-availability .strip-title {
+  margin: 0 0 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+.page-availability .strip-chip .strip-detail {
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
+/* The heatmap. Each row is its own grid with identical fixed tracks, so the
+   sticky name column and the sticky header stay aligned while the wrapper
+   scrolls in both directions. */
+.page-availability .hm-wrap {
+  overflow: auto;
+  max-height: 68vh;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+}
+.page-availability .hm {
+  width: max-content;
+  min-width: 100%;
+}
+.page-availability .hm-row {
+  display: grid;
+  grid-template-columns: var(--hm-name-w) repeat(var(--hm-cols, 0), var(--hm-cell));
+}
+.page-availability .hm-head-row {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--bg-elev);
+  box-shadow: 0 1px 0 var(--border);
+}
+.page-availability .hm-corner,
+.page-availability .hm-name {
+  position: sticky;
+  left: 0;
+  background: var(--bg-elev);
+  border-right: 1px solid var(--border);
+}
+.page-availability .hm-corner {
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.page-availability .hm-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  line-height: 1.15;
+  border-left: 1px solid var(--av-grid);
+  color: var(--text-dim);
+}
+.page-availability .hm-head .hm-dom {
+  font-size: 10px;
+  font-weight: 600;
+}
+.page-availability .hm-head .hm-dow {
+  font-size: 8.5px;
+  opacity: 0.75;
+}
+.page-availability .hm-head.is-weekend {
+  color: var(--text-faint);
+  opacity: 0.75;
+}
+.page-availability .hm-head.is-today {
+  color: var(--accent);
+}
+.page-availability .hm-name {
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  border-top: 1px solid var(--av-grid);
+}
+.page-availability .hm-person {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-availability .hm-team {
+  color: var(--text-faint);
+  font-size: 10.5px;
+  flex: none;
+}
+.page-availability .hm-loc {
+  flex: none;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 0 3px;
+}
+.page-availability .hm-cell {
+  height: 24px;
+  border-top: 1px solid var(--av-grid);
+  border-left: 1px solid var(--av-grid);
+  background-color: var(--bg-elev);
+}
+.page-availability .hm-cell.k-remote {
+  --c: var(--av-remote);
+}
+.page-availability .hm-cell.k-onsite {
+  --c: var(--av-onsite);
+}
+.page-availability .hm-cell.k-leave {
+  --c: var(--av-leave);
+}
+.page-availability .hm-cell.k-planned {
+  --c: var(--av-planned);
+}
+.page-availability .hm-cell.k-core {
+  --c: var(--av-core);
+}
+.page-availability .hm-cell.k-sick {
+  --c: var(--av-sick);
+}
+.page-availability .hm-cell.k-social {
+  --c: var(--av-social);
+}
+.page-availability .hm-cell.k-holiday {
+  --c: var(--av-holiday);
+}
+.page-availability .hm-cell.k-unknown {
+  --c: var(--av-unknown);
+}
+.page-availability .hm-cell.k-remote,
+.page-availability .hm-cell.k-onsite,
+.page-availability .hm-cell.k-leave,
+.page-availability .hm-cell.k-planned,
+.page-availability .hm-cell.k-core,
+.page-availability .hm-cell.k-sick,
+.page-availability .hm-cell.k-social,
+.page-availability .hm-cell.k-holiday,
+.page-availability .hm-cell.k-unknown {
+  background-image: linear-gradient(var(--c), var(--c));
+}
+.page-availability .hm-cell.half-am {
+  background-image: linear-gradient(to right, var(--c) 0 50%, transparent 50%);
+}
+.page-availability .hm-cell.half-pm {
+  background-image: linear-gradient(to right, transparent 0 50%, var(--c) 50%);
+}
+.page-availability .hm-cell.k-weekend {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 3px,
+    color-mix(in srgb, var(--text-faint) 22%, transparent) 3px 4px
+  );
+}
+.page-availability .hm-cell.is-blank {
+  background-image: radial-gradient(circle at 50% 50%, var(--av-grid) 1px, transparent 1.5px);
+}
+.page-availability .hm-cell.is-today {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.page-availability .hm-cell.m-start,
+.page-availability .hm-head.m-start {
+  border-left: 2px solid var(--border-strong);
+}
+.page-availability .hm-empty {
+  padding: 22px;
+}
+
+/* Capacity table. */
+.page-availability .cap-title {
+  margin: 18px 0 8px;
+  font-size: 13.5px;
+}
+.page-availability .cap-wrap {
+  overflow-x: auto;
+}
+.page-availability .cap-table {
+  border-collapse: collapse;
+  font-size: 12.5px;
+  min-width: 340px;
+}
+.page-availability .cap-table th,
+.page-availability .cap-table td {
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  white-space: nowrap;
+}
+.page-availability .cap-table th {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.page-availability .cap-table .cap-team {
+  text-align: left;
+  position: sticky;
+  left: 0;
+  background: var(--bg-elev);
 }

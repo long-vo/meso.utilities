@@ -16,14 +16,19 @@ import {
   CODES,
   daysInQuarter,
   HOLIDAYS_CH_ZURICH,
+  mergeModels,
+  mondayOf,
   nextDate,
   outInRange,
   outOn,
+  packModel,
   parseCsv,
   parseQuarterCsv,
   parseVacationWorkbook,
   quarterDates,
+  remoteOn,
   teamCapacity,
+  unpackModel,
   yearFromFilename,
 } from "../static/availability/availability.mjs";
 
@@ -410,4 +415,75 @@ Deno.test("parseQuarterCsv: one exported quarter equals the xlsx path", () => {
   assertEquals(fromCsv.days, fromRows.days);
   assertEquals(person(fromCsv, "Vo, Long").days["2026-07-02"], "p", "quoted comma name");
   assertThrows(() => parseQuarterCsv("x", { year: 2026, quarter: 5 }), "quarter (1-4)");
+});
+
+Deno.test("mondayOf: snaps any day to its week's Monday, across year ends too", () => {
+  assertEquals(mondayOf("2026-07-25"), "2026-07-20", "Saturday");
+  assertEquals(mondayOf("2026-07-20"), "2026-07-20", "Monday stays");
+  assertEquals(mondayOf("2026-07-26"), "2026-07-20", "Sunday belongs to the same week");
+  assertEquals(mondayOf("2026-01-04"), "2025-12-29", "first week can start last year");
+});
+
+Deno.test("remoteOn: lists remote and onsite people, not the office ones", () => {
+  const rows = grid({
+    people: [
+      ["Tuyen Nguyen", "capoo", ["w"]],
+      ["Linh Vo", "pika", ["rm"]],
+      ["Bao Huynh", "capy", ["ch"]],
+      ["Mai Bui", "a", ["p"]],
+    ],
+    nDays: 92,
+  });
+  const model = parseVacationWorkbook([{ name: "3rd quarter", rows }], { year: 2026 });
+  const away = remoteOn(model, "2026-07-01");
+  assertEquals(away.map((x) => [x.name, x.code, x.kind, x.half]), [
+    ["Bao Huynh", "ch", "onsite", null],
+    ["Linh Vo", "rm", "remote", "am"],
+  ]);
+});
+
+Deno.test("packModel/unpackModel: survives a JSON round-trip, commas and all", () => {
+  const rows = grid({
+    people: [["Long Vo", "mortal", ["w", "p", "x,y", null, "sm"]]],
+    nDays: 92,
+  });
+  const model = parseVacationWorkbook([{ name: "3rd quarter", rows }], { year: 2026 });
+  assertEquals(model.warnings.length, 1, "x,y is a dirty cell");
+  const restored = unpackModel(JSON.parse(JSON.stringify(packModel(model))));
+  assertEquals(restored, model, "byte-for-byte model round-trip");
+  assertEquals(person(restored as Model, "Long Vo").days["2026-07-03"], "x,y");
+  assertEquals(person(restored as Model, "Long Vo").days["2026-07-04"], undefined);
+});
+
+Deno.test("unpackModel: rejects malformed or future payloads with null", () => {
+  assertEquals(unpackModel(null), null);
+  assertEquals(unpackModel("nope"), null);
+  assertEquals(unpackModel({ v: 2, days: "", people: [] }), null);
+  assertEquals(unpackModel({ v: 1, days: "", people: [{ name: 1, codes: "" }] }), null);
+});
+
+Deno.test("mergeModels: reconciles like the workbook parser, purely", () => {
+  const q1 = parseVacationWorkbook(
+    [{ name: "1st quarter", rows: grid({ people: [["Anh Pham", "Pragma", ["p"]]], nDays: 90 }) }],
+    { year: 2026 },
+  );
+  const q3 = parseVacationWorkbook(
+    [{
+      name: "3rd quarter",
+      rows: grid({
+        people: [["Anh Pham", "pragma", ["v"]], ["Khoi Le", "Pragma", ["w"]]],
+        nDays: 92,
+      }),
+    }],
+    { year: 2026 },
+  );
+  const merged = mergeModels(q1, q3);
+  assertEquals(merged.people.length, 2);
+  const anh = person(merged, "Anh Pham");
+  assertEquals(anh.team, "pragma");
+  assertEquals(anh.days["2026-01-01"], "p");
+  assertEquals(anh.days["2026-07-01"], "v");
+  assertEquals(merged.days.length, 90 + 92);
+  assertEquals(person(q1, "Anh Pham").team, "Pragma", "base model not mutated");
+  assertEquals(person(q1, "Anh Pham").days["2026-07-01"], undefined);
 });
