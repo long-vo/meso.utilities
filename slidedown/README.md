@@ -88,6 +88,20 @@ Prefix filenames with numbers to control order:
 A ready-to-try set of files lives in the [`examples/`](./examples) folder —
 select all of them on the start screen to load them as a deck.
 
+### Write or paste slides
+
+No files needed — click **"Write or paste slides"** on the start screen to open a
+live editor. Pick a format (Markdown, AsciiDoc, or HTML), type or paste on the
+left, and the slides render on the right as you go; click a thumbnail to jump
+around. **Present** launches the deck, and exiting a presentation you started
+from the editor drops you back in the editor with your text intact. Your draft is
+saved locally, so a reload won't lose it.
+
+Pasted text behaves exactly like a dropped file of that format, so every
+authoring marker below (`---`, `???`, `+++`, layout directives, front-matter)
+works — split slides with `---`, and so on. Link straight to the editor with the
+**`#editor`** hash, e.g. `…/slidedown/#editor`.
+
 ## Navigation
 
 | Action               | Keys                              |
@@ -195,9 +209,9 @@ theme: dark
 
 ```
 src/
-  App.tsx                 App shell: start screen ↔ presentation
+  App.tsx                 App shell: start screen ↔ editor ↔ presentation
   main.tsx                React entry point + global styles
-  types.ts                Shared types (Slide, Direction)
+  types.ts                Shared types (Slide, Direction, Draft)
   styles.css              All styling and the 16:9 slide theme
   lib/
     markdown.ts           Markdown → sanitized HTML pipeline (+ HTML sanitizer)
@@ -210,6 +224,7 @@ src/
     useFullscreen.ts      Fullscreen toggle
   components/
     StartScreen.tsx       Drag & drop / file picker
+    Editor.tsx            Paste/write editor: live preview + thumbnail rail
     Presentation.tsx      Slide/zoom/fragment state, scaling, transitions
     Slide.tsx             A single scaled 16:9 slide
     Controls.tsx          Floating control bar

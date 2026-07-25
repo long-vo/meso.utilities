@@ -5,8 +5,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 Slidedown is a client-only, PowerPoint-like presentation viewer. The user drops
-files on a start screen and navigates them as slides. There is no backend and no
-routing — everything runs in the browser and all file parsing is local.
+files on a start screen — or writes/pastes text in a live editor — and navigates
+the result as slides. There is no backend and no router (the only URL state is
+the `#deck=…` share link and the `#editor` deep link) — everything runs in the
+browser and all file parsing is local.
 
 The core rule: **one file = one slide, ordered by natural filename sort**, with
 exceptions — a PDF expands to one slide per page, an AsciiDoc file to one slide
@@ -31,10 +33,17 @@ part of `build`) is the only automated check.
 
 Data flows in one direction: **files → `Slide[]` → render**.
 
-- `src/App.tsx` is a two-state switch: no slides → `StartScreen`; slides →
-  `Presentation`. A third, transient state restores a deck from a `#deck=…`
-  share link on mount (spinner while decoding; decode failure falls back to
-  `StartScreen` with an error).
+- `src/App.tsx` is a `mode` state machine — `start` → `editor` → `present` —
+  plus a transient restore state for a `#deck=…` share link on mount (spinner
+  while decoding; failure falls back to `StartScreen` with an error). Files
+  dropped on the start screen go straight to `present`; the "Write or paste
+  slides" button opens the `editor`. `present` records its origin
+  (`presentOrigin`), so exiting a presentation launched from the editor returns
+  to the editor (text intact) rather than the start screen. The editor `Draft`
+  (`{ text, format }`) is lifted here and persisted to
+  `localStorage['slidedown.draft']` (debounced). A `#editor` hash opens the
+  editor directly and is mirrored into the address bar while editing — but the
+  sync bails on a `#deck=…` link so it never clobbers a share link.
 - `src/lib/share.ts` — content-in-URL share links (mermaid.live-style):
   `'#deck=1.' + base64url(deflate-raw(JSON SourceFile[]))` via the native
   `CompressionStream` API. Only text decks are shareable: `slidesFromFiles()`
@@ -48,7 +57,8 @@ Data flows in one direction: **files → `Slide[]` → render**.
   `notes` (rendered HTML) and a `fragmentCount` (>= 1). `ProtoSlide` is a slide
   before its index-based `id`. `slidesFromFiles()` returns a `Deck`
   (`{ slides, meta }`) where `meta` carries front-matter (`title`, `author`,
-  `theme`).
+  `theme`). It also defines the paste editor's `Draft` (`{ text, format }`) and
+  `ComposeFormat` / `COMPOSE_FORMATS` / `COMPOSE_FORMAT_LABELS`.
 - `src/lib/deck.ts` is the loader and the heart of the app. `slidesFromFiles()`
   filters supported files, sorts them naturally by filename, and expands each:
   Markdown → strip front-matter, split on `---`, split notes on `???`, split
@@ -64,6 +74,15 @@ Data flows in one direction: **files → `Slide[]` → render**.
 - `src/lib/mermaid.ts` — `renderMermaidInHtml()` finds `code.language-mermaid`
   in already-rendered HTML and replaces each block with inline SVG. Runs once at
   load time so slides and overview thumbnails both just render stored HTML.
+- `src/components/Editor.tsx` — the paste/write editor. A debounced effect wraps
+  the textarea text in a virtual `File([text], 'deck.<ext>')` and runs it through
+  `slidesFromFiles()` — **no new parsing; pasted text is treated exactly like a
+  dropped file** — guarding out-of-order async builds with a `buildId` ref and a
+  `mounted` ref (the present transition unmounts it). It reuses `SlideView` for
+  the big preview (fit-scaled like `Presentation`, but rendered **outside**
+  `.stage-wrap` so all `+++` fragments show) and the `.thumb*` markup for the
+  rail. **Present** rebuilds synchronously from the current text so a mid-debounce
+  click can't launch a stale deck.
 - `src/components/Presentation.tsx` — owns index/step/direction/zoom/pan/
   overview/speaker/print state and all interaction. Slides live on a **fixed
   1280×720 (16:9) stage** scaled to fit via a `ResizeObserver` (`fitScale`);
@@ -82,6 +101,17 @@ Data flows in one direction: **files → `Slide[]` → render**.
   of CSS variables under `[data-theme='…']` in `styles.css` (including the
   `--glow-*` aurora colours); add one by extending `THEMES` in `types.ts` plus a
   CSS block and a `.swatch-*` colour.
+- **Chrome tokens.** The **presentation** chrome stays dark in every theme (it
+  reads `--app-bg` directly), but the **start screen and editor** are surfaces
+  people sit on, so they follow the theme via a shared `--chrome-*` token set:
+  light for the light-content themes (light/sepia/forest/contrast), dark for
+  dark/midnight. The tokens are scoped to the `.editor` / `.start` roots (not the
+  theme blocks) so the editor's per-deck `data-theme` on `.editor-right` — which
+  themes only the preview slide + thumbnails — can't hijack the surrounding
+  chrome. Reused-but-dark-tuned bits (the `.start-brand*` wordmark, `.ctrl-btn`
+  theme-menu trigger) are re-pointed at `--chrome-*`; on bright themes the
+  `meso.utilities` wordmark takes the hub's blue→purple brand gradient to match
+  the other utilities.
 
 ## Conventions and gotchas
 
@@ -105,7 +135,10 @@ Data flows in one direction: **files → `Slide[]` → render**.
   export (which live outside `.slide-content`).
 - Adding an input format: extend `deck.ts` (an `isXxxFile` check,
   `isSupportedFile`, a proto builder), handle any new `kind` in `Slide.tsx` and
-  `Overview.tsx`, and update the `accept` attribute in `StartScreen.tsx`.
+  `Overview.tsx`, and update the `accept` attribute in `StartScreen.tsx`. For a
+  **text** format, also add it to `COMPOSE_FORMATS` / `COMPOSE_FORMAT_LABELS` in
+  `types.ts` and the extension map in `Editor.tsx` so it appears in the paste
+  editor's format selector.
 - Theme is driven by CSS variables in `src/styles.css` (`--accent`, `--app-bg*`,
   `--slide-bg`); the slide title (`h1`) uses `--accent`.
 - TypeScript is `strict` with `noUnusedLocals`/`noUnusedParameters`; the new JSX

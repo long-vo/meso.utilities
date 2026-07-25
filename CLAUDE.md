@@ -60,15 +60,31 @@ Tools come in three tiers:
   hub with an ↗ card.
 
 The hub (`static/index.html` + `static/hub.js`) lists every tool as a card and owns hub-only
-interactions (share-to-Slack, favourite stars, favourites-only filter — all persisted in
-`localStorage`). Cards carry a `data-tool` id that the favourites/filter logic keys off; new cards
-need one. Shared assets live at the `static/` root and are referenced by every tool with relative
-paths: a **single** `styles.css` covers the hub and all tools (scope page-specific rules — the hub
-page uses `<main class="hub">`/`<body class="page-hub">`, tool pages use `<main class="layout">`),
-plus `theme.js` (dark/light toggle), `palette.js` + `palette.mjs` (the Ctrl/⌘ K command palette —
-pages contribute page-specific actions via `registerCommands`) and `handoff.mjs` (the cross-tool
-"Send to" handoff over `sessionStorage`). Both shared `.mjs` modules follow the dual-consumption
-pattern and have parity tests.
+interactions (share-to-Slack, favourite stars, favourites-only filter, drag-to-reorder — all
+persisted in `localStorage`). Cards carry a `data-tool` id that the favourites/filter/order logic
+keys off; new cards need one. The card order is the user's own — favourites no longer float to the
+top — and `static/reorder.mjs` holds that ordering logic (dual-consumption, with parity tests):
+saved orders are reconciled against the cards on the page, so a tool added later lands at the end
+instead of disappearing.
+
+Four things the drag wiring in `hub.js` depends on, each of which looks removable and isn't:
+
+- The pointer listeners live on `document`, not on the grip via `setPointerCapture` — reordering
+  re-inserts the dragged card, which implicitly releases the capture and strands the drag.
+- The dragged card's own empty slot is part of the hit-testing geometry, without which a drag into
+  the last row's empty tail oscillates as the grid reflows under the pointer.
+- The `card-appear` entrance animation is retired (`.cards.is-settled`) before any reorder: a
+  replayed animation's `transform` outranks the inline one the drag sets, snapping the card back.
+- Both the drag and the keyboard path commit through `withVisibleOrder`, so reordering while the
+  favourites filter is on leaves the cards it hides in the slots they already had.
+
+Shared assets live at the `static/` root and are referenced by every tool with relative paths: a
+**single** `styles.css` covers the hub and all tools (scope page-specific rules — the hub page uses
+`<main class="hub">`/`<body class="page-hub">`, tool pages use `<main class="layout">`), plus
+`theme.js` (dark/light toggle), `palette.js` + `palette.mjs` (the Ctrl/⌘ K command palette — pages
+contribute page-specific actions via `registerCommands`) and `handoff.mjs` (the cross-tool "Send to"
+handoff over `sessionStorage`). Both shared `.mjs` modules follow the dual-consumption pattern and
+have parity tests.
 
 A gotcha with that single stylesheet: some tool pages override the shared `.layout` grid with extra
 areas — Leave's `.page-leave .layout` adds a `templates` column. A shared `.layout` grid override

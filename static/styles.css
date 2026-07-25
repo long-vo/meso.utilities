@@ -1804,13 +1804,18 @@ input[aria-invalid="true"] {
   position: relative;
 }
 .cards .card .card-head {
-  padding-right: 28px; /* room for the star */
+  padding-right: 50px; /* room for the grip and the star */
 }
 
+/* The star and the grip share the corner. Their hit areas must not overlap, so
+   both are 26px wide and sit side by side: star 8→34px, grip 34→60px from the
+   card's right edge (the .card-head padding above keeps the title clear of the
+   pair). `.page-transform` reuses the star inline — it resets `position`, so the
+   offsets here are hub-only. */
 .fav-btn {
   position: absolute;
-  top: 10px;
-  right: 12px;
+  top: 15px;
+  right: 8px;
   background: none;
   border: none;
   padding: 4px;
@@ -1819,6 +1824,17 @@ input[aria-invalid="true"] {
   color: var(--text-faint);
   cursor: pointer;
   transition: transform 0.15s, color 0.15s;
+}
+/* Hub-only: an identical 26×26 box for the star, so it shares the grip's
+   baseline instead of sitting a couple of pixels lower. Both keep `top: 15px`,
+   which also lines the pair up with the card title beside them. */
+.cards .card .fav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
 }
 body.page-hub .fav-btn:not(:hover, .is-fav) {
   color: color-mix(in srgb, var(--card-ink, var(--text-faint)) 55%, transparent);
@@ -1831,11 +1847,77 @@ body.page-hub .fav-btn:not(:hover, .is-fav) {
   color: var(--warn);
 }
 
+/* ---- hub drag-to-reorder ---- */
+
+/* The grip sits beside the star, 26×26 so the touch target clears WCAG's 24px
+   minimum — it's the drag affordance, so it has to be comfortable on a phone.
+   `touch-action: none` is what makes a touch drag reorder instead of scrolling
+   the page. */
+.grip-btn {
+  position: absolute;
+  top: 15px;
+  right: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: none;
+  border: none;
+  padding: 0;
+  line-height: 1;
+  color: var(--text-faint);
+  cursor: grab;
+  touch-action: none;
+  transition: color 0.15s;
+}
+.grip-btn svg {
+  fill: currentColor;
+}
+body.page-hub .grip-btn:not(:hover, :focus-visible) {
+  color: color-mix(in srgb, var(--card-ink, var(--text-faint)) 40%, transparent);
+}
+.grip-btn:hover {
+  color: var(--accent);
+}
+.grip-btn:active {
+  cursor: grabbing;
+}
+
+.cards.is-reordering {
+  user-select: none;
+}
+
+/* The dragged card follows the pointer (hub.js sets the transform) and leaves
+   its slot in the grid open as the drop target. `transition: none` is the point
+   here: the shared `.card` rule transitions `transform`, which would smear every
+   pointer step into 150ms of lag. */
+.cards.is-reordering .card.is-dragging {
+  z-index: 5;
+  cursor: grabbing;
+  opacity: 0.9;
+  border-color: var(--accent);
+  box-shadow: 0 18px 34px rgb(0 0 0 / 32%);
+  transition: none;
+}
+/* A hover lift on the card being dragged over would fight the drag transform. */
+.cards.is-reordering a.card:hover:not(.is-dragging) {
+  transform: none;
+}
+
+/* The staggered entrance is a first-load flourish; hub.js retires it before any
+   reorder, because a replayed `card-appear` transform outranks the inline one
+   the drag sets and would snap the card back to its slot. */
+.cards.is-settled .card {
+  animation: none;
+}
+
 /* ---- hub favourites filter ---- */
 
 .cards-toolbar {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
   margin-top: 28px;
 }
 .cards.has-toolbar {

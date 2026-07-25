@@ -20,14 +20,18 @@ everything here runs entirely in your browser and deploys to GitHub Pages.
   plugin: switch case (camelCase ↔ snake_case ↔ kebab-case …), sort, align, grep, trim, dedupe,
   quote juggling and JSON ↔ YAML — applied in place with undo. Runs fully client-side.
 - **Slidedown** (`/slidedown/`) — turn Markdown, HTML, AsciiDoc, PDFs and images into navigable
-  presentation slides, with speaker view, themes, PDF export and shareable content-in-URL links for
-  text decks. A Vite/React app (in `slidedown/`) built in CI; runs fully client-side.
+  presentation slides — drop files or paste/write them in a live editor — with speaker view, themes,
+  PDF export and shareable content-in-URL links for text decks. A Vite/React app (in `slidedown/`)
+  built in CI; runs fully client-side.
 - **Scrum Poker** — planning poker for team estimation. Lives in its own repo,
   [meso.poker](https://github.com/long-vo/meso.poker), and is hosted on Render (it needs a server
   for live rooms); the hub links straight to it.
 
-On the hub, the ☆ star at the top-right of each card marks a tool as a favourite — favourites float
-to the top of the grid and are remembered in your browser's `localStorage`. Every page also has a
+On the hub, the ☆ star at the top-right of each card marks a tool as a favourite, and the
+**Favourites only** toggle narrows the grid to just those. The ⠿ grip beside the star drags a card
+anywhere in the grid — mouse or touch — or, with the grip focused, the **arrow keys** move it a slot
+(↑↓ by a whole row); **Reset order** appears in the toolbar once you've rearranged anything. Your
+order and your favourites are remembered in your browser's `localStorage`. Every page also has a
 command palette — press **Ctrl/⌘ K** to jump between tools or run the current page's main actions.
 
 **Live:** <https://long-vo.github.io/meso.utilities/>
@@ -269,6 +273,7 @@ src/
   leave.test.ts       leave-request builder tests (import the module from static/leave/)
   shortlink.test.ts   shortlink logic tests (import the module from static/shortlink/)
   transform.test.ts   text-transform tests (import the modules from static/transform/)
+  reorder.test.ts     hub card-ordering tests (import the module from static/)
 static/
   index.html          hub / master page (lists all tools)
   styles.css          shared theme + hub + tool styles
@@ -276,7 +281,8 @@ static/
   palette.js          shared command palette (Ctrl/⌘ K) overlay, on every page
   palette.mjs         palette filtering/ranking (imported by the browser and the tests)
   handoff.mjs         cross-tool "Send to" handoff (imported by the browser and the tests)
-  hub.js              hub master-page interactions (share to Slack, favourite stars)
+  hub.js              hub master-page interactions (share to Slack, favourite stars, card drag)
+  reorder.mjs         hub card ordering logic (imported by the browser and the tests)
   sanitize.mjs        masking logic (imported by the browser and the tests)
   diff.mjs            line-pair diff for the sanitizer's Diff view (browser and tests)
   suggest.mjs         sensitive-field suggestions (browser and tests)

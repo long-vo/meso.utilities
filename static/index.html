@@ -50,6 +50,12 @@
     </section>
 
     <div class="cards-toolbar">
+      <!-- Revealed by hub.js only once the cards have been dragged out of their
+           default order; hidden here so it doesn't flash in before that check. -->
+      <button type="button" id="order-reset" class="pill pill-toggle" hidden
+        title="Put the cards back in their default order">
+        <span aria-hidden="true">⠿</span> Reset order
+      </button>
       <button type="button" id="fav-filter" class="pill pill-toggle">
         <span aria-hidden="true">★</span> Favourites only
       </button>
