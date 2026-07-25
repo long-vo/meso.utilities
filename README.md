@@ -155,8 +155,10 @@ day counts 0.5; remote and onsite count as working). People or whole teams can b
 days.
 
 Everything (model, tags, filters) persists in this browser's `localStorage` and can be exported to /
-imported from `availability.json`. There is deliberately no share-URL: the roster is personal data
-and the site is public. The `.xlsx` itself is read by a small values-only zip/XML reader
+imported from `availability.json` — either the full model, or (**Export view**, shown while a
+team/name filter is active) just the visible slice with tags pruned to the included people, e.g. one
+team's plan for its lead. There is deliberately no share-URL: the roster is personal data and the
+site is public. The `.xlsx` itself is read by a small values-only zip/XML reader
 (`static/availability/xlsx.mjs`) — no third-party library.
 
 > The workbook is parsed entirely in your browser. Names and absences are never uploaded.

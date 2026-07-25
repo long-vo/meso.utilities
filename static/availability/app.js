@@ -50,6 +50,7 @@ const els = {
   legend: $("legend"),
   legendRail: $("legend-rail"),
   exportJson: $("export-json"),
+  exportView: $("export-view"),
   importJson: $("import-json"),
   jsonInput: $("json-input"),
   clearData: $("clear-data"),
@@ -197,6 +198,7 @@ function renderAll() {
   const model = displayModel();
   document.body.classList.toggle("has-model", model !== null);
   els.legendRail.hidden = model === null; // the layout drops the rail column too
+  els.exportView.hidden = !filterActive();
   renderImportStatus();
   renderTeamChips(model);
   renderTags(model);
@@ -521,23 +523,63 @@ function importCsv() {
   renderAll();
 }
 
+function downloadJson(payload, filename) {
+  const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 function exportJson() {
   if (state.model === null) {
     toast("Nothing to export yet");
     return;
   }
-  const payload = {
-    v: 1,
-    year: state.year,
-    tags: state.tags,
-    model: packModel(state.model),
-  };
-  const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `availability-${state.year}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  downloadJson(
+    { v: 1, year: state.year, tags: state.tags, model: packModel(state.model) },
+    `availability-${state.year}.json`,
+  );
+}
+
+/** Is the heatmap currently narrowed by a team or name filter? */
+function filterActive() {
+  return state.teams.length > 0 || state.nameFilter.trim() !== "";
+}
+
+/**
+ * Export only the people the current filter shows — e.g. one team's slice for
+ * its lead. Tags are pruned to the included people so a slice never carries
+ * the rest of the roster's names.
+ */
+function exportViewJson() {
+  if (state.model === null || !filterActive()) {
+    toast("Filter by team or name first");
+    return;
+  }
+  const people = visiblePeople(state.model);
+  if (people.length === 0) {
+    toast("Nothing matches the current filter");
+    return;
+  }
+  const names = new Set(people.map((p) => p.name));
+  const tags = Object.fromEntries(
+    Object.entries(state.tags).filter(([name]) => names.has(name)),
+  );
+  const slug = state.teams.length > 0
+    ? state.teams.map((t) => t.replace(/[^a-z0-9]+/gi, "-")).join("+").slice(0, 40)
+    : "filtered";
+  downloadJson(
+    {
+      v: 1,
+      year: state.year,
+      tags,
+      model: packModel({ people, days: state.model.days, warnings: state.model.warnings }),
+    },
+    `availability-${state.year}-${slug}.json`,
+  );
+  toast(`Exported ${people.length} ${people.length === 1 ? "person" : "people"} (current view)`);
 }
 
 function importJsonFile(file) {
@@ -624,6 +666,7 @@ els.navToday.addEventListener("click", () => {
 
 els.nameFilter.addEventListener("input", () => {
   state.nameFilter = els.nameFilter.value;
+  els.exportView.hidden = !filterActive();
   const model = displayModel();
   renderHeatmap(model);
   renderCapacity(model);
@@ -643,6 +686,7 @@ function bulkTag(loc) {
 }
 
 els.exportJson.addEventListener("click", exportJson);
+els.exportView.addEventListener("click", exportViewJson);
 els.importJson.addEventListener("click", () => els.jsonInput.click());
 els.jsonInput.addEventListener("change", () => {
   const file = els.jsonInput.files?.[0];
@@ -704,6 +748,13 @@ registerCommands([
     },
   },
   { icon: "⬇️", title: "Export availability data", hint: "action", run: exportJson },
+  {
+    icon: "⬇️",
+    title: "Export current view (filtered)",
+    hint: "action",
+    keywords: ["team", "slice", "share"],
+    run: exportViewJson,
+  },
 ]);
 
 /* ------------------------------- boot ------------------------------- */
