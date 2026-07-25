@@ -34,11 +34,11 @@ export const CODES = {
   s: { kind: "sick", label: "Sick leave", weight: 0, half: null },
   sm: { kind: "sick", label: "Sick leave (morning)", weight: 0.5, half: "am" },
   sa: { kind: "sick", label: "Sick leave (afternoon)", weight: 0.5, half: "pm" },
-  r: { kind: "remote", label: "Working remotely", weight: 1, half: null },
+  r: { kind: "remote", label: "WFH", weight: 1, half: null },
   rm: { kind: "remote", label: "Remote (morning)", weight: 1, half: "am" },
   ra: { kind: "remote", label: "Remote (afternoon)", weight: 1, half: "pm" },
   ch: { kind: "onsite", label: "Onsite", weight: 1, half: null },
-  si: { kind: "social", label: "Social-insurance leave", weight: 0, half: null },
+  si: { kind: "social", label: "Social leave", weight: 0, half: null },
 };
 
 const UNKNOWN_CODE = { kind: "unknown", label: "Unknown code", weight: 1, half: null };

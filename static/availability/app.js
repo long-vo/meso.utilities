@@ -104,7 +104,7 @@ const KIND_LEGEND = [
   ["onsite", "Onsite", "ch"],
   ["leave", "Leave", "p m a"],
   ["planned", "Planned", "v"],
-  ["core", "Core leave", "c cm ca"],
+  ["core", "Core leave", "c"],
   ["sick", "Sick", "s sm sa"],
   ["social", "Social ins.", "si"],
   ["holiday", "Holiday", "h"],
@@ -517,9 +517,16 @@ function renderStrip(model) {
   els.dayPick.value = day;
   els.dayReset.hidden = isToday;
 
-  const section = (title) => {
+  // The heading keeps its three parts apart: what it lists, when, how many.
+  const section = (label, when, count) => {
     const wrap = el("div", "strip-group");
-    wrap.appendChild(el("h3", "strip-title", title));
+    const head = el("h3", "strip-title");
+    head.append(
+      el("span", "st-label", label),
+      el("span", "st-when", when),
+      el("span", "st-count", `- ${peopleCount(count)}`),
+    );
+    wrap.appendChild(head);
     els.strip.appendChild(wrap);
     return wrap;
   };
@@ -532,7 +539,7 @@ function renderStrip(model) {
   const when = isToday ? "today" : prettyDay(day);
   const nothingScheduled = () => el("span", "hint", "Weekend — nobody scheduled.");
 
-  const outBox = chipsIn(section(`Out ${when} (${holiday.length + other.length})`));
+  const outBox = chipsIn(section("Out", when, holiday.length + other.length));
   if (weekend) outBox.appendChild(nothingScheduled());
   if (holiday.length > HOLIDAY_COLLAPSE_AT) outBox.appendChild(holidayChip(holiday));
   else for (const entry of holiday) outBox.appendChild(stripEntryChip(entry));
@@ -541,15 +548,13 @@ function renderStrip(model) {
     outBox.appendChild(el("span", "hint", "Everyone's available."));
   }
 
-  const awayBox = chipsIn(section(`Remote / onsite ${when} (${away.length})`));
+  const awayBox = chipsIn(section("Remote / onsite", when, away.length));
   if (away.length === 0) {
     awayBox.appendChild(weekend ? nothingScheduled() : el("span", "hint", "Nobody remote."));
   }
   for (const entry of away) awayBox.appendChild(stripEntryChip(entry));
 
-  const weekWrap = section(
-    isToday ? `Next 7 days (${week.length})` : `7 days from ${shortDay(day)} (${week.length})`,
-  );
+  const weekWrap = section("7 days", `${shortDay(day)} – ${shortDay(to)}`, week.length);
   weekWrap.appendChild(dayIndexRow(model, day, to));
   const weekBox = chipsIn(weekWrap);
   if (week.length === 0) weekBox.appendChild(el("span", "hint", "No absences planned."));

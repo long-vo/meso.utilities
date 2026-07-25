@@ -816,7 +816,7 @@ Deno.test("summaryText: a working day names absences, remotes and the per-day in
     "Availability We 01.07",
     "Public holiday — 1 off",
     "Out: Mai Bui (Annual leave)",
-    "Remote/onsite: Duc Le (Working remotely)",
+    "Remote/onsite: Duc Le (WFH)",
     "Per day: 01.07 1 · 02.07 1 · 03.07 1 · 06.07 1 · 07.07 0",
     "Next 7 days:",
     "  Mai Bui: 01.07–06.07 Annual leave",
