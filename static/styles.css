@@ -3667,6 +3667,11 @@ button.out:focus-visible::after {
   letter-spacing: 0.05em;
   color: var(--text-dim);
 }
+/* The shared .chip text is uniformly dim; these chips carry a hierarchy —
+   the person's name leads, the date detail stays dim. */
+.page-availability .strip-chip {
+  color: var(--text);
+}
 .page-availability .strip-chip .strip-detail {
   color: var(--text-dim);
   font-size: 11.5px;
