@@ -3521,6 +3521,11 @@ button.out:focus-visible::after {
 .page-availability .nav-row {
   margin-top: 8px;
 }
+/* Up to five data buttons (Export/Export view/Share/Import/Clear) share one
+   row — they don't fit the 320px sidebar on a single line. */
+.page-availability .controls .btn-row {
+  flex-wrap: wrap;
+}
 .page-availability details.field > summary {
   cursor: pointer;
   font-weight: 600;
