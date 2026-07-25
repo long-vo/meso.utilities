@@ -308,8 +308,8 @@ function setPageMode(next) {
   const isEncode = next === "encode";
   els.modeEncode.classList.toggle("is-active", isEncode);
   els.modeDecode.classList.toggle("is-active", !isEncode);
-  els.modeEncode.setAttribute("aria-selected", String(isEncode));
-  els.modeDecode.setAttribute("aria-selected", String(!isEncode));
+  els.modeEncode.setAttribute("aria-pressed", String(isEncode));
+  els.modeDecode.setAttribute("aria-pressed", String(!isEncode));
   els.input.placeholder = isEncode
     ? "Type or paste plain text — then add layers on the left…"
     : "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.… — or Base64, hex, %-encoded, gzip'd, escaped JSON";

@@ -280,8 +280,8 @@ function setMode(next) {
   const isLog = next === "log";
   els.modeLog.classList.toggle("is-active", isLog);
   els.modeJson.classList.toggle("is-active", !isLog);
-  els.modeLog.setAttribute("aria-selected", String(isLog));
-  els.modeJson.setAttribute("aria-selected", String(!isLog));
+  els.modeLog.setAttribute("aria-pressed", String(isLog));
+  els.modeJson.setAttribute("aria-pressed", String(!isLog));
   els.input.placeholder = isLog
     ? "Paste log text, or attach a .log file above…"
     : '{ "customer": { "lastName": "Weber", "email": "jara@example.com" } }';

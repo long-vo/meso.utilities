@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Team Availability — meso.utilities</title>
+  <meta name="description" content="Drop the team's vacation workbook and see who's out when — heatmap, out-today strip and per-team capacity, entirely in your browser." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Crect%20x%3D%222%22%20y%3D%222%22%20width%3D%223.4%22%20height%3D%223.4%22%20rx%3D%221%22%20fill%3D%22%2384b515%22%2F%3E%3Crect%20x%3D%226.3%22%20y%3D%222%22%20width%3D%223.4%22%20height%3D%223.4%22%20rx%3D%221%22%20fill%3D%22%2384b515%22%20opacity%3D%22.45%22%2F%3E%3Crect%20x%3D%2210.6%22%20y%3D%222%22%20width%3D%223.4%22%20height%3D%223.4%22%20rx%3D%221%22%20fill%3D%22%2384b515%22%2F%3E%3Crect%20x%3D%222%22%20y%3D%226.3%22%20width%3D%223.4%22%20height%3D%223.4%22%20rx%3D%221%22%20fill%3D%22%2384b515%22%2F%3E%3Crect%20x%3D%226.3%22%20y%3D%226.3%22%20width%3D%223.4%22%20height%3D%223.4%22%20rx%3D%221%22%20fill%3D%22%2384b515%22%2F%3E%3Crect%20x%3D%2210.6%22%20y%3D%226.3%22%20width%3D%223.4%22%20height%3D%223.4%22%20rx%3D%221%22%20fill%3D%22%2384b515%22%20opacity%3D%22.45%22%2F%3E%3Crect%20x%3D%222%22%20y%3D%2210.6%22%20width%3D%223.4%22%20height%3D%223.4%22%20rx%3D%221%22%20fill%3D%22%2384b515%22%20opacity%3D%22.45%22%2F%3E%3Crect%20x%3D%226.3%22%20y%3D%2210.6%22%20width%3D%223.4%22%20height%3D%223.4%22%20rx%3D%221%22%20fill%3D%22%2384b515%22%2F%3E%3Crect%20x%3D%2210.6%22%20y%3D%2210.6%22%20width%3D%223.4%22%20height%3D%223.4%22%20rx%3D%221%22%20fill%3D%22%2384b515%22%2F%3E%3C%2Fsvg%3E" />
+  <!-- Apply the saved theme before first paint so the deferred theme.js can't cause a flash. -->
+  <script>
+    try {
+      var t = localStorage.getItem("meso-theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      if (localStorage.getItem("meso-controls-hidden-availability") === "1") document.documentElement.setAttribute("data-controls-collapsed", "");
+    } catch (e) { /* storage unavailable; keep the default dark theme */ }
+  </script>
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body class="page-availability">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <nav class="brand" aria-label="Breadcrumb">
+      <a class="brand-link" href="../" title="All utilities">
+        <img class="brand-mark" src="../mesoneer-logo.jpg" alt="" aria-hidden="true" />
+        <span class="brand-name">meso.utilities</span>
+      </a>
+      <span class="crumb-sep" aria-hidden="true">/</span>
+      <span class="crumb-current"><span class="crumb-icon card--lime" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><rect class="i1" x="2" y="2" width="3.4" height="3.4" rx="1" /><rect class="i2" x="6.3" y="2" width="3.4" height="3.4" rx="1" /><rect class="i1" x="10.6" y="2" width="3.4" height="3.4" rx="1" /><rect class="i1" x="2" y="6.3" width="3.4" height="3.4" rx="1" /><rect class="i1" x="6.3" y="6.3" width="3.4" height="3.4" rx="1" /><rect class="i2" x="10.6" y="6.3" width="3.4" height="3.4" rx="1" /><rect class="i2" x="2" y="10.6" width="3.4" height="3.4" rx="1" /><rect class="i1" x="6.3" y="10.6" width="3.4" height="3.4" rx="1" /><rect class="i1" x="10.6" y="10.6" width="3.4" height="3.4" rx="1" /></svg></span> Team Availability</span>
+    </nav>
+    <div class="topbar-actions">
+      <span class="pill pill-privacy" title="The workbook is parsed locally and never uploaded. Share link is the one way data leaves — it travels inside the link itself, not to any server.">
+        <span aria-hidden="true">🛡️</span> Runs in your browser
+      </span>
+      <button id="palette-open" class="icon-btn palette-hint" type="button"
+        title="Command palette (Ctrl/⌘ K)" aria-label="Open command palette">⌘K</button>
+      <button id="controls-toggle" class="icon-btn" type="button"
+        aria-controls="controls" aria-expanded="true" title="Hide controls"
+        aria-label="Hide controls sidebar">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor"
+          stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
+          <rect x="2.75" y="4.5" width="14.5" height="11" rx="2.25" />
+          <line x1="8" y1="4.5" x2="8" y2="15.5" />
+        </svg>
+      </button>
+      <button id="theme-toggle" class="icon-btn" type="button" aria-label="Toggle colour theme">
+        <span class="theme-icon">🌙</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="layout" id="main" tabindex="-1">
+    <section id="controls" class="panel controls" aria-label="Import, filters and options">
+      <div class="field">
+        <label for="file-input">Vacation workbook</label>
+        <div id="drop-zone" class="drop-zone" role="button" tabindex="0"
+          aria-label="Import the vacation workbook (.xlsx), one quarter as .csv, or an availability.json export">
+          <strong>Drop the .xlsx here</strong>
+          <span class="hint">or click to choose — a quarter .csv or an availability.json
+            export works too</span>
+        </div>
+        <input id="file-input" type="file" accept=".xlsx,.csv,.json,application/json" hidden />
+        <p id="import-status" class="hint" aria-live="polite">Nothing imported yet.</p>
+      </div>
+
+      <details id="csv-details" class="field">
+        <summary>…or paste one quarter as CSV</summary>
+        <textarea id="csv-text" class="code-area csv-area" spellcheck="false"
+          placeholder="Export a quarter sheet as CSV and paste it here"></textarea>
+        <div class="btn-row">
+          <select id="csv-quarter" aria-label="Which quarter the CSV covers">
+            <option value="1">1st quarter</option>
+            <option value="2">2nd quarter</option>
+            <option value="3" selected>3rd quarter</option>
+            <option value="4">4th quarter</option>
+          </select>
+          <button id="csv-import" class="btn btn-small" type="button">Import CSV</button>
+        </div>
+      </details>
+
+      <div class="field">
+        <label for="year-input">Workbook year</label>
+        <input id="year-input" type="number" min="2000" max="2100" step="1" />
+        <p class="hint">Used when a filename or CSV has no year. Dates always derive from
+          quarter + column position — never from the sheet's own date headers.</p>
+      </div>
+
+      <div class="field needs-model">
+        <label>View</label>
+        <!-- Toggle buttons, not tabs: there is no tabpanel to select, so
+             aria-pressed is the honest state (same for sanitize and decode). -->
+        <div class="mode-switch" role="group" aria-label="Zoom">
+          <button id="view-month" class="mode-btn is-active" type="button" aria-pressed="true">Month</button>
+          <button id="view-quarter" class="mode-btn" type="button" aria-pressed="false">Quarter</button>
+        </div>
+        <div class="btn-row nav-row">
+          <button id="nav-prev" class="btn btn-ghost btn-small" type="button" aria-label="Previous period">‹ Prev</button>
+          <button id="nav-today" class="btn btn-small" type="button">Today</button>
+          <button id="nav-next" class="btn btn-ghost btn-small" type="button" aria-label="Next period">Next ›</button>
+        </div>
+      </div>
+
+      <div class="field needs-model">
+        <label>Teams</label>
+        <div id="team-chips" class="chips" role="group" aria-label="Filter by team"></div>
+        <p class="hint">Click to filter — nothing selected shows everyone.</p>
+      </div>
+
+      <div class="field needs-model">
+        <label for="name-filter">Find a person</label>
+        <input id="name-filter" type="search" placeholder="Filter by name…" />
+      </div>
+
+      <div class="field needs-model">
+        <label for="low-threshold">Flag thin weeks below
+          <output id="low-threshold-out" for="low-threshold" class="thresh-out">60%</output>
+        </label>
+        <input id="low-threshold" type="range" min="0" max="100" step="5" value="60" />
+        <p class="hint">A team-week whose available person-days fall under this share of the week's
+          maximum is marked in the capacity table. Drag to 0 to switch it off.</p>
+      </div>
+
+      <details id="tags-details" class="field needs-model">
+        <summary>Locations <span class="hint-inline">(CH people get Zürich holidays)</span></summary>
+        <div class="btn-row tag-bulk">
+          <select id="bulk-team" class="select" aria-label="Team to tag"></select>
+          <button id="bulk-vn" class="btn btn-ghost btn-small" type="button">Set VN</button>
+          <button id="bulk-ch" class="btn btn-ghost btn-small" type="button">Set CH</button>
+        </div>
+        <div id="tag-list" class="tag-list"></div>
+      </details>
+
+      <details id="warnings-details" class="field" hidden>
+        <summary id="warnings-summary">Workbook warnings</summary>
+        <ul id="warnings-list" class="warnings-list"></ul>
+      </details>
+
+      <div class="field btn-row">
+        <button id="export-json" class="btn btn-ghost btn-small" type="button"
+          title="Download everything (model, tags, year) as availability.json">Export data</button>
+        <button id="export-view" class="btn btn-ghost btn-small needs-model" type="button" hidden
+          title="Download only the people matching the current team/name filter — e.g. one team's slice for its lead">Export view</button>
+        <button id="share-link" class="btn btn-ghost btn-small needs-model" type="button"
+          title="Copy a link carrying what the current filter shows. The data travels in the URL fragment (never sent to any server) — but anyone with the link can read these names and absences.">Share link</button>
+        <button id="import-json" class="btn btn-ghost btn-small" type="button">Import data</button>
+        <input id="json-input" type="file" accept=".json,application/json" hidden />
+        <button id="clear-data" class="btn btn-ghost btn-small" type="button">Clear</button>
+      </div>
+    </section>
+
+    <section class="panel editor" aria-label="Who's out">
+      <div class="panel-head">
+        <h2>Who's out</h2>
+        <div class="result-tools">
+          <input id="day-pick" class="day-pick needs-model" type="date"
+            aria-label="Report on this day" title="Report on any day — the heatmap's day headers and the week index below pick one too" />
+          <button id="day-reset" class="btn btn-ghost btn-small needs-model" type="button" hidden
+            title="Back to today">Today</button>
+          <span id="strip-status" class="status"></span>
+          <button id="copy-strip" class="btn btn-small needs-model" type="button"
+            title="Copy a plain-text summary for standup or Slack">📋 Copy summary</button>
+        </div>
+      </div>
+      <div id="strip" class="strip"></div>
+    </section>
+
+    <section class="panel result" aria-label="Availability heatmap and capacity">
+      <div class="panel-head">
+        <h2>Heatmap</h2>
+        <div class="result-tools">
+          <span id="range-label" class="status"></span>
+        </div>
+      </div>
+      <div id="heatmap-wrap" class="hm-wrap">
+        <div id="heatmap" class="hm" role="grid" aria-label="Availability heatmap"
+          aria-rowcount="0" aria-colcount="0"></div>
+      </div>
+      <h3 class="cap-title needs-model">Team capacity <span class="hint-inline">available person-days per week, over the week's maximum</span></h3>
+      <p id="cap-warn" class="cap-warn needs-model" role="status" hidden></p>
+      <div id="capacity" class="cap-wrap needs-model"></div>
+    </section>
+
+    <section id="legend-rail" class="panel legend-rail" aria-label="Legend" hidden>
+      <div class="panel-head">
+        <h2>Legend</h2>
+      </div>
+      <div id="legend" class="legend"></div>
+      <p class="hint">Half-coloured cells describe half a day (left = morning) — the other half is
+        worked. <code>rm</code>/<code>ra</code> are therefore full days: remote for one half, in the
+        office for the other. Dotted cells have no data for that day.</p>
+      <p class="hint">Tab into the grid, then move with the arrow keys (Page&nbsp;Up/Down by ten
+        rows, Ctrl&nbsp;+&nbsp;Home/End to the corners). Press Enter on a day header — or click it —
+        to report on that day.</p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    The workbook is parsed entirely in your browser and stays in this browser's storage — nothing
+    is uploaded. <strong>Share link</strong> is the one exception: it packs the names and absences
+    you filtered into the link itself, so treat that link like the roster.
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="../theme.js"></script>
+  <script type="module" src="../resize.js"></script>
+  <script type="module" src="../sidebar.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
