@@ -283,9 +283,11 @@ _replaces_ what's loaded and asks first; every partial payload — CSV quarter, 
 link — _merges_ by name, so importing one team's slice never drops the rest of the roster. **Share
 link** copies a URL that carries the same slice gzip-compressed in the URL fragment — like
 Slidedown's and Shortlink's share links, the fragment is never sent to any server, and opening it
-asks before merging into that browser's data. One caveat, stated on the button too: the link _is_
-the data, so anyone who obtains it can read those names and absences — share it only where you'd
-share the roster itself. The `.xlsx` itself is read by a small values-only zip/XML reader
+asks before merging into that browser's data — unless the link also carries `?auto=1`, which takes
+the payload straight away (what `scripts/availability-share-url.ts --auto` emits for an unattended
+refresh, since nobody is there to click Replace). One caveat, stated on the button too: the link
+_is_ the data, so anyone who obtains it can read those names and absences — share it only where
+you'd share the roster itself. The `.xlsx` itself is read by a small values-only zip/XML reader
 (`static/availability/xlsx.mjs`) — no third-party library.
 
 > The workbook is parsed entirely in your browser. Names and absences are never uploaded.

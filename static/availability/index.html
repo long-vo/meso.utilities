@@ -60,7 +60,8 @@
 
   <!-- An arriving #share= payload is offered here rather than through confirm():
        a native dialog can only be dismissed by a human hand, which rules out
-       the scheduled workbook refresh (see scripts/availability-share-url.ts). -->
+       the scheduled workbook refresh (see scripts/availability-share-url.ts).
+       That refresh skips this banner entirely with ?auto=1 on the link. -->
   <div id="share-offer" class="share-offer" role="alertdialog" aria-labelledby="share-offer-text"
     hidden>
     <p id="share-offer-text" class="share-offer-text"></p>
