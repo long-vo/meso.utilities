@@ -3400,8 +3400,19 @@ button.out:focus-visible::after {
    The rail is [hidden] until a workbook is imported — the :has() variants
    drop its column so no empty track remains. Explicit rows keep the short
    strip panel from being inflated by the tall sticky sidebar. */
+/* The rail is a column of panels, not a panel: the legend, and under it the
+   recorded changes when there are any. */
 .page-availability .legend-rail {
   grid-area: legend;
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+/* Twenty records would push the Clear button off a sticky rail — the list
+   scrolls inside the panel instead. */
+.page-availability .legend-rail .history-list {
+  max-height: 40vh;
+  overflow-y: auto;
 }
 @media (min-width: 1081px) {
   .page-availability .layout {
@@ -3642,11 +3653,21 @@ button.out:focus-visible::after {
   --av-holiday: #14b8a6;
   --av-unknown: #ff00dd;
   --av-grid: color-mix(in srgb, var(--border) 60%, transparent);
-  /* Days picked to send to Leave. Green rather than --accent: today and the
-     picked column already own the accent, and a third accent-coloured marking
-     on the same cell would be unreadable. Green is also Leave's card colour,
-     which is where the picked days are going. */
+  /* Days picked to send to Leave. Green rather than --accent: today owns the
+     accent, and two accent-coloured markings on the same cell would be
+     unreadable. Green is also Leave's card colour, which is where the picked
+     days are going. */
   --av-sel: var(--good);
+  /* The reported-on column, in whatever reads loudest against the grid without
+     being mistaken for today's blue: white rails on the dark theme. */
+  --av-picked: var(--text);
+}
+/* On white, a near-black rail is the one line on the page that looks like a
+   heavier grid line, so light mode takes orange instead. Deeper than the
+   `--av-planned` orange a cell can be filled with (#f9820a), which keeps a rail
+   apart from the days it runs past. */
+:root[data-theme="light"] .page-availability {
+  --av-picked: #c2410c;
 }
 
 .page-availability .drop-zone {
@@ -3810,6 +3831,16 @@ button.out:focus-visible::after {
 }
 .page-availability .history-line {
   font-size: 12px;
+}
+/* A record the grid no longer backs up: the panel is the master copy, so this
+   is a discrepancy to act on, not a note. */
+.page-availability .history-stale {
+  font-size: 11px;
+  color: var(--warn);
+}
+.page-availability .history-list li.is-stale {
+  padding-left: 6px;
+  border-left: 2px solid color-mix(in srgb, var(--warn) 60%, transparent);
 }
 .page-availability .history-meta {
   font-size: 11px;
@@ -4062,9 +4093,11 @@ button.out:focus-visible::after {
   color: var(--accent);
   opacity: 1;
 }
+/* Head of the reported-on column — the same rail colour as the cells under it,
+   which also keeps it apart from today's blue heading. */
 .page-availability .hm-head.is-picked {
-  color: var(--accent);
-  box-shadow: inset 0 -2px 0 var(--accent);
+  color: var(--av-picked);
+  box-shadow: inset 0 -2px 0 var(--av-picked);
   opacity: 1;
 }
 .page-availability .hm-name {
@@ -4163,7 +4196,17 @@ button.out:focus-visible::after {
 /* The picked day gets rails down its column rather than a full outline, so it
    reads as a column and not as 70 selected cells. */
 .page-availability .hm-cell.is-picked {
-  box-shadow: inset 1.5px 0 0 var(--accent), inset -1.5px 0 0 var(--accent);
+  box-shadow: inset 1.5px 0 0 var(--av-picked), inset -1.5px 0 0 var(--av-picked);
+}
+/* The day header's underline caps the column at the top; this caps it at the
+   foot. Every horizontal line in the grid is a cell's own `border-top`, so the
+   last row has no bottom edge for the rails to end against and they ran off it.
+   `:not(.is-sel)` keeps the deal struck below — the selection band outranks the
+   picked column on any cell that is both, which this heavier selector would
+   otherwise reverse on the last row alone. */
+.page-availability .hm-row:last-child .hm-cell.is-picked:not(.is-sel) {
+  box-shadow: inset 1.5px 0 0 var(--av-picked), inset -1.5px 0 0 var(--av-picked),
+    inset 0 -1.5px 0 var(--av-picked);
 }
 /* Days picked for a leave request: one band across the row, capped at the ends
    so a run reads as one range rather than as separate tiles. Box-shadow alone —

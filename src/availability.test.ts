@@ -50,6 +50,7 @@ import {
   prettyDay,
   pushHistory,
   quarterDates,
+  recordOnGrid,
   remoteOn,
   revertDayCodes,
   shiftBalance,
@@ -1719,6 +1720,53 @@ Deno.test("pushHistory / historyText: newest first, capped, and readable", () =>
     "Mai Bui · 22.07 · Annual leave (1 day)",
     "a single day names one date and one day",
   );
+});
+
+Deno.test("recordOnGrid: a fresh import leaves the record with nothing to show", () => {
+  // 01.07.2026 is a Wednesday; 04/05.07 are the weekend.
+  const q3 = (codes: Cell[]) =>
+    parseVacationWorkbook(
+      [{ name: "3rd quarter", rows: grid({ people: [["Mai Bui", "a", codes]], nDays: 92 }) }],
+      { year: 2026 },
+    );
+  const model = q3(["w", "w", "w", "e", "e", "w"]);
+  const applied = applyDayCodes(model, {
+    name: "Mai Bui",
+    from: "2026-07-02",
+    to: "2026-07-06",
+    code: "s",
+  });
+  const entry = {
+    name: "Mai Bui",
+    from: "2026-07-02",
+    to: "2026-07-06",
+    code: "s",
+    days: applied.written,
+    at: 1,
+    before: applied.before,
+  };
+  // The weekend was never written, so it is not held against the record.
+  assertEquals(recordOnGrid(applied.model, entry), { days: 3, kept: 3 });
+
+  // HR sends a new workbook that knows nothing of the request.
+  assertEquals(recordOnGrid(model, entry), { days: 3, kept: 0 });
+
+  // One day of it survives — a partial loss is not a whole one.
+  const partial = applyDayCodes(applied.model, {
+    name: "Mai Bui",
+    from: "2026-07-02",
+    to: "2026-07-02",
+    code: "p",
+  });
+  assertEquals(recordOnGrid(partial.model, entry), { days: 3, kept: 2 });
+
+  // An import that drops the person takes their days with them.
+  assertEquals(recordOnGrid(q3([]), { ...entry, name: "Ghost" }), { days: 3, kept: 0 });
+
+  // A record from a build that kept no `before` falls back to working days.
+  const legacy = { ...entry, before: undefined };
+  assertEquals(recordOnGrid(applied.model, legacy), { days: 3, kept: 3 });
+  assertEquals(recordOnGrid(model, legacy), { days: 3, kept: 0 });
 });
 
 Deno.test("revertDayCodes: deleting a record puts the days back", () => {

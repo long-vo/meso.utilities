@@ -207,16 +207,24 @@ carried a balance, e.g. after importing only a quarter `.csv`.
 
 Requests saved in Leave Request land back on the person's row the next time this tool opens (see
 **Save to Availability**), so the round trip closes: pick days here, file the request there, see it
-here. Each applied request is logged under **Recorded changes** in the sidebar — who, which days,
-what was written and how many days took it, plus the tool that asked and when — so a code you didn't
-expect on your row has an explanation instead of a mystery. The last 20 are kept, alongside the rest
-of the data in `localStorage`.
+here. Each applied request is logged under **Recorded changes**, the panel beneath the legend — who,
+which days, what was written and how many days took it, plus the tool that asked and when — so a
+code you didn't expect on your row has an explanation instead of a mystery. The last 20 are kept,
+alongside the rest of the data in `localStorage`.
+
+The panel is the master copy of what this tool wrote, so it says when the grid stops agreeing with
+it. Importing a workbook that predates a request writes over the days it added; the record then
+reads **⚠ no longer on the grid** (or `2 of 3 days` when only part of it went), the panel heads the
+list with a count, and the record is yours to re-file or delete. The check is live against the
+current grid, so re-filing the request clears its warning on its own.
 
 Deleting a single record (the × beside it) also undoes it: those days go back to exactly what they
 held before — the previous code, not a blanket "working" — and the toast offers **Undo**. A day that
 moved on since, because a later request overwrote it, is left at its newer value and counted in the
 toast rather than silently rolled back. **Clear history** is the other half of that pair: it forgets
-the whole log without touching a single day.
+the whole log without touching a single day — and offers **Undo** too, since the records are the
+only account of what wrote those days. (Both Undos live in the toast, so a later message replaces
+them; act on it while it's up.)
 
 Days picked in the grid go to the Leave Request tool. Drag along one person's row (or press
 **Enter** on a cell, **Shift + Enter** to extend the run, **Esc** to drop it). **Send to Leave** is

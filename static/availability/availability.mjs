@@ -1388,6 +1388,43 @@ export function historyText(entry) {
   return `${entry.name} · ${when} · ${codeInfo(entry.code).label} (${days})`;
 }
 
+/**
+ * How much of a recorded change the grid still shows. The record is the master
+ * copy of what this tool wrote: importing a fresh workbook replaces the days
+ * wholesale, and a request HR has not entered yet simply vanishes from the grid
+ * while its record stays. Comparing the two is what lets the panel say so
+ * instead of leaving the change silently undone.
+ *
+ * `before` names exactly the days the change wrote — weekends and days outside
+ * the imported range were skipped — which is what makes this checkable at all.
+ * A record from a build that did not keep `before` falls back to the range's
+ * working days, the closest stand-in available.
+ *
+ * A person the roster no longer holds counts as nothing kept: the days are as
+ * gone as the row is.
+ *
+ * @param {Model} model
+ * @param {HistoryEntry} entry
+ * @returns {{ days: number, kept: number }} how many days the record wrote, and
+ *   how many of them still carry its code
+ */
+export function recordOnGrid(model, entry) {
+  const dates = Object.keys(entry.before ?? {});
+  if (dates.length === 0) {
+    for (let d = entry.from; d <= entry.to; d = nextDate(d)) {
+      if (!isWeekend(d)) dates.push(d);
+    }
+  }
+  const wanted = String(entry.name ?? "").trim().toLowerCase();
+  const person = model.people.find((p) => p.name.toLowerCase() === wanted);
+  if (person === undefined) return { days: dates.length, kept: 0 };
+  let kept = 0;
+  for (const date of dates) {
+    if (person.days[date] === entry.code) kept++;
+  }
+  return { days: dates.length, kept };
+}
+
 // --- view framing ----------------------------------------------------------------
 // The day axis the heatmap draws, and how the capacity table carves it up.
 

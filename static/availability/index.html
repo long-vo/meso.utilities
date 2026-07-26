@@ -146,13 +146,6 @@
         <ul id="warnings-list" class="warnings-list"></ul>
       </details>
 
-      <details id="history-details" class="field" hidden>
-        <summary id="history-summary">Recorded changes</summary>
-        <ul id="history-list" class="history-list"></ul>
-        <button id="history-clear" class="btn btn-ghost btn-small" type="button"
-          title="Forget the recorded changes — the days themselves stay as they are">Clear history</button>
-      </details>
-
       <div class="field btn-row">
         <button id="export-json" class="btn btn-ghost btn-small" type="button"
           title="Download everything (model, tags, year) as availability.json">Export data</button>
@@ -208,15 +201,34 @@
       <div id="balances" class="cap-wrap" hidden></div>
     </section>
 
-    <section id="legend-rail" class="panel legend-rail" aria-label="Legend" hidden>
-      <div class="panel-head">
-        <h2>Legend</h2>
-      </div>
-      <div id="legend" class="legend"></div>
-      <p class="hint">Tab into the grid, then move with the arrow keys (Page&nbsp;Up/Down by ten
-        rows, Ctrl&nbsp;+&nbsp;Home/End to the corners). Press Enter on a day header — or click it —
-        to report on that day.</p>
-    </section>
+    <!-- The right-hand rail: the legend, and under it whatever has been written
+         onto the grid. It is one grid item holding two panels, because the
+         layout drops the whole column when there is no model to explain — the
+         `:has(> .legend-rail[hidden])` rule keys off this element being a
+         direct child of .layout. -->
+    <div id="legend-rail" class="legend-rail" hidden>
+      <section class="panel" aria-label="Legend">
+        <div class="panel-head">
+          <h2>Legend</h2>
+        </div>
+        <div id="legend" class="legend"></div>
+        <p class="hint">Tab into the grid, then move with the arrow keys (Page&nbsp;Up/Down by ten
+          rows, Ctrl&nbsp;+&nbsp;Home/End to the corners). Press Enter on a day header — or click it
+          — to report on that day.</p>
+      </section>
+
+      <!-- Days written onto the grid by another tool, newest first. It sits
+           beside the grid it explains rather than in the import sidebar. -->
+      <section id="history-details" class="panel" aria-labelledby="history-summary" hidden>
+        <div class="panel-head">
+          <h2 id="history-summary">Recorded changes</h2>
+        </div>
+        <p id="history-warn" class="cap-warn" role="status" hidden></p>
+        <ul id="history-list" class="history-list"></ul>
+        <button id="history-clear" class="btn btn-ghost btn-small" type="button"
+          title="Forget the recorded changes — the days themselves stay as they are">Clear history</button>
+      </section>
+    </div>
   </main>
 
   <footer class="footer">

@@ -16,6 +16,7 @@ import {
   dayCounts,
   decodeShare,
   encodeShare,
+  HISTORY_LIMIT,
   historyText,
   holidayName,
   HOLIDAYS_CH_ZURICH,
@@ -36,6 +37,7 @@ import {
   personSummary,
   prettyDay,
   pushHistory,
+  recordOnGrid,
   remoteOn,
   revertDayCodes,
   shortDay,
@@ -81,6 +83,7 @@ const els = {
   warningsList: $("warnings-list"),
   historyDetails: $("history-details"),
   historySummary: $("history-summary"),
+  historyWarn: $("history-warn"),
   historyList: $("history-list"),
   historyClear: $("history-clear"),
   legend: $("legend"),
@@ -745,6 +748,7 @@ function renderHistory() {
   els.historyDetails.hidden = state.history.length === 0;
   els.historySummary.textContent = `Recorded changes (${state.history.length})`;
   els.historyList.textContent = "";
+  let stale = 0;
   state.history.forEach((entry, index) => {
     const item = el("li");
     const text = el("div", "history-text");
@@ -757,6 +761,24 @@ function renderHistory() {
     // the line beats leaving the user to wonder why the grid did not move.
     const undoable = Object.keys(entry.before ?? {}).length > 0;
     if (!undoable) text.lastChild.textContent += " · can't be undone";
+    // The record is the master copy of what this tool wrote; the grid can move
+    // out from under it — most often an imported workbook that predates the
+    // request. Compared against the raw model, not `displayModel()`, whose
+    // holiday overlay would read as a change nobody made. Appended after the
+    // meta line above, which edits itself through `lastChild`.
+    const standing = state.model === null ? null : recordOnGrid(state.model, entry);
+    if (standing !== null && standing.kept < standing.days) {
+      stale++;
+      item.classList.add("is-stale");
+      const lost = standing.days - standing.kept;
+      text.append(el(
+        "span",
+        "history-stale",
+        standing.kept === 0
+          ? "⚠ no longer on the grid"
+          : `⚠ ${lost} of ${standing.days} days no longer on the grid`,
+      ));
+    }
     const del = el("button", "history-del", "×");
     del.type = "button";
     del.title = undoable
@@ -767,6 +789,21 @@ function renderHistory() {
     item.append(text, del);
     els.historyList.appendChild(item);
   });
+  // Said once at the top as well as per record: after an import that wiped
+  // several, the panel is the only place the loss is visible at all, and the
+  // list can be scrolled past its first entry.
+  els.historyWarn.hidden = stale === 0;
+  els.historyWarn.textContent = "";
+  if (stale > 0) {
+    const badge = el("span", "cap-warn-badge");
+    badge.append(
+      el("span", "cap-warn-mark", "⚠"),
+      ` ${stale} of ${state.history.length} not on the grid`,
+    );
+    badge.title = "These days were written by this tool but the grid no longer shows them — " +
+      "usually a workbook imported over them. Re-file the request, or delete the record.";
+    els.historyWarn.appendChild(badge);
+  }
 }
 
 /**
@@ -1015,7 +1052,15 @@ function renderHeatmap(model) {
       }`,
     );
     markFocusable(cell, -1, col);
-    cell.addEventListener("click", () => pickDay(date));
+    cell.addEventListener("click", () => {
+      // Clicking a header focuses it, which makes the re-render below put focus
+      // back on the grid's tab stop — and that is row 0 of today's column until
+      // the grid has been used, so the click would land the caret on a cell in
+      // some other column. The pointer moves the tab stop here, exactly as it
+      // does for a cell (see the `pointerdown` handler).
+      state.focus = { row: -1, col };
+      pickDay(date);
+    });
     head.appendChild(cell);
   });
   frag.appendChild(head);
@@ -1837,11 +1882,30 @@ els.heatmap.addEventListener("pointerdown", (event) => {
 });
 els.sendLeave.addEventListener("click", sendToLeave);
 els.historyClear.addEventListener("click", () => {
-  // The days themselves stay: this forgets the log, not the leave.
+  if (state.history.length === 0) return;
+  // The days themselves stay: this forgets the log, not the leave. Nothing on
+  // the grid moves, so putting the log back is the whole of the undo — and the
+  // records are the only copy of what wrote those days, so one misplaced click
+  // must not be the end of them.
+  const cleared = state.history;
   state.history = [];
   renderHistory();
   saveState();
-  toast("History cleared — the days themselves are unchanged");
+  toast(
+    `${cleared.length} ${cleared.length === 1 ? "record" : "records"} forgotten — ` +
+      "the days themselves are unchanged",
+    {
+      label: "Undo",
+      onAction: () => {
+        // Whatever arrived while the toast was up stays: a request applied in
+        // the meantime is newer than anything being restored.
+        state.history = [...state.history, ...cleared].slice(0, HISTORY_LIMIT);
+        renderHistory();
+        saveState();
+        toast(`${cleared.length} ${cleared.length === 1 ? "record" : "records"} back`);
+      },
+    },
+  );
 });
 
 els.lowThreshold.addEventListener("input", () => {
