@@ -9,6 +9,8 @@ import {
   reconcileOrder,
   withVisibleOrder,
 } from "./reorder.mjs";
+import { initTour } from "./tour.js";
+import { SEEN_KEY, SEEN_VERSION, shouldNudge } from "./tour.mjs";
 
 // "Share to Slack": Slack has no public post-a-message URL, and this hub has no
 // backend, so we copy a ready-to-paste message to the clipboard instead.
@@ -448,9 +450,73 @@ function settleCards() {
 }
 setTimeout(settleCards, 900);
 
+/* -------------------------------- the tour -------------------------------
+   A focus stage over the hub: one tool per screen, Back/Continue. It reads the
+   cards for everything visual (title, colour, tags, href, the illustration
+   itself), so the stage and the grid can't drift; tour.mjs holds the prose.
+   `originalCards` — the authored order, unfiltered — is deliberate: a dragged
+   grid or the favourites filter must not reorder or skip the tour. */
+
+const tourBtn = /** @type {HTMLElement} */ (document.getElementById("tour-start"));
+const tourNudge = /** @type {HTMLElement} */ (document.getElementById("tour-nudge"));
+
+const tour = initTour({
+  cards: originalCards,
+  // Hand attention back to the grid: the tool the tour ended on is scrolled to
+  // and pulsed once, rather than the modal just vanishing.
+  onClose: (step) => {
+    const card = originalCards.find((one) => toolOf(one) === step?.id);
+    if (!card || card.classList.contains("card--hidden")) return;
+    card.classList.remove("is-pulse");
+    void card.offsetWidth; // restart the animation if it's the same card again
+    card.classList.add("is-pulse");
+    card.scrollIntoView({ block: "center", behavior: "smooth" });
+  },
+});
+
+function dismissNudge() {
+  tourNudge.hidden = true;
+  try {
+    localStorage.setItem(SEEN_KEY, SEEN_VERSION);
+  } catch {
+    /* storage may be unavailable; the nudge just comes back next visit */
+  }
+}
+
+function openTour() {
+  tourNudge.hidden = true;
+  tour.open(0);
+}
+
+tourBtn.hidden = false; // the launcher is hidden in the HTML until it works
+tourBtn.addEventListener("click", openTour);
+document.getElementById("tour-nudge-start")?.addEventListener("click", openTour);
+document.getElementById("tour-nudge-dismiss")?.addEventListener("click", dismissNudge);
+
+// Only ever a nudge — the modal never opens by itself.
+try {
+  tourNudge.hidden = !shouldNudge(localStorage.getItem(SEEN_KEY));
+} catch {
+  tourNudge.hidden = false; // storage unavailable: offer it, don't hide it
+}
+
+// The palette's cross-page entry navigates here with #tour (the tour lives on
+// the hub, so from a tool page the only way in is to come back first).
+if (location.hash === "#tour") {
+  history.replaceState(null, "", location.pathname + location.search);
+  openTour();
+}
+
 /* ---------------------------- command palette ---------------------------- */
 
 registerCommands([
+  {
+    icon: "▸",
+    title: "Take a tour",
+    hint: "action",
+    keywords: ["tour", "guide", "intro", "help", "walkthrough", "onboarding", "what", "explain"],
+    run: openTour,
+  },
   {
     icon: "★",
     title: "Toggle favourites-only filter",

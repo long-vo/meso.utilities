@@ -50,6 +50,12 @@
     </section>
 
     <div class="cards-toolbar">
+      <!-- Revealed by hub.js: a launcher that can't open anything is worse than
+           no launcher, so it stays hidden until the tour is actually wired. -->
+      <button type="button" id="tour-start" class="pill pill-tour" hidden
+        title="A two-minute walk through what each tool does">
+        <span class="tour-spark" aria-hidden="true">▸</span> Take a tour
+      </button>
       <!-- Revealed by hub.js only once the cards have been dragged out of their
            default order; hidden here so it doesn't flash in before that check. -->
       <button type="button" id="order-reset" class="pill pill-toggle" hidden
@@ -59,6 +65,22 @@
       <button type="button" id="fav-filter" class="pill pill-toggle">
         <span aria-hidden="true">★</span> Favourites only
       </button>
+
+      <!-- First-visit nudge. In the static markup (like the toolbar's other
+           conditional bits) so the deferred module doesn't shift the grid;
+           hub.js reveals it, and the tour itself never opens unprompted. -->
+      <div class="tour-nudge" id="tour-nudge" role="note" hidden>
+        <h3>First time here?</h3>
+        <p>Eight tools, two minutes — a quick walk through what each one actually does.</p>
+        <div class="tour-nudge-actions">
+          <button class="btn btn-small btn-primary" type="button" id="tour-nudge-start">
+            Start the tour
+          </button>
+          <button class="btn btn-small btn-ghost" type="button" id="tour-nudge-dismiss">
+            Not now
+          </button>
+        </div>
+      </div>
     </div>
 
     <section class="cards has-toolbar" aria-label="Available tools">

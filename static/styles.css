@@ -1952,7 +1952,10 @@ body.page-hub .grip-btn:not(:hover, :focus-visible) {
 
 /* ---- hub favourites filter ---- */
 
+/* `position: relative` anchors the tour's first-visit nudge, which hangs off
+   the launcher pill at the left end of this bar. */
 .cards-toolbar {
+  position: relative;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -2000,6 +2003,666 @@ html.js body.page-hub .cards.is-ready {
   background: var(--bg-elev);
   border: 1px dashed var(--border);
   border-radius: var(--radius);
+}
+
+/* ---- hub: guided tour -------------------------------------------------------
+   A focus stage over the hub — one tool per screen. The signature move is that
+   the whole dialog wears the current tool's `--card-*` palette and *transitions*
+   between them, so advancing reads as turning over the card grid at 3× size.
+   Custom properties are only animatable once registered, hence the @property
+   block; browsers without it swap the palette instantly and lose nothing else.
+   Registration is global but a registered property only animates where a
+   `transition` names it — declared solely on `.tour` — so the cards are
+   unaffected. */
+
+@property --card-tint {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #161b22;
+}
+@property --card-ink {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #e6edf3;
+}
+@property --card-sub {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #9aa7b4;
+}
+@property --card-paper {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #e6edf3;
+}
+@property --card-art1 {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #4f9dff;
+}
+@property --card-art2 {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #262c36;
+}
+@property --card-art3 {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #161b22;
+}
+@property --card-mid {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #9aa7b4;
+}
+@property --card-deep {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #262c36;
+}
+
+/* One neutral "house" set for the tour's opening and closing steps, which are
+   about the hub itself and shouldn't borrow a tool's identity. Same stop roles
+   as the card sets above, derived from --accent / --accent-2. */
+.card--brand {
+  --card-tint: #191f3a;
+  --card-ink: #cfd9ff;
+  --card-sub: #a9b8ee;
+  --card-paper: #cfd9ff;
+  --card-art1: #6f8bf0;
+  --card-art2: #41519e;
+  --card-art3: #2b3670;
+  --card-mid: #a9b8ee;
+  --card-deep: #2b3670;
+}
+:root[data-theme="light"] .card--brand {
+  --card-tint: #eef1fe;
+  --card-ink: #1c2450;
+  --card-sub: #41519e;
+  --card-paper: #ffffff;
+  --card-art2: #a9b8ee;
+  --card-art3: #cfd9ff;
+  --card-deep: #41519e;
+}
+
+/* The launcher. The toolbar is right-aligned, so this one pill claims the left
+   end rather than crowding the two toggles. */
+.pill-tour {
+  margin-right: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 13px 6px 9px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev));
+  transition: border-color 0.15s, transform 0.12s, background 0.15s;
+}
+.pill-tour:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.tour-spark {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  line-height: 1;
+  color: #fff;
+  background: linear-gradient(140deg, var(--accent-2), var(--accent));
+}
+
+/* First-visit nudge, anchored under the launcher. */
+.tour-nudge {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 0;
+  z-index: 4;
+  width: min(330px, 82vw);
+  padding: 14px 15px 13px;
+  text-align: left;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border-strong));
+  border-radius: 14px;
+  background: var(--bg-elev);
+  box-shadow: var(--shadow);
+  animation: nudge-in 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.tour-nudge::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 26px;
+  width: 10px;
+  height: 10px;
+  transform: rotate(45deg);
+  background: var(--bg-elev);
+  border-left: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border-strong));
+  border-top: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border-strong));
+}
+.tour-nudge h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+.tour-nudge p {
+  margin: 0 0 11px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.tour-nudge-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+@keyframes nudge-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* When the tour closes, the tool it ended on pulses once — the modal hands
+   attention back to the real card instead of just vanishing. */
+.card.is-pulse {
+  animation: card-pulse 1.1s ease-out 1;
+}
+@keyframes card-pulse {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--card-art1) 70%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 18px transparent;
+  }
+}
+
+/* ---- the stage ---- */
+
+.tour {
+  width: min(1060px, 94vw);
+  max-height: min(90vh, 740px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 20px;
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.5);
+  /* Tinted text can't use --card-art1 in both themes and clear 4.5:1 — the 400
+     stop is 4.40 on the dark panel (pink) and 2.44 on white (lime). One derived
+     token instead: the light stop on dark, the deep stop on light. Worst 6.20. */
+  --tour-accent: var(--card-mid);
+  transition:
+    --card-tint 0.42s ease, --card-art1 0.42s ease, --card-art2 0.42s ease,
+    --card-art3 0.42s ease, --card-ink 0.42s ease, --card-sub 0.42s ease,
+    --card-paper 0.42s ease, --card-mid 0.42s ease, --card-deep 0.42s ease;
+}
+:root[data-theme="light"] .tour {
+  --tour-accent: var(--card-deep);
+}
+.tour[open] {
+  display: flex;
+  flex-direction: column;
+  animation: tour-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.tour::backdrop {
+  background: rgba(6, 9, 14, 0.68);
+  backdrop-filter: blur(6px);
+}
+:root[data-theme="light"] .tour::backdrop {
+  background: rgba(24, 32, 48, 0.42);
+}
+@keyframes tour-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A wash of the current tool's colour bleeding in from the corners. */
+.tour-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    radial-gradient(560px 300px at 8% -8%,
+    color-mix(in srgb, var(--card-art1) 26%, transparent), transparent 70%),
+    radial-gradient(420px 260px at 100% 110%,
+    color-mix(in srgb, var(--card-art1) 12%, transparent), transparent 70%);
+}
+
+.tour-top {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px 14px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.tour-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--tour-accent);
+}
+.tour-eyebrow .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--card-art1);
+}
+/* The rail doubles as a table of contents: each segment names its step. */
+.tour-rail {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 auto;
+}
+.tour-seg {
+  width: 16px;
+  height: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  background: var(--border-strong);
+  transition: width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.3s;
+}
+.tour-seg:hover {
+  background: var(--text-faint);
+}
+.tour-seg.is-done {
+  background: color-mix(in srgb, var(--card-art1) 55%, var(--border-strong));
+}
+.tour-seg.is-active {
+  width: 34px;
+  background: var(--card-art1);
+}
+.tour-count {
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--text-faint);
+}
+.tour-close {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-inset);
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.tour-close:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.tour-body {
+  position: relative;
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.tour-art {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 26px 24px;
+  background: var(--card-tint);
+  border-right: 1px solid var(--border);
+  transition: background 0.42s ease;
+}
+/* A soft centre light, so the panel doesn't read as a flat block of colour. */
+.tour-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(220px 180px at 50% 38%, rgba(255, 255, 255, 0.1), transparent 70%);
+}
+:root[data-theme="light"] .tour-art::after {
+  background: radial-gradient(220px 180px at 50% 38%, rgba(255, 255, 255, 0.7), transparent 70%);
+}
+/* The illustration is the hub card's own SVG, cloned — hence the fixed viewBox
+   and the width override rather than the card's 120×96 attributes. */
+.tour-art .card-art {
+  width: min(210px, 62%);
+  padding: 0;
+}
+.tour-art .card-art svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.tour-art-tags {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+.tour-art .tag {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--card-sub);
+}
+:root[data-theme="light"] .tour-art .tag {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+/* The book-end steps have no single card to show, so they show all of them. */
+.tour-recap {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 9px;
+  width: 100%;
+}
+/* Contrast note. A tile's own --card-tint on the panel's (brand) tint measures
+   1.11–1.30 — eight dark rectangles on a dark panel, invisible as tiles. The
+   plate can't carry the separation on fill alone, so the accent hairline does
+   it, and the fill lifts to --card-art3 (1.57–2.11, enough to read as a plate
+   once it has an edge). */
+.tour-recap-tile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--card-art1) 55%, transparent);
+  border-radius: 11px;
+  font-size: 12.3px;
+  font-weight: 600;
+  background: var(--card-art3);
+  color: var(--card-ink);
+  /* Re-declared, not inherited. A custom property is inherited as its
+     *substituted* value, so the --tour-accent computed on .tour has already
+     resolved against the panel's (brand) --card-mid — inheriting it would paint
+     all eight icons the same violet and throw away the per-tool identity the
+     iconography rules exist to protect. Declaring it here re-resolves it
+     against the tile's own card--* class. */
+  --tour-accent: var(--card-mid);
+}
+:root[data-theme="light"] .tour-recap-tile {
+  --tour-accent: var(--card-deep);
+}
+/* The icon rides --tour-accent for the same reason the kicker does: the 400
+   stop on a tint is 3.71–5.09 in dark but only 2.21–3.40 in light, under the
+   3:1 minimum for non-text graphics. The accent token is 6.54–8.30 in dark and
+   4.13–6.44 in light. */
+.tour-recap-tile .crumb-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.tour-recap-tile .crumb-icon .i1,
+.tour-recap-tile .crumb-icon .i2 {
+  fill: var(--tour-accent);
+}
+.tour-recap-tile .crumb-icon .is1,
+.tour-recap-tile .crumb-icon .is2 {
+  stroke: var(--tour-accent);
+}
+/* The second fill/stroke stays a step back so two-tone icons keep their
+   depth — still well clear of 3:1 against the plate. */
+.tour-recap-tile .crumb-icon .i2 {
+  fill: color-mix(in srgb, var(--tour-accent) 62%, var(--card-art3));
+}
+.tour-recap-tile .crumb-icon .is2 {
+  stroke: color-mix(in srgb, var(--tour-accent) 62%, var(--card-art3));
+}
+
+.tour-copy {
+  min-width: 0;
+  padding: 28px 30px 22px;
+  overflow-y: auto;
+}
+.tour-kicker {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--tour-accent);
+}
+.tour-copy h2 {
+  margin: 0 0 8px;
+  font-size: 26px;
+  line-height: 1.2;
+  letter-spacing: -0.4px;
+}
+.tour-lede {
+  margin: 0 0 20px;
+  max-width: 56ch;
+  font-size: 14.5px;
+  color: var(--text-dim);
+}
+.tour-feats {
+  display: grid;
+  gap: 13px;
+  margin: 0 0 22px;
+  padding: 0;
+  list-style: none;
+}
+.tour-feats li {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 11px;
+  align-items: start;
+  font-size: 13.8px;
+}
+.feat-mark {
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  margin-left: 3px;
+  border-radius: 2px;
+  transform: rotate(45deg);
+  background: var(--card-art1);
+}
+.tour-feats b {
+  font-weight: 650;
+  color: var(--text);
+}
+.tour-feats .txt {
+  color: var(--text-dim);
+}
+/* Secondary on purpose: the tour's primary action is *continue*, and a tour
+   that drops you into a tool on the main button never gets finished. */
+.tour-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 13px;
+  border: 1px dashed color-mix(in srgb, var(--card-art1) 45%, transparent);
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 650;
+  text-decoration: none;
+  color: var(--tour-accent);
+  transition: background 0.15s, transform 0.12s;
+}
+.tour-open:hover {
+  background: color-mix(in srgb, var(--card-art1) 12%, transparent);
+  transform: translateX(2px);
+}
+
+.tour-foot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-inset);
+}
+.tour-keys {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.tour-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-left: auto;
+}
+/* The primary button is tinted to the tool on screen, so the colour story runs
+   all the way through the action. White on the 400 stop fails AA for every card
+   set (2.44–3.93), so the fill flips by theme: dark ink on the vivid 400 in
+   dark (worst 4.81), white on the deep stop in light (worst 4.56, card--lime).
+   Doubled selector to outrank the generic .btn.btn-primary declared earlier. */
+.tour .btn.btn-primary {
+  background: var(--card-art1);
+  border-color: var(--card-art1);
+  color: var(--bg);
+  transition: background 0.42s ease, border-color 0.42s ease, transform 0.1s;
+}
+:root[data-theme="light"] .tour .btn.btn-primary {
+  background: var(--card-deep);
+  border-color: var(--card-deep);
+  color: #fff;
+}
+.tour .btn.btn-primary:hover {
+  filter: brightness(1.08);
+}
+
+/* Step transitions: direction-aware, art and copy staggered. */
+@keyframes tour-step-fwd {
+  from {
+    opacity: 0;
+    transform: translateX(22px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes tour-step-back {
+  from {
+    opacity: 0;
+    transform: translateX(-22px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes tour-art-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.tour.dir-fwd .tour-copy {
+  animation: tour-step-fwd 0.36s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.tour.dir-back .tour-copy {
+  animation: tour-step-back 0.36s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.tour .tour-art > * {
+  animation: tour-art-in 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.tour-feats li {
+  animation: tour-step-fwd 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.tour-feats li:nth-child(1) {
+  animation-delay: 0.04s;
+}
+.tour-feats li:nth-child(2) {
+  animation-delay: 0.08s;
+}
+.tour-feats li:nth-child(3) {
+  animation-delay: 0.12s;
+}
+.tour-feats li:nth-child(4) {
+  animation-delay: 0.16s;
+}
+.tour-feats li:nth-child(5) {
+  animation-delay: 0.2s;
+}
+.tour-feats li:nth-child(6) {
+  animation-delay: 0.24s;
+}
+
+/* Stacked: the art moves above the copy and shrinks; the rail keeps every
+   segment (it's the only progress indicator left once the counter drops). */
+@media (max-width: 860px) {
+  .tour-body {
+    grid-template-columns: 1fr;
+  }
+  .tour-art {
+    padding: 18px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .tour-art .card-art {
+    width: 132px;
+  }
+  .tour-art-tags {
+    display: none;
+  }
+  .tour-recap {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  /* Names drop, icons stay — hence the class rather than a bare `span`, which
+     would take the icon's wrapper with it. */
+  .tour-recap-name {
+    display: none;
+  }
+  .tour-recap-tile {
+    justify-content: center;
+  }
+  .tour-copy {
+    padding: 20px;
+  }
+  .tour-copy h2 {
+    font-size: 22px;
+  }
+  .tour-count,
+  .tour-keys {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour,
+  .tour[open],
+  .tour .tour-art,
+  .tour .tour-art > *,
+  .tour .tour-copy,
+  .tour-feats li,
+  .tour-nudge,
+  .card.is-pulse {
+    animation: none;
+    transition: none;
+  }
 }
 
 /* ---- autocomplete menu + recipient suggestions (Leave) ---- */

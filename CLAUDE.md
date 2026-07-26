@@ -72,12 +72,24 @@ Tools come in three tiers:
   hub with an ↗ card.
 
 The hub (`static/index.html` + `static/hub.js`) lists every tool as a card and owns hub-only
-interactions (share-to-Slack, favourite stars, favourites-only filter, drag-to-reorder — all
-persisted in `localStorage`). Cards carry a `data-tool` id that the favourites/filter/order logic
-keys off; new cards need one. The card order is the user's own — favourites no longer float to the
-top — and `static/reorder.mjs` holds that ordering logic (dual-consumption, with parity tests):
-saved orders are reconciled against the cards on the page, so a tool added later lands at the end
-instead of disappearing.
+interactions (share-to-Slack, favourite stars, favourites-only filter, drag-to-reorder, the guided
+tour — all persisted in `localStorage`). Cards carry a `data-tool` id that the favourites/filter/
+order/tour logic keys off; new cards need one. The card order is the user's own — favourites no
+longer float to the top — and `static/reorder.mjs` holds that ordering logic (dual-consumption, with
+parity tests): saved orders are reconciled against the cards on the page, so a tool added later
+lands at the end instead of disappearing.
+
+**The guided tour** (`static/tour.js` + `static/tour.mjs`) is a focus-stage dialog: one tool per
+screen, Back/Continue. Its defining property is that it declares _no_ visuals of its own — title,
+colour class, tags, href and the illustration are all read off the hub's cards at runtime (the
+`.card-art` SVG is `cloneNode`d), so the stage and the card cannot drift. `tour.mjs` holds only the
+prose, keyed by `data-tool`, plus the step arithmetic; `src/tour.test.ts` scrapes `data-tool` out of
+`index.html` and fails when a card has no entry, which is what stops a new tool silently skipping
+the tour. Three things there that look incidental and aren't: it is handed `originalCards` (the
+authored order, unfiltered) so a dragged grid or the favourites filter can't reorder or skip steps;
+the `--card-*` properties are `@property`-registered purely so the palette can _transition_ between
+tools; and tinted text uses `--tour-accent` rather than `--card-art1`, because the 400 stop fails
+4.5:1 on the dark panel (pink) and on white (lime) — see the contrast note in the stylesheet.
 
 Four things the drag wiring in `hub.js` depends on, each of which looks removable and isn't:
 
@@ -128,7 +140,10 @@ Since the favicon refresh, every tool has **one visual identity**: a card color 
 (`card--purple`, `card--teal`, `card--green`, `card--coral`, `card--pink`, `card--amber`,
 `card--blue`) plus an SVG icon. That same icon and color must appear everywhere the tool is
 referenced — do not introduce emojis for tool references (emojis remain only for non-tool action
-glyphs like 📋 ⬇️ 🌓, and for tools without an SVG identity: the hub 🧰 and Scrum Poker 🃏):
+glyphs like 📋 ⬇️ 🌓, and for the hub itself, 🧰). **Every** tool in `TOOL_ICONS` has an SVG, Scrum
+Poker included: it was the last emoji hold-out, and the guided tour's recap grid — eight icons side
+by side — is what made a full-colour 🃏 beside seven flat tinted glyphs impossible to ignore.
+Anywhere tools are shown together, one emoji among SVGs reads as a bug:
 
 - **Favicon** (`static/<tool>/index.html`) — inline `data:` SVG filled with the tool's own
   `--card-art1` hex (dark-theme value), not another tool's color.
@@ -164,7 +179,10 @@ Deploy is `.github/workflows/pages.yml`: it copies `static/` → `_site/`, then 
    it's reachable from every page (no test catches a missing one).
 6. Give the tool a consistent icon — pick a card color, add its SVG to `TOOL_ICONS`, and use the
    same icon/color for the favicon, breadcrumb and card art (see "Tool iconography" above).
-7. Update README.md
+7. **Add a `TOUR_CONTENT` entry** in `static/tour.mjs` — a lede and 3–6 `[label, text]` features.
+   `src/tour.test.ts` fails until you do; nothing else about the tour needs touching, since it reads
+   the rest off the card.
+8. Update README.md
 
 ## Conventions
 
