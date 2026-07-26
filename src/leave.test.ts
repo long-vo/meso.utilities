@@ -64,6 +64,12 @@ Deno.test("type mapping: bracket, leave-type label and email applicability", () 
     { type: "annual", bracket: "[OFF] - John Doe", label: "Annual leave", applicable: true },
     { type: "sick", bracket: "[Sick Leave] - John Doe", label: "Sick leave", applicable: true },
     { type: "core", bracket: "[Core Leave] - John Doe", label: "Core leave", applicable: true },
+    {
+      type: "social",
+      bracket: "[Social Leave] - John Doe",
+      label: "Social leave",
+      applicable: true,
+    },
     { type: "remote", bracket: "[Remote] - John Doe", label: "Remote", applicable: false },
     { type: "wfh", bracket: "[WFH] - John Doe", label: "WFH", applicable: false },
   ] as const;
@@ -79,17 +85,19 @@ Deno.test("type mapping: bracket, leave-type label and email applicability", () 
   }
 });
 
-Deno.test("Core leave is full-day only — a half-day is coerced to full", () => {
-  const result = buildLeaveRequest({
-    name: "John Doe",
-    type: "core",
-    duration: "morning",
-    startDate: "2026-07-20",
-  });
-  if (!result.ok) throw new Error(result.error);
-  assert(!result.event.subject.includes("Morning"), `core event: ${result.event.subject}`);
-  assert(!result.email.subject.includes("(Morning)"), `core subject: ${result.email.subject}`);
-  assert(!result.email.body.includes("(Morning)"), `core body: ${result.email.body}`);
+Deno.test("Core and Social leave are full-day only — a half-day is coerced to full", () => {
+  for (const type of ["core", "social"] as const) {
+    const result = buildLeaveRequest({
+      name: "John Doe",
+      type,
+      duration: "morning",
+      startDate: "2026-07-20",
+    });
+    if (!result.ok) throw new Error(result.error);
+    assert(!result.event.subject.includes("Morning"), `${type} event: ${result.event.subject}`);
+    assert(!result.email.subject.includes("(Morning)"), `${type} subject: ${result.email.subject}`);
+    assert(!result.email.body.includes("(Morning)"), `${type} body: ${result.email.body}`);
+  }
 });
 
 Deno.test("Annual leave allows a half-day: TIME token in event bracket and email period", () => {
@@ -410,6 +418,10 @@ Deno.test("templateSummary: type label, duration, and optional reason", () => {
   assertEquals(templateSummary({ type: "sick", duration: "afternoon" }), "Sick leave · afternoon");
   // Full-day-only types always read "full day", even if a stray half-day slipped in.
   assertEquals(templateSummary({ type: "core", duration: "morning" }), "Core leave · full day");
+  assertEquals(
+    templateSummary({ type: "social", duration: "afternoon" }),
+    "Social leave · full day",
+  );
   // A reason is appended when present, and ignored when blank.
   assertEquals(
     templateSummary({ type: "annual", duration: "full", reason: "Family trip" }),
@@ -674,6 +686,8 @@ Deno.test("availabilityUpdate: turns the request into one person's day code", ()
   // rather than inventing a request the form cannot make.
   assertEquals(code("core", "full"), "c");
   assertEquals(code("core", "morning"), "c");
+  assertEquals(code("social", "full"), "si");
+  assertEquals(code("social", "morning"), "si");
   assertEquals(code("nonsense", "full"), "p", "an unknown type falls back to annual");
 
   // A half day is a single date, however the To field was left.
