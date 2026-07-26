@@ -12,6 +12,7 @@
       var t = localStorage.getItem("meso-theme");
       if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
       if (localStorage.getItem("meso-controls-hidden-availability") === "1") document.documentElement.setAttribute("data-controls-collapsed", "");
+      if (localStorage.getItem("meso-rail-hidden-availability") === "1") document.documentElement.setAttribute("data-rail-collapsed", "");
     } catch (e) { /* storage unavailable; keep the default dark theme */ }
   </script>
   <link rel="stylesheet" href="../styles.css" />
@@ -40,6 +41,15 @@
           stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
           <rect x="2.75" y="4.5" width="14.5" height="11" rx="2.25" />
           <line x1="8" y1="4.5" x2="8" y2="15.5" />
+        </svg>
+      </button>
+      <button id="rail-toggle" class="icon-btn" type="button"
+        aria-controls="legend-rail" aria-expanded="true" title="Hide legend panel"
+        aria-label="Hide legend panel">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor"
+          stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
+          <rect x="2.75" y="4.5" width="14.5" height="11" rx="2.25" />
+          <line x1="12" y1="4.5" x2="12" y2="15.5" />
         </svg>
       </button>
       <button id="theme-toggle" class="icon-btn" type="button" aria-label="Toggle colour theme">
@@ -206,7 +216,7 @@
          layout drops the whole column when there is no model to explain — the
          `:has(> .legend-rail[hidden])` rule keys off this element being a
          direct child of .layout. -->
-    <div id="legend-rail" class="legend-rail" hidden>
+    <div id="legend-rail" class="legend-rail rail" data-rail-label="legend" hidden>
       <section class="panel" aria-label="Legend">
         <div class="panel-head">
           <h2>Legend</h2>
