@@ -2335,7 +2335,15 @@ html.js body.page-hub .cards.is-ready {
   position: relative;
   display: grid;
   grid-template-columns: 340px 1fr;
-  flex: 1;
+  /* `1 1 auto`, not the shorthand `1` — `flex: 1` means `flex-basis: 0`, and the
+     dialog is a column flex container with a `max-height` but no definite
+     `height`. With a zero basis this row contributes nothing to that auto
+     height, so Safari resolved the whole body to zero and the tour opened as a
+     bare progress rail above the buttons — no illustration, no copy. (Chrome
+     sizes it from the content contribution instead, which is why it only showed
+     up on a phone.) The `auto` basis restores the contribution; `min-height: 0`
+     still lets it shrink under `max-height` so `.tour-copy` scrolls. */
+  flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
 }
