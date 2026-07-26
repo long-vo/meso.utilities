@@ -32,6 +32,11 @@ everything here runs entirely in your browser and deploys to GitHub Pages.
   [meso.poker](https://github.com/long-vo/meso.poker), and is hosted on Render (it needs a server
   for live rooms); the hub links straight to it.
 
+New here? **Take a tour** in the hub toolbar walks through the tools one screen at a time — what
+each one is for and what it actually does — with Back/Continue, the arrow keys, and a progress rail
+you can click to jump. It never opens by itself: on a first visit it only offers a small nudge
+beside the button, and the tour is in the **Ctrl/⌘ K** palette from every page.
+
 On the hub, the ☆ star at the top-right of each card marks a tool as a favourite, and the
 **Favourites only** toggle narrows the grid to just those. The ⠿ grip beside the star drags a card
 anywhere in the grid — mouse or touch — or, with the grip focused, the **arrow keys** move it a slot
@@ -438,6 +443,7 @@ src/
   shortlink.test.ts   shortlink logic tests (import the module from static/shortlink/)
   transform.test.ts   text-transform tests (import the modules from static/transform/)
   reorder.test.ts     hub card-ordering tests (import the module from static/)
+  tour.test.ts        guided-tour content/step tests (also reads static/index.html)
   xlsx.test.ts        minimal xlsx-reader tests (import the module from static/availability/)
   availability.test.ts  vacation-model + aggregation tests (from static/availability/)
   testdata/
@@ -451,6 +457,8 @@ static/
   handoff.mjs         cross-tool "Send to" handoff (imported by the browser and the tests)
   hub.js              hub master-page interactions (share to Slack, favourite stars, card drag)
   reorder.mjs         hub card ordering logic (imported by the browser and the tests)
+  tour.js             the hub's guided tour: dialog, rendering, keyboard
+  tour.mjs            tour content + step logic (imported by the browser and the tests)
   sanitize.mjs        masking logic (imported by the browser and the tests)
   diff.mjs            line-pair diff for the sanitizer's Diff view (browser and tests)
   suggest.mjs         sensitive-field suggestions (browser and tests)

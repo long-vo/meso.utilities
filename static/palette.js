@@ -69,6 +69,15 @@ export const TOOL_ICONS = {
   transform: '<span class="crumb-icon card--blue">' +
     '<svg width="14" height="14" viewBox="0 0 16 16">' +
     '<text class="i1" x="1.5" y="12" font-size="11" font-weight="700">Aa</text></svg></span>',
+  // Two fanned cards — the small-size reading of the hub card's three-card
+  // illustration. Poker used to be one of the two things here with no SVG
+  // identity (a 🃏), which read as a full-colour emoji wherever the other tools
+  // showed a flat tinted glyph; the hub's guided-tour recap made that obvious.
+  poker: '<span class="crumb-icon card--amber">' +
+    '<svg width="14" height="14" viewBox="0 0 16 16">' +
+    '<g transform="rotate(-15 5.4 12)">' +
+    '<rect class="i2" x="2.4" y="3.2" width="6" height="9.2" rx="1.5" /></g>' +
+    '<rect class="i1" x="7.4" y="3.2" width="6.2" height="9.6" rx="1.5" /></svg></span>',
   // Slidedown's own start-crumb-icon (StartScreen.tsx) hardcodes the pink
   // card's hexes; the i1/i2 classes resolve to the same colors via card--pink.
   slidedown: '<span class="crumb-icon card--pink">' +
@@ -135,7 +144,7 @@ const TOOL_LINKS = [
     keywords: ["slides", "presentation", "markdown", "deck"],
   },
   {
-    icon: "🃏",
+    icon: TOOL_ICONS.poker,
     title: "Scrum Poker",
     href: "https://meso-poker.onrender.com/",
     keywords: ["estimate", "planning", "team"],
@@ -170,6 +179,21 @@ function builtinCommands() {
       run: () => document.getElementById("theme-toggle")?.click(),
     },
   ];
+  // The guided tour lives on the hub, so from a tool page the only way in is to
+  // go back first — hub.js reads the hash on load and opens it. Keyed off the
+  // hub's own launcher rather than the path, so this can't end up alongside the
+  // command hub.js registers (which opens the tour without a navigation).
+  if (!document.getElementById("tour-start")) {
+    actions.push({
+      icon: "▸",
+      title: "Take a tour",
+      hint: "open",
+      keywords: ["tour", "guide", "intro", "help", "walkthrough", "onboarding", "explain"],
+      run: () => {
+        location.href = new URL("./#tour", import.meta.url).href;
+      },
+    });
+  }
   // Only tool pages have a controls sidebar; skip the action on the hub.
   if (document.getElementById("controls-toggle")) {
     actions.push({
