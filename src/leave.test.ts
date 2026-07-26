@@ -10,6 +10,7 @@
 import {
   addRecipients,
   applyRecipientCompletion,
+  availabilityUpdate,
   buildLeaveRequest,
   filterRecipientSuggestions,
   isValidEmailList,
@@ -17,6 +18,7 @@ import {
   nextWorkingDay,
   outlookComposeUrl,
   parseEmails,
+  parseLeaveHandoff,
   recipientTokenAt,
   removeRecipient,
   summarizePeriod,
@@ -592,4 +594,101 @@ Deno.test("nextWorkingDay: weekdays pass through, weekends roll to Monday", () =
   // Unparsable input comes back untouched — the form shows its own guidance.
   assertEquals(nextWorkingDay(""), "", "blank stays blank");
   assertEquals(nextWorkingDay("not-a-date"), "not-a-date", "garbage is returned as-is");
+});
+
+Deno.test("parseLeaveHandoff: fills the form from a grid selection, or gives up", () => {
+  const text = (payload: unknown) => JSON.stringify(payload);
+
+  assertEquals(
+    parseLeaveHandoff(text({
+      v: 1,
+      name: "Anh Pham",
+      type: "annual",
+      duration: "full",
+      from: "2026-07-27",
+      to: "2026-07-29",
+    })),
+    {
+      name: "Anh Pham",
+      type: "annual",
+      duration: "full",
+      startDate: "2026-07-27",
+      endDate: "2026-07-29",
+    },
+  );
+
+  // A payload the sender could not fully resolve still saves the date entry:
+  // an unmappable type and a missing name fall back to the empty form's values.
+  assertEquals(
+    parseLeaveHandoff(text({
+      v: 1,
+      name: null,
+      type: null,
+      duration: "sometimes",
+      from: "2026-07-27",
+      to: null,
+    })),
+    { name: "", type: "annual", duration: "full", startDate: "2026-07-27", endDate: "2026-07-27" },
+  );
+
+  // A backwards range describes one day, the reading formatPeriod already uses.
+  assertEquals(
+    parseLeaveHandoff(text({ v: 1, from: "2026-07-29", to: "2026-07-27" }))?.endDate,
+    "2026-07-29",
+    "an end before the start collapses to the start",
+  );
+
+  // Half days survive.
+  assertEquals(
+    parseLeaveHandoff(text({ v: 1, duration: "afternoon", from: "2026-07-27" }))?.duration,
+    "afternoon",
+  );
+
+  // Nothing usable → null, and the page keeps the state it had.
+  assertEquals(parseLeaveHandoff("not json"), null, "garbage");
+  assertEquals(parseLeaveHandoff(text({ v: 2, from: "2026-07-27" })), null, "a newer version");
+  assertEquals(parseLeaveHandoff(text({ v: 1, to: "2026-07-27" })), null, "no start date");
+  assertEquals(parseLeaveHandoff(text({ v: 1, from: "27.07.2026" })), null, "not an ISO date");
+  assertEquals(parseLeaveHandoff(text(null)), null, "not an object");
+});
+
+Deno.test("availabilityUpdate: turns the request into one person's day code", () => {
+  const base = { name: "Anh Pham", type: "annual", duration: "full", startDate: "2026-07-27" };
+
+  assertEquals(
+    availabilityUpdate({ ...base, endDate: "2026-07-29" }),
+    { name: "Anh Pham", from: "2026-07-27", to: "2026-07-29", code: "p" },
+  );
+
+  const code = (type: string, duration: string) =>
+    availabilityUpdate({ ...base, type, duration })?.code;
+  assertEquals(code("annual", "full"), "p", "annual leave");
+  assertEquals(code("annual", "morning"), "m");
+  assertEquals(code("annual", "afternoon"), "a");
+  assertEquals(code("sick", "full"), "s");
+  assertEquals(code("sick", "morning"), "sm");
+  assertEquals(code("sick", "afternoon"), "sa");
+  assertEquals(code("remote", "full"), "r");
+  assertEquals(code("wfh", "afternoon"), "ra", "WFH and Remote share the remote codes");
+  // Core leave is full-day only, so its halves resolve to the full-day code
+  // rather than inventing a request the form cannot make.
+  assertEquals(code("core", "full"), "c");
+  assertEquals(code("core", "morning"), "c");
+  assertEquals(code("nonsense", "full"), "p", "an unknown type falls back to annual");
+
+  // A half day is a single date, however the To field was left.
+  assertEquals(
+    availabilityUpdate({ ...base, duration: "morning", endDate: "2026-07-31" }),
+    { name: "Anh Pham", from: "2026-07-27", to: "2026-07-27", code: "m" },
+  );
+  // So is a full day whose end is missing, blank or before the start.
+  const to = (endDate: string) => availabilityUpdate({ ...base, endDate })?.to;
+  assertEquals(to(""), "2026-07-27", "no end date");
+  assertEquals(to("2026-07-20"), "2026-07-27", "an end before the start");
+  assertEquals(to("nope"), "2026-07-27", "an unparsable end");
+
+  // Nothing to record against.
+  assertEquals(availabilityUpdate({ ...base, name: "  " }), null, "no name");
+  assertEquals(availabilityUpdate({ ...base, startDate: "" }), null, "no start date");
+  assertEquals(availabilityUpdate({ ...base, startDate: "27.07.2026" }), null, "not an ISO date");
 });

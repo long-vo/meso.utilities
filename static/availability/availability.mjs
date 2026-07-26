@@ -6,9 +6,20 @@
 // ("Workbook facts the parser must honor").
 
 /**
+ * @typedef {{ working: number | null, carry: number | null, allowance: number | null,
+ *   planned: number | null, dayOffs: number | null,
+ *   annual: number | null, core: number | null, sick: number | null }} Balance
+ *   One person's leave accounting, as the "General" sheet records it: the days
+ *   it counts (`working`, `carry` from the previous year, the year's annual
+ *   `allowance`, `planned`, and `dayOffs` taken) and what is left of each
+ *   allowance (`annual`, `core`, `sick`). A field is null when that cell was
+ *   blank; negative means overdrawn. The sheet's own arithmetic is
+ *   `annual = carry + allowance - planned - dayOffs`, which is why the two
+ *   groups belong to one record.
  * @typedef {{ name: string, team: string, location: "VN" | "CH",
- *   days: Record<string, string> }} Person
+ *   days: Record<string, string>, balance?: Balance }} Person
  *   `days` maps ISO dates ("2026-07-01") to the raw lowercase day code.
+ *   `balance` is absent for anyone the balance block does not list.
  * @typedef {{ sheet: string, ref: string, value: string, message: string }} Warning
  * @typedef {{ people: Person[], days: string[], warnings: Warning[] }} Model
  */
@@ -347,9 +358,225 @@ function parseQuarterGrid(rows, sheetName, year, quarter, warnings) {
   return people;
 }
 
+// --- leave balances ------------------------------------------------------------
+// The workbook's "General" sheet carries a second, unrelated table: one row per
+// person with the year's leave accounting — the days it counts and what is left
+// of each allowance.
+
+const BALANCE_COLUMNS = ["annual leave", "core leave", "sick leave"];
+const NAME_HEADER = /^associate name$/i;
+
+/**
+ * The counted columns, between the name and the three `remain` ones. Each is
+ * found by its own header rather than by an offset from the block, so a column
+ * that moves — or that a future workbook drops — costs only itself.
+ *
+ * `carry` is headed by the bare previous-year number (`2025` in the 2026
+ * workbook), which is why it matches a pattern and not a word; `allowance` is
+ * the sheet's `Annual` / `Leave` header split over two rows, so only its first
+ * line is matched.
+ */
+/** @type {Array<[key: string, header: RegExp]>} */
+const RECORDED_COLUMNS = [
+  ["working", /^working$/],
+  ["carry", /^(?:19|20)\d{2}$/],
+  ["allowance", /^annual(?: leave)?$/],
+  ["planned", /^planned$/],
+  ["dayOffs", /^day ?offs?$/],
+];
+
+/**
+ * Every field of a {@link Balance}, in the sheet's own left-to-right order —
+ * the counted columns, then the three remainders. Exported because the UI, the
+ * totals and the storage validator must agree on this list.
+ */
+export const BALANCE_FIELDS = [
+  ...RECORDED_COLUMNS.map(([key]) => key),
+  "annual",
+  "core",
+  "sick",
+];
+
+/** A header cell as a comparable label: trimmed, lowercase, runs of space collapsed. */
+function label(value) {
+  return clean(value)?.toLowerCase().replace(/\s+/g, " ") ?? null;
+}
+
+/** @param {unknown} value @returns {number | null} */
+function numberOrNull(value) {
+  return isNumeric(value) ? Number(value) : null;
+}
+
+/**
+ * Find the balance block by its own signature: the three `Annual leave |
+ * Core leave | Sick Leave` columns with an `Associate Name` column to their
+ * left. Like {@link findHeader}, positions come from the signature so the
+ * block may shift between workbook years. `recorded` maps each counted column
+ * to its own index, or to -1 when this workbook has no such column.
+ *
+ * @param {Array<Array<unknown>>} rows
+ * @returns {{ row: number, nameCol: number, firstCol: number,
+ *   recorded: Record<string, number> } | null}
+ */
+function findBalanceHeader(rows) {
+  for (let r = 0; r < rows.length; r++) {
+    const cells = rows[r] ?? [];
+    for (let c = 0; c + BALANCE_COLUMNS.length <= cells.length; c++) {
+      if (!BALANCE_COLUMNS.every((h, i) => label(cells[c + i]) === h)) continue;
+      let nameCol = -1;
+      for (let k = 0; k < c; k++) {
+        if (NAME_HEADER.test(clean(cells[k]) ?? "")) nameCol = k;
+      }
+      if (nameCol === -1) continue;
+      // Searched strictly between the name and the remainders, so `Annual` can
+      // never be answered by the `Annual leave` remainder column itself.
+      /** @type {Record<string, number>} */
+      const recorded = {};
+      for (const [key, pattern] of RECORDED_COLUMNS) {
+        recorded[key] = -1;
+        for (let k = nameCol + 1; k < c; k++) {
+          if (pattern.test(label(cells[k]) ?? "")) recorded[key] = k;
+        }
+      }
+      return { row: r, nameCol, firstCol: c, recorded };
+    }
+  }
+  return null;
+}
+
+/**
+ * The leave balances of one sheet — an empty array when the sheet has no
+ * balance block, which is how {@link parseVacationWorkbook} tells the General
+ * sheet apart from the holiday one without matching on sheet names.
+ *
+ * Two rows below the header are deliberately not people: the `remain` label
+ * row that spells the columns out, and roster rows that are still entirely
+ * blank (a joiner with nothing recorded yet). Both are skipped by the same
+ * rule — a row with no number in it carries no balance. The block ends where
+ * the name column does, which is what keeps the legend further down the sheet
+ * out of the result.
+ *
+ * @param {Array<Array<unknown>>} rows
+ * @returns {Array<{ name: string } & Balance>}
+ */
+export function parseBalanceSheet(rows) {
+  const header = findBalanceHeader(rows);
+  if (header === null) return [];
+  const entries = [];
+  for (let r = header.row + 1; r < rows.length; r++) {
+    const cells = rows[r] ?? [];
+    const name = clean(cells[header.nameCol]);
+    if (name === null) break;
+    /** @type {{ name: string } & Balance} */
+    const entry = /** @type {any} */ ({ name });
+    for (const [key] of RECORDED_COLUMNS) {
+      const col = header.recorded[key];
+      entry[key] = col === -1 ? null : numberOrNull(cells[col]);
+    }
+    entry.annual = numberOrNull(cells[header.firstCol]);
+    entry.core = numberOrNull(cells[header.firstCol + 1]);
+    entry.sick = numberOrNull(cells[header.firstCol + 2]);
+    if (BALANCE_FIELDS.every((key) => entry[key] === null)) continue;
+    entries.push(entry);
+  }
+  return entries;
+}
+
+/**
+ * What one day under `code` contributes to a person's leave accounting: the
+ * fraction of the day worked, and the fraction not worked booked against the
+ * allowance its kind belongs to. Codes that are not leave (working, remote,
+ * onsite) only ever touch `working`; `carry` and `allowance` are the year's
+ * grant rather than activity, so nothing here moves them.
+ *
+ * An empty code is no data, not a worked day — the day contributes nothing at
+ * all, exactly as it contributes to neither side of {@link teamCapacity}.
+ *
+ * The signs are the sheet's own arithmetic, which is what keeps
+ * `annual = carry + allowance - planned - dayOffs` true after any change:
+ * a day booked as annual leave adds to `dayOffs` and takes the same amount off
+ * `annual`.
+ *
+ * @param {string} code
+ * @returns {Partial<Balance>}
+ */
+function dayEffect(code) {
+  if (code === "" || code === undefined || code === null) return {};
+  const info = codeInfo(code);
+  const off = 1 - info.weight; // the fraction of the day not worked
+  const effect = { working: info.weight };
+  if (info.kind === "planned") {
+    effect.planned = off;
+    effect.annual = -off;
+  } else if (info.kind === "leave") {
+    effect.dayOffs = off;
+    effect.annual = -off;
+  } else if (info.kind === "core") {
+    effect.core = -off;
+  } else if (info.kind === "sick") {
+    effect.sick = -off;
+  }
+  return effect;
+}
+
+/**
+ * Move a balance by the day-code changes `changes` describes — one
+ * `[before, after]` pair per day. This is what makes a request written onto the
+ * grid show up in the balances too, instead of the two disagreeing until the
+ * next workbook lands.
+ *
+ * Exactly reversible: replaying the same pairs swapped puts the balance back,
+ * which is what lets {@link revertDayCodes} undo a change in full.
+ *
+ * A field that was never recorded (null) stays null — marking days cannot
+ * invent a balance the workbook does not have — and a person with no balance at
+ * all is returned untouched.
+ *
+ * @param {Balance | undefined} balance
+ * @param {Array<[string, string]>} changes
+ * @returns {Balance | undefined}
+ */
+export function shiftBalance(balance, changes) {
+  if (balance === undefined || balance === null) return balance;
+  const moved = { ...balance };
+  for (const [before, after] of changes) {
+    const from = dayEffect(before);
+    const to = dayEffect(after);
+    for (const key of BALANCE_FIELDS) {
+      const delta = (to[key] ?? 0) - (from[key] ?? 0);
+      if (delta !== 0 && typeof moved[key] === "number") moved[key] += delta;
+    }
+  }
+  return moved;
+}
+
+/**
+ * Sum a group's balances for a totals line, one total per {@link BALANCE_FIELDS}
+ * entry. People without a balance are ignored (`people` counts only the ones
+ * that have one), and a null field contributes nothing rather than reading as a
+ * zero someone earned.
+ *
+ * @param {Person[]} people
+ * @returns {Record<string, number>} `people` plus one key per balance field
+ */
+export function balanceTotals(people) {
+  const totals = { people: 0 };
+  for (const key of BALANCE_FIELDS) totals[key] = 0;
+  for (const person of people) {
+    if (person.balance === undefined || person.balance === null) continue;
+    totals.people++;
+    for (const key of BALANCE_FIELDS) {
+      const value = person.balance[key];
+      if (typeof value === "number" && Number.isFinite(value)) totals[key] += value;
+    }
+  }
+  return totals;
+}
+
 /**
  * Parse the whole vacation workbook (all `1st quarter` … `4th quarter`
- * sheets; holiday/summary sheets are ignored) into one reconciled model.
+ * sheets; the "General" sheet contributes leave balances, other sheets are
+ * ignored) into one reconciled model.
  *
  * People are matched across quarters by trimmed name; the team label of the
  * latest quarter a person appears in wins (labels drift, e.g. `Pragma` →
@@ -373,10 +600,21 @@ export function parseVacationWorkbook(sheets, opts) {
   /** @type {string[]} */
   const days = [];
   let quartersSeen = 0;
+  /** @type {ReturnType<typeof parseBalanceSheet>} */
+  let balances = [];
+  let balanceSheet = "";
 
   for (const sheet of sheets) {
     const quarter = quarterOfSheetName(sheet.name);
-    if (quarter === 0) continue;
+    if (quarter === 0) {
+      // The balance block lives on a non-quarter sheet ("General" in the real
+      // workbook); the first sheet carrying one wins.
+      if (balances.length === 0) {
+        balances = parseBalanceSheet(sheet.rows);
+        if (balances.length > 0) balanceSheet = sheet.name;
+      }
+      continue;
+    }
     quartersSeen++;
     const roster = parseQuarterGrid(sheet.rows, sheet.name, opts.year, quarter, warnings);
     if (roster.length > 0) days.push(...quarterDates(opts.year, quarter));
@@ -399,6 +637,28 @@ export function parseVacationWorkbook(sheets, opts) {
   if (quartersSeen === 0) {
     throw new Error('no quarter sheets found (expected names like "1st quarter")');
   }
+
+  // Balances join to the roster by name — the quarter grids decide who exists,
+  // so a balance row matching nobody is reported rather than inventing a person.
+  const byLower = new Map([...byName.values()].map((p) => [p.name.toLowerCase(), p]));
+  for (const entry of balances) {
+    const person = byLower.get(entry.name.toLowerCase());
+    if (person === undefined) {
+      warnings.push({
+        sheet: balanceSheet,
+        ref: "",
+        value: entry.name,
+        message:
+          `${balanceSheet}: leave balances for "${entry.name}" match nobody in the quarter ` +
+          `sheets — ignored`,
+      });
+      continue;
+    }
+    const balance = /** @type {Balance} */ ({});
+    for (const key of BALANCE_FIELDS) balance[key] = entry[key];
+    person.balance = balance;
+  }
+
   return { people: [...byName.values()], days: [...new Set(days)].sort(), warnings };
 }
 
@@ -726,6 +986,291 @@ export function teamCapacity(model, from, to) {
   return [...teams.values()].sort((a, b) => a.team.localeCompare(b.team));
 }
 
+// --- handoff to Leave --------------------------------------------------------------
+
+/**
+ * Day-code kinds → the Leave tool's leave types. Kinds with no leave equivalent
+ * (working, onsite, holiday, weekend, social-insurance, unknown) are absent, and
+ * the target then keeps its own default rather than guessing.
+ */
+const LEAVE_TYPE_BY_KIND = {
+  planned: "annual",
+  leave: "annual",
+  core: "core",
+  sick: "sick",
+  remote: "wfh",
+};
+
+/**
+ * Sort a picked run of grid cells into the days a leave request could cover and
+ * the days it could not. A weekend is not a day off anyone has to ask for, and a
+ * public holiday is already free — booking one would spend a leave day on a day
+ * nobody works. Everything else counts, blank cells included: no data recorded
+ * for a Tuesday is not a reason to refuse a request for it.
+ *
+ * `reason` names what a pick is made of when it holds no leavable day at all —
+ * the wording the UI puts in front of a refused pick — and is null whenever
+ * there is something to request, including for an empty pick.
+ *
+ * `outside` and `markable` answer a different question: not "can this be
+ * requested" but "can it be written onto the grid". A day the workbook never
+ * covered is still a real date someone can ask for, so it never sets `reason`;
+ * it simply has no column to be marked in. `markable` counts the days
+ * {@link applyDayCodes} would actually write — everything that is neither a
+ * weekend nor outside the imported range — so a caller can tell beforehand
+ * whether marking would do anything at all.
+ *
+ * Cells are `{ date, code, outside }` triples rather than a model slice on
+ * purpose: the caller reads them straight off the grid, so the answer covers
+ * exactly what is on screen (the CH holiday overlay included) without
+ * rebuilding the model on every step of a drag.
+ *
+ * @param {Array<{ date?: string, code?: string, outside?: boolean }>} picked
+ * @returns {{ leavable: number, weekend: number, holiday: number, outside: number,
+ *   markable: number, reason: string | null }}
+ */
+export function leavableDays(picked) {
+  /** @type {{ leavable: number, weekend: number, holiday: number, outside: number,
+   *   markable: number, reason: string | null }} */
+  const summary = { leavable: 0, weekend: 0, holiday: 0, outside: 0, markable: 0, reason: null };
+  for (const cell of picked) {
+    const date = cell?.date ?? "";
+    const kind = codeInfo(cell?.code ?? "").kind;
+    // The calendar answers for the cells the workbook left blank; the day code
+    // answers for the ones it filled in.
+    const weekend = kind === "weekend" || (date !== "" && isWeekend(date));
+    const outside = cell?.outside === true;
+    if (weekend) summary.weekend++;
+    else if (kind === "holiday") summary.holiday++;
+    else summary.leavable++;
+    if (outside) summary.outside++;
+    if (!weekend && !outside) summary.markable++;
+  }
+  if (summary.leavable === 0) {
+    if (summary.weekend > 0 && summary.holiday > 0) summary.reason = "weekend and public holiday";
+    else if (summary.holiday > 0) summary.reason = "public holiday";
+    else if (summary.weekend > 0) summary.reason = "weekend";
+  }
+  return summary;
+}
+
+/**
+ * The leave type and duration a grid pick implies — what {@link leaveHandoffText}
+ * sends when nothing overrides them, exposed so the send-to-Leave dialog can
+ * prefill its fields with the same reading. A half-day code only describes a
+ * single day, so a multi-day pick is always full days.
+ *
+ * @param {{ code?: string, from: string, to: string }} selection
+ * @returns {{ type: string | null, duration: "full"|"morning"|"afternoon" }}
+ */
+export function leaveHandoffDefaults({ code, from, to }) {
+  const info = codeInfo(code ?? "");
+  const half = from === to ? info.half : null;
+  return {
+    type: LEAVE_TYPE_BY_KIND[info.kind] ?? null,
+    duration: half === "am" ? "morning" : half === "pm" ? "afternoon" : "full",
+  };
+}
+
+/**
+ * The handoff payload for a grid selection: who, which days, and which leave
+ * type the picked code implies. An explicit `type` or `duration` (the dialog's
+ * override path) replaces the code-derived one; absent, the defaults apply.
+ *
+ * @param {{ name: string, code?: string, from: string, to: string,
+ *   type?: string, duration?: string }} selection
+ * @returns {string} the envelope text `parseLeaveHandoff` reads
+ */
+export function leaveHandoffText({ name, code, from, to, type, duration }) {
+  const defaults = leaveHandoffDefaults({ code, from, to });
+  return JSON.stringify({
+    v: 1,
+    name: String(name ?? ""),
+    type: type ?? defaults.type,
+    duration: duration ?? defaults.duration,
+    from,
+    to,
+  });
+}
+
+/**
+ * Write a leave request's day code onto one person's row — the return path of
+ * the Leave handoff, so a request made from the grid lands back in it.
+ *
+ * Three things are deliberately *not* written, and are reported instead of
+ * silently dropped: an unknown person (the roster comes from the workbook, and
+ * a leave form must not invent a row), days outside the imported range (the
+ * grid has no column for them), and weekends (a request spanning one covers the
+ * working days around it, and overwriting `e` would claim someone worked).
+ *
+ * The person's leave balance moves with the days ({@link shiftBalance}), so the
+ * grid and the balances panel never disagree about the same absence.
+ *
+ * The model is copied, never mutated: callers hold the old one until they
+ * choose to swap it in.
+ *
+ * Every overwritten code is returned in `before` (an empty string where the cell
+ * had none), which is what makes the change undoable — see {@link revertDayCodes}.
+ *
+ * @param {Model} model
+ * @param {{ name: string, from: string, to: string, code: string }} update
+ * @returns {{ model: Model, name: string | null, written: number, weekend: number,
+ *   outside: number, before: Record<string, string> }} `name` is the roster's
+ *   spelling, or null when nobody matched.
+ */
+export function applyDayCodes(model, update) {
+  const nothing = { model, name: null, written: 0, weekend: 0, outside: 0, before: {} };
+  const iso = /^\d{4}-\d{2}-\d{2}$/;
+  // `nextDate` throws on an unparsable date, and this input crossed a storage
+  // boundary — check before stepping through the range with it.
+  if (!iso.test(update?.from ?? "") || !iso.test(update?.to ?? "")) return nothing;
+  const wanted = String(update?.name ?? "").trim().toLowerCase();
+  const person = model.people.find((p) => p.name.toLowerCase() === wanted) ?? null;
+  if (person === null) return nothing;
+  const known = new Set(model.days);
+  const days = { ...person.days };
+  /** @type {Record<string, string>} */
+  const before = {};
+  /** @type {Array<[string, string]>} */
+  const changes = [];
+  let written = 0;
+  let weekend = 0;
+  let outside = 0;
+  for (let date = update.from; date <= update.to; date = nextDate(date)) {
+    if (!known.has(date)) {
+      outside++;
+      continue;
+    }
+    if (codeInfo(days[date] ?? "").kind === "weekend") {
+      weekend++;
+      continue;
+    }
+    before[date] = days[date] ?? "";
+    changes.push([before[date], update.code]);
+    days[date] = update.code;
+    written++;
+  }
+  // The days and the balance describe the same absence, so they move together.
+  const balance = shiftBalance(person.balance, changes);
+  return {
+    model: {
+      ...model,
+      people: model.people.map((p) =>
+        p === person ? { ...p, days, ...(balance === undefined ? {} : { balance }) } : p
+      ),
+    },
+    name: person.name,
+    written,
+    weekend,
+    outside,
+    before,
+  };
+}
+
+/**
+ * Put back what an applied change overwrote — deleting a recorded change undoes
+ * it rather than just forgetting it happened.
+ *
+ * A day is only restored while it still holds the code that change wrote: if
+ * something later moved that day again, the newer value is the true one and
+ * resurrecting an older code would be a silent regression. Those days are
+ * counted as `kept` so the caller can say so.
+ *
+ * What the days give back, the balance gives back too — but only for the days
+ * actually restored, so a partial undo leaves a partially booked balance rather
+ * than crediting days that are still taken.
+ *
+ * @param {Model} model
+ * @param {{ name: string, code: string, before?: Record<string, string> }} entry
+ * @returns {{ model: Model, name: string | null, restored: number, kept: number }}
+ */
+export function revertDayCodes(model, entry) {
+  const before = entry?.before ?? null;
+  const wanted = String(entry?.name ?? "").trim().toLowerCase();
+  const person = model.people.find((p) => p.name.toLowerCase() === wanted) ?? null;
+  if (person === null || before === null || typeof before !== "object") {
+    return { model, name: person?.name ?? null, restored: 0, kept: 0 };
+  }
+  const days = { ...person.days };
+  /** @type {Array<[string, string]>} */
+  const changes = [];
+  let restored = 0;
+  let kept = 0;
+  for (const [date, previous] of Object.entries(before)) {
+    if ((days[date] ?? "") !== entry.code) {
+      kept++;
+      continue;
+    }
+    // "" means the cell had no code at all; restoring must leave it blank
+    // again, not write an empty string the legend would call unknown.
+    if (previous === "") delete days[date];
+    else days[date] = previous;
+    changes.push([entry.code, previous]);
+    restored++;
+  }
+  // Only the days actually put back are unbooked; the ones a later change moved
+  // on keep the balance that change gave them.
+  const balance = shiftBalance(person.balance, changes);
+  return {
+    model: {
+      ...model,
+      people: model.people.map((p) =>
+        p === person ? { ...p, days, ...(balance === undefined ? {} : { balance }) } : p
+      ),
+    },
+    name: person.name,
+    restored,
+    kept,
+  };
+}
+
+/** How many recorded changes are kept. Old enough to answer "who changed my
+ *  row?", short enough that the panel stays readable and the state stays small. */
+export const HISTORY_LIMIT = 20;
+
+/**
+ * @typedef {Object} HistoryEntry
+ * @property {string} name Roster spelling of the person the days belong to.
+ * @property {string} from ISO date @property {string} to ISO date
+ * @property {string} code The day code written.
+ * @property {number} days How many days actually took it (weekends are skipped).
+ * @property {number} at When it was applied (epoch ms).
+ * @property {string} [source] The tool that asked for it, e.g. "Leave Request".
+ * @property {Record<string, string>} [before] What each written day held before
+ *   (empty string where the cell had none) — what {@link revertDayCodes} needs
+ *   to undo the change rather than merely forget it.
+ */
+
+/**
+ * Add an applied change to the history, newest first, capped at `limit`.
+ * Returns a new array — the caller swaps it in, so a render mid-update never
+ * sees a half-written list.
+ *
+ * @param {HistoryEntry[]} history
+ * @param {HistoryEntry} entry
+ * @param {number} [limit]
+ * @returns {HistoryEntry[]}
+ */
+export function pushHistory(history, entry, limit = HISTORY_LIMIT) {
+  const list = Array.isArray(history) ? history : [];
+  return [entry, ...list].slice(0, Math.max(0, limit));
+}
+
+/**
+ * One history line: who, which days, and what was written there — the code's
+ * own legend label, so the line says "Sick leave" rather than "s".
+ *
+ * @param {{ name: string, from: string, to: string, code: string, days: number }} entry
+ * @returns {string}
+ */
+export function historyText(entry) {
+  const when = entry.from === entry.to
+    ? shortDay(entry.from)
+    : `${shortDay(entry.from)}–${shortDay(entry.to)}`;
+  const days = `${entry.days} ${entry.days === 1 ? "day" : "days"}`;
+  return `${entry.name} · ${when} · ${codeInfo(entry.code).label} (${days})`;
+}
+
 // --- view framing ----------------------------------------------------------------
 // The day axis the heatmap draws, and how the capacity table carves it up.
 
@@ -899,7 +1444,7 @@ export function lowCoverage(grid, weeks, threshold) {
 export function applyLocationHolidays(model, tags, holidays) {
   const dates = holidays.map((h) => (typeof h === "string" ? h : h.date));
   const people = model.people.map((person) => {
-    const location = tags[person.name] === "CH" ? "CH" : "VN";
+    const location = /** @type {"VN" | "CH"} */ (tags[person.name] === "CH" ? "CH" : "VN");
     if (location === "VN") return person.location === "VN" ? person : { ...person, location };
     /** @type {Record<string, string>} */
     const days = { ...person.days };
@@ -923,9 +1468,13 @@ export function applyLocationHolidays(model, tags, holidays) {
  * aligned to the model's day axis (roughly 10× smaller than the raw model).
  * Codes are URI-encoded so even a dirty cell containing a comma survives.
  *
+ * `balance` is only written for the people who have one, so a payload from a
+ * source without balances (a CSV quarter) stays exactly as it was.
+ *
  * @param {Model} model
  * @returns {{ v: 1, days: string, warnings: Warning[],
- *   people: Array<{ name: string, team: string, location: string, codes: string }> }}
+ *   people: Array<{ name: string, team: string, location: string, codes: string,
+ *     balance?: Balance }> }}
  */
 export function packModel(model) {
   return {
@@ -936,9 +1485,31 @@ export function packModel(model) {
       team: person.team,
       location: person.location,
       codes: model.days.map((d) => encodeURIComponent(person.days[d] ?? "")).join(","),
+      ...(person.balance === undefined || person.balance === null
+        ? {}
+        : { balance: person.balance }),
     })),
     warnings: model.warnings,
   };
+}
+
+/**
+ * One packed `balance` field back into a {@link Balance}, or undefined for
+ * anything that is not one. Every field is validated: this crosses a storage
+ * boundary (localStorage, a JSON export, a share link), and a string where a
+ * number belongs would reach the totals line as `"3" + 2`.
+ *
+ * @param {unknown} packed
+ * @returns {Balance | undefined}
+ */
+function unpackBalance(packed) {
+  if (packed === null || typeof packed !== "object") return undefined;
+  const balance = /** @type {Balance} */ ({});
+  for (const key of BALANCE_FIELDS) {
+    const value = /** @type {Record<string, unknown>} */ (packed)[key];
+    balance[key] = typeof value === "number" && Number.isFinite(value) ? value : null;
+  }
+  return balance;
 }
 
 /**
@@ -967,11 +1538,13 @@ export function unpackModel(packed) {
       const code = codes[i];
       if (code !== undefined && code !== "") days[axis[i]] = decodeURIComponent(code);
     }
+    const balance = unpackBalance(q.balance);
     people.push({
       name: q.name,
       team: typeof q.team === "string" ? q.team : "",
-      location: q.location === "CH" ? "CH" : "VN",
+      location: /** @type {"VN" | "CH"} */ (q.location === "CH" ? "CH" : "VN"),
       days,
+      ...(balance === undefined ? {} : { balance }),
     });
   }
   return { people, days: axis, warnings: Array.isArray(p.warnings) ? p.warnings : [] };
@@ -989,7 +1562,8 @@ export function unpackModel(packed) {
  */
 export async function encodeShare(payload) {
   const json = new TextEncoder().encode(JSON.stringify(payload));
-  const stream = new Blob([json]).stream().pipeThrough(new CompressionStream("gzip"));
+  const stream = new Blob([/** @type {BlobPart} */ (json)]).stream()
+    .pipeThrough(new CompressionStream("gzip"));
   const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
   let bin = "";
   for (let i = 0; i < bytes.length; i += 0x8000) {
@@ -1011,7 +1585,8 @@ export async function decodeShare(encoded) {
   try {
     const b64 = String(encoded).replaceAll("-", "+").replaceAll("_", "/");
     const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+    const stream = new Blob([/** @type {BlobPart} */ (bytes)]).stream()
+      .pipeThrough(new DecompressionStream("gzip"));
     const json = new TextDecoder().decode(await new Response(stream).arrayBuffer());
     const payload = JSON.parse(json);
     return payload !== null && typeof payload === "object" ? payload : null;
@@ -1024,7 +1599,8 @@ export async function decodeShare(encoded) {
  * Merge a partial model into an existing one — the CSV path imports one
  * quarter at a time. Same reconciliation rules as the workbook parser: match
  * by name, the incoming team label wins when present, incoming days win per
- * date. Pure: neither input is mutated.
+ * date, an incoming balance replaces the held one (a payload without balances
+ * leaves them alone). Pure: neither input is mutated.
  *
  * @param {Model} base
  * @param {Model} incoming
@@ -1041,6 +1617,7 @@ export function mergeModels(base, incoming) {
       byName.set(person.name, { ...person, days: { ...person.days } });
     } else {
       if (person.team !== "") existing.team = person.team;
+      if (person.balance !== undefined) existing.balance = person.balance;
       Object.assign(existing.days, person.days);
     }
   }

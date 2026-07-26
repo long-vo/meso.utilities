@@ -15,7 +15,9 @@ no server code.
 ```sh
 deno task dev     # static file server on http://localhost:8000 (serves static/ only — NOT slidedown)
 deno task test    # run all parity tests
-deno task check   # type-check (only the src/*.test.ts files listed in deno.json — see gotcha below)
+deno task check   # type-check both halves — see the gotcha below for the file lists
+deno task check:tests    # …just the src/*.test.ts files (strict, deno.json)
+deno task check:browser  # …just the browser modules (deno.browser.json)
 deno task fmt     # format
 deno task lint    # lint
 ```
@@ -30,6 +32,16 @@ deno test --allow-read --filter "maskLog: masks every value"
 **Always verify after finishing a task.** Run `deno task fmt`, `deno task lint`, `deno task check`
 and `deno task test`, and confirm all four pass before treating the work as complete. These mirror
 CI and the pre-commit hook below — do not report a task done until they are green.
+
+Type-checking runs under **two configs**, and the split is deliberate. `deno.json` keeps the
+`src/*.test.ts` files strict. `deno.browser.json` covers the browser modules, which are plain JS:
+without `checkJs` the check silently passes on anything — an undeclared identifier included, which
+is exactly the bug class it exists to catch. It sets `noImplicitAny: false` (browser code here has
+no parameter annotations) but keeps **`strictNullChecks` on**, because without it TypeScript cannot
+narrow a discriminated union and every `if (!result.ok)` guard reports a false error on
+`result.error`. Elements are bound through `$()`, so where the code uses `value`/`checked`/
+`disabled` the `els` entry carries a `/** @type {HTMLInputElement} */`-style cast naming the element
+the page actually holds.
 
 A versioned pre-commit hook (`.githooks/pre-commit`) mirrors CI by running fmt-check → check → lint
 → test. Enable it once per clone: `git config core.hooksPath .githooks`. It verifies formatting with
@@ -126,8 +138,9 @@ Deploy is `.github/workflows/pages.yml`: it copies `static/` → `_site/`, then 
 
 1. Create `static/<tool>/index.html` + `app.js` (DOM wiring) + `<tool>.mjs` (pure logic).
 2. Add `src/<tool>.test.ts` importing the `.mjs` from `static/`.
-3. **Add `src/<tool>.test.ts` to the `check` task's file list in `deno.json`** — that task names
-   test files explicitly, so a new one won't be type-checked otherwise.
+3. **Add the new files to both check tasks in `deno.json`** — `src/<tool>.test.ts` to `check:tests`
+   and `static/<tool>/app.js` to `check:browser`. Both name their files explicitly, so anything new
+   goes unchecked otherwise.
 4. Add a card with a unique `data-tool` to `static/index.html`.
 5. **Register the tool in the ⌘K palette** — add an entry to `TOOL_LINKS` in `static/palette.js` so
    it's reachable from every page (no test catches a missing one).

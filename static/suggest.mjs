@@ -4,7 +4,8 @@
 // "Redact IDs" toggle, which is value-shape only. Pure logic (no DOM),
 // imported by the browser UI and the parity tests.
 
-/** Key-name patterns worth masking, with the reason shown on the chip. */
+/** Key-name patterns worth masking, with the reason shown on the chip.
+ *  @type {Array<[pattern: RegExp, reason: string]>} */
 const KEY_PATTERNS = [
   [/pass(word)?|passwd|pwd|secret|credential/i, "key name suggests a secret"],
   [
@@ -97,7 +98,9 @@ export function suggestSensitiveFields(root, existingFields = [], limit = 8) {
   let visited = 0;
 
   while (queue.length > 0) {
-    const { value, depth } = queue.shift();
+    const next = queue.shift();
+    if (next === undefined) break; // `queue.length > 0` guarantees one, but say so
+    const { value, depth } = next;
     if (++visited > 2000 || depth > 8 || value === null || typeof value !== "object") continue;
     if (Array.isArray(value)) {
       for (const item of value) queue.push({ value: item, depth: depth + 1 });

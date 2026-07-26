@@ -7,16 +7,22 @@
 import { readWorkbook } from "./xlsx.mjs";
 import {
   addDays,
+  applyDayCodes,
   applyLocationHolidays,
+  balanceTotals,
   capacityGrid,
   clampAnchor,
   codeInfo,
   dayCounts,
   decodeShare,
   encodeShare,
+  historyText,
   holidayName,
   HOLIDAYS_CH_ZURICH,
   isWeekend,
+  leavableDays,
+  leaveHandoffDefaults,
+  leaveHandoffText,
   lowCoverage,
   mergeModels,
   monthSpans,
@@ -28,7 +34,9 @@ import {
   parseQuarterCsv,
   parseVacationWorkbook,
   prettyDay,
+  pushHistory,
   remoteOn,
+  revertDayCodes,
   shortDay,
   splitHoliday,
   summaryText,
@@ -39,50 +47,70 @@ import {
   weekSlices,
   yearFromFilename,
 } from "./availability.mjs";
-import { registerCommands } from "../palette.js";
+// The type+duration → day-code mapping is Leave's to define (it owns the leave
+// vocabulary); importing it keeps the dialog's marks byte-identical to the ones
+// Leave's own "save to grid" queues.
+import { availabilityUpdate } from "../leave/leave.mjs";
+import { drainUpdates, INBOX_KEY, sendHandoff } from "../handoff.mjs";
+import { registerCommands, TOOL_ICONS } from "../palette.js";
 import { makeToast } from "../ui.mjs";
 
-const $ = (id) => document.getElementById(id);
+const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 const els = {
   dropZone: $("drop-zone"),
-  fileInput: $("file-input"),
+  fileInput: /** @type {HTMLInputElement} */ ($("file-input")),
   importStatus: $("import-status"),
-  csvText: $("csv-text"),
-  csvQuarter: $("csv-quarter"),
+  csvText: /** @type {HTMLTextAreaElement} */ ($("csv-text")),
+  csvQuarter: /** @type {HTMLSelectElement} */ ($("csv-quarter")),
   csvImport: $("csv-import"),
-  year: $("year-input"),
+  year: /** @type {HTMLInputElement} */ ($("year-input")),
   viewMonth: $("view-month"),
   viewQuarter: $("view-quarter"),
   navPrev: $("nav-prev"),
   navToday: $("nav-today"),
   navNext: $("nav-next"),
   teamChips: $("team-chips"),
-  nameFilter: $("name-filter"),
-  bulkTeam: $("bulk-team"),
+  nameFilter: /** @type {HTMLInputElement} */ ($("name-filter")),
+  bulkTeam: /** @type {HTMLSelectElement} */ ($("bulk-team")),
   bulkVn: $("bulk-vn"),
   bulkCh: $("bulk-ch"),
   tagList: $("tag-list"),
   warningsDetails: $("warnings-details"),
   warningsSummary: $("warnings-summary"),
   warningsList: $("warnings-list"),
+  historyDetails: $("history-details"),
+  historySummary: $("history-summary"),
+  historyList: $("history-list"),
+  historyClear: $("history-clear"),
   legend: $("legend"),
   legendRail: $("legend-rail"),
   exportJson: $("export-json"),
   exportView: $("export-view"),
   shareLink: $("share-link"),
   importJson: $("import-json"),
-  jsonInput: $("json-input"),
+  jsonInput: /** @type {HTMLInputElement} */ ($("json-input")),
   clearData: $("clear-data"),
   stripStatus: $("strip-status"),
   copyStrip: $("copy-strip"),
-  dayPick: $("day-pick"),
+  dayPick: /** @type {HTMLInputElement} */ ($("day-pick")),
   dayReset: $("day-reset"),
   strip: $("strip"),
   rangeLabel: $("range-label"),
+  selLabel: $("sel-label"),
+  sendLeave: /** @type {HTMLButtonElement} */ ($("send-leave")),
+  leaveDialog: /** @type {HTMLDialogElement} */ ($("leave-dialog")),
+  leaveDialogDays: $("leave-dialog-days"),
+  leaveMark: /** @type {HTMLInputElement} */ ($("leave-mark")),
+  leaveMarkNote: $("leave-mark-note"),
+  leaveName: /** @type {HTMLSelectElement} */ ($("leave-name")),
+  leaveType: /** @type {HTMLSelectElement} */ ($("leave-type")),
+  leaveDuration: /** @type {HTMLSelectElement} */ ($("leave-duration")),
   heatmap: $("heatmap"),
   capacity: $("capacity"),
   capWarn: $("cap-warn"),
-  lowThreshold: $("low-threshold"),
+  balTitle: $("bal-title"),
+  balances: $("balances"),
+  lowThreshold: /** @type {HTMLInputElement} */ ($("low-threshold")),
   lowThresholdOut: $("low-threshold-out"),
   shareOffer: $("share-offer"),
   shareOfferText: $("share-offer-text"),
@@ -127,6 +155,24 @@ function el(tag, className, text) {
 
 /* ------------------------------- state ------------------------------- */
 
+/**
+ * Spelled out rather than inferred: every field that starts as `null` would
+ * otherwise be typed `null`, and a `!== null` guard would narrow it to `never`.
+ *
+ * @type {{
+ *   model: import("./availability.mjs").Model | null,
+ *   year: number,
+ *   tags: Record<string, "VN" | "CH">,
+ *   teams: string[],
+ *   view: { mode: "month" | "quarter", anchor: string },
+ *   nameFilter: string,
+ *   history: import("./availability.mjs").HistoryEntry[],
+ *   pickedDay: string | null,
+ *   focus: { row: number, col: number } | null,
+ *   sel: { name: string, from: string, to: string, anchor?: string, code?: string } | null,
+ *   lowThreshold: number,
+ * }}
+ */
 const state = {
   model: null, // reconciled model straight from the parser (location untagged)
   year: new Date().getFullYear(),
@@ -134,8 +180,13 @@ const state = {
   teams: [], // selected team keys (lowercase); empty = everyone
   view: { mode: "month", anchor: todayIso() },
   nameFilter: "",
+  // Changes another tool recorded here, newest first. Persisted with the model.
+  history: [],
   pickedDay: null, // the day the strip reports on; null = today
   focus: null, // heatmap cell holding the grid's single tab stop; see markFocusable
+  // One person's run of days picked in the grid, for handing to Leave:
+  // { name, from, to, code } with from ≤ to. Transient — never saved.
+  sel: null,
   // Percent of a week's maximum below which a team-week is flagged thin. What
   // counts as thin is a team's own call, so it is a control, not a constant;
   // 0 turns the flagging off.
@@ -146,6 +197,7 @@ const state = {
  * Dimensions of the last-rendered heatmap. The keyboard handler needs them on
  * every arrow press and must not re-derive the model to get them.
  */
+/** @type {{ rows: number, cols: number, dates: string[] }} */
 let gridDims = { rows: 0, cols: 0, dates: [] };
 
 /**
@@ -157,11 +209,14 @@ let gridDims = { rows: 0, cols: 0, dates: [] };
 function markFocusable(cell, row, col) {
   cell.dataset.r = String(row);
   cell.dataset.c = String(col);
-  cell.tabIndex = state.focus.row === row && state.focus.col === col ? 0 : -1;
+  const focus = state.focus;
+  cell.tabIndex = focus !== null && focus.row === row && focus.col === col ? 0 : -1;
 }
 
 function gridCell(row, col) {
-  return els.heatmap.querySelector(`[data-r="${row}"][data-c="${col}"]`);
+  return /** @type {HTMLElement | null} */ (
+    els.heatmap.querySelector(`[data-r="${row}"][data-c="${col}"]`)
+  );
 }
 
 /**
@@ -186,11 +241,223 @@ function setHoverColumn(col) {
   }
 }
 
+/* ------------------------- grid selection → Leave ------------------------- */
+
+/**
+ * What the current pick is made of, as {@link leavableDays} reads it off the
+ * cells in {@link paintSelection}. `reason` drives the disabled button — and is
+ * re-checked inside {@link sendToLeave}, so the ⌘K command refuses exactly the
+ * picks the button does; a disabled button stops the pointer, not another way
+ * in. `markable` drives the dialog's mark checkbox.
+ */
+let selSummary = leavableDays([]);
+
+/**
+ * Paint `state.sel` onto the cells and update the panel head. Selection is
+ * repainted in place rather than through `renderAll`: a drag crosses a cell
+ * boundary many times a second, and re-rendering a 92-column grid that often
+ * drops the pointer's own cell out from under it mid-drag.
+ */
+function paintSelection() {
+  const sel = state.sel;
+  /** @type {Array<{ date: string, code: string, outside: boolean }>} */
+  const picked = [];
+  for (
+    const cell of /** @type {NodeListOf<HTMLElement>} */ (
+      els.heatmap.querySelectorAll(".hm-cell")
+    )
+  ) {
+    const date = cell.dataset.date ?? "";
+    const inRange = sel !== null && cell.dataset.person === sel.name &&
+      date >= sel.from && date <= sel.to;
+    cell.classList.toggle("is-sel", inRange);
+    // Round only the ends, so a run reads as one band instead of a row of tiles.
+    cell.classList.toggle("is-sel-start", inRange && date === sel.from);
+    cell.classList.toggle("is-sel-end", inRange && date === sel.to);
+    // Collected in the same pass that paints: a drag repaints many times a
+    // second, and these cells are already in hand.
+    if (inRange) {
+      picked.push({
+        date,
+        code: cell.dataset.code ?? "",
+        outside: cell.dataset.outside === "1",
+      });
+    }
+  }
+  selSummary = leavableDays(picked);
+  const blocked = selSummary.reason;
+  // The pick still paints when it can't be requested — seeing what you grabbed
+  // is how you know what to fix, which a vanishing button never says.
+  els.sendLeave.hidden = sel === null;
+  els.sendLeave.disabled = blocked !== null;
+  els.sendLeave.title = blocked === null
+    ? "Open Leave Request with the picked person and dates filled in"
+    : `Nothing to request — the pick is ${blocked} only`;
+  // Days the workbook never covered are still real dates to request, so they
+  // are a note rather than a refusal — but nothing can be written to them, and
+  // saying so in the label beats letting the dialog's tick do nothing.
+  const note = blocked !== null
+    ? ` · ${blocked} only — nothing to request`
+    : selSummary.outside === 0
+    ? ""
+    : ` · ${selSummary.outside} outside the imported range`;
+  els.selLabel.textContent = sel === null
+    ? ""
+    : `${sel.name} · ${
+      sel.from === sel.to ? prettyDay(sel.from) : `${shortDay(sel.from)}–${shortDay(sel.to)}`
+    }${note}`;
+}
+
+/** Replace the selection (null clears it) and repaint. */
+function setSelection(sel) {
+  state.sel = sel;
+  paintSelection();
+}
+
+/** Selection from one cell, or — when extending — from the anchor out to it. */
+function selectCell(cell, extend) {
+  const { person, date, code } = cell.dataset;
+  if (person === undefined || date === undefined) return;
+  const sel = state.sel;
+  if (extend && sel !== null && sel.name === person) {
+    // The anchor is whichever end the extension did not move to.
+    const anchor = sel.anchor ?? sel.from;
+    setSelection({
+      ...sel,
+      from: date < anchor ? date : anchor,
+      to: date < anchor ? anchor : date,
+    });
+    return;
+  }
+  setSelection({ name: person, from: date, to: date, anchor: date, code });
+}
+
+/** Widen the current selection to `cell`, which a drag guarantees is in-row. */
+function dragTo(cell) {
+  const sel = state.sel;
+  const date = cell.dataset.date;
+  if (sel === null || date === undefined) return;
+  // The anchor is set whenever a selection is made; fall back to its start.
+  const anchor = sel.anchor ?? sel.from;
+  const from = date < anchor ? date : anchor;
+  const to = date < anchor ? anchor : date;
+  if (from === sel.from && to === sel.to) return; // still inside the same run
+  setSelection({ ...sel, from, to });
+}
+
+/**
+ * Offer the selection to the Leave tool: a dialog confirms (or adjusts) who,
+ * which leave type and which duration before anything is handed over. Every
+ * field is editable; the grid pick only supplies the starting values.
+ */
+function sendToLeave() {
+  if (state.sel === null || state.model === null) {
+    toast("Pick days in the grid first — click a cell, or drag along a row");
+    return;
+  }
+  if (selSummary.reason !== null) {
+    toast(`Nothing to request — the pick is ${selSummary.reason} only`);
+    return;
+  }
+  els.leaveName.replaceChildren(
+    ...state.model.people.map((person) => new Option(person.name, person.name)),
+  );
+  els.leaveDialogDays.textContent = state.sel.from === state.sel.to
+    ? prettyDay(state.sel.from)
+    : `${prettyDay(state.sel.from)} – ${prettyDay(state.sel.to)}`;
+  const defaults = leaveHandoffDefaults(state.sel);
+  els.leaveName.value = state.sel.name;
+  // A pick with no leave-type equivalent (a working day, a holiday) lands on
+  // annual — the same reading the Leave form gives a null type.
+  els.leaveType.value = defaults.type ?? "annual";
+  els.leaveDuration.value = defaults.duration;
+  // Marking the grid rewrites day codes and books them against the balance, so
+  // it is opt-in on every open rather than remembered — a leftover tick from the
+  // last request must not write.
+  els.leaveMark.checked = false;
+  // A tick that would write nothing is worse than no tick: `markOnGrid` runs
+  // immediately before navigating to Leave, so it has no way to report back — a
+  // silent no-op is all the user would get. Say it here, before the choice.
+  const { markable, outside, weekend } = selSummary;
+  els.leaveMark.disabled = markable === 0;
+  els.leaveMarkNote.hidden = markable > 0 && outside === 0;
+  els.leaveMarkNote.textContent = markable === 0
+    ? outside > 0
+      ? "These days are outside the imported range, so there is nothing on the grid to mark — " +
+        "the request itself still goes through."
+      : "There is nothing on the grid to mark for these days — the request itself still goes " +
+        "through."
+    : `${outside} of these days ${outside === 1 ? "is" : "are"} outside the imported range and ` +
+      `won't be marked${weekend > 0 ? " (weekends are skipped too)" : ""} — ${markable} will.`;
+  els.leaveDialog.showModal();
+}
+
+/**
+ * Write the dialog's request onto the heatmap itself — the same pipeline the
+ * Leave-tool inbox uses (`applyQueuedUpdates`), minus the queue: the model is
+ * right here, so the change lands, persists and is recorded before navigation.
+ * `applyDayCodes` books the days against the person's leave balance too, so the
+ * balances panel reflects the request the moment the grid does.
+ */
+function markOnGrid(update) {
+  if (state.model === null) return;
+  const result = applyDayCodes(state.model, update);
+  if (result.name === null || result.written === 0) return;
+  state.model = result.model;
+  state.history = pushHistory(state.history, {
+    name: result.name,
+    from: update.from,
+    to: update.to,
+    code: update.code,
+    days: result.written,
+    at: Date.now(),
+    source: "Send to Leave",
+    before: result.before,
+  });
+  saveState();
+  renderAll();
+}
+
+/**
+ * The dialog's send path, on submit rather than on the dialog's close event —
+ * submit fires synchronously and names its button, while close is fired from a
+ * queued task that at least one embedded Chromium drops entirely. The dates
+ * ride in sessionStorage, not the URL: a leave request names a person, and a
+ * URL is the one part of a page that gets pasted into chats and logged by
+ * proxies.
+ */
+// The dialog always contains the form; it is authored in the same document.
+/** @type {HTMLFormElement} */ (els.leaveDialog.querySelector("form"))
+  .addEventListener("submit", (event) => {
+    const submitter = /** @type {HTMLButtonElement | null} */ (event.submitter);
+    if (submitter?.value !== "send" || state.sel === null) return;
+    const fields = {
+      name: els.leaveName.value,
+      type: els.leaveType.value,
+      duration: els.leaveDuration.value,
+    };
+    if (els.leaveMark.checked) {
+      const update = availabilityUpdate({
+        ...fields,
+        startDate: state.sel.from,
+        endDate: state.sel.to,
+      });
+      if (update !== null) markOnGrid(update);
+    }
+    const text = leaveHandoffText({ ...state.sel, ...fields });
+    if (!sendHandoff(sessionStorage, "leave", text, "Team Availability")) {
+      toast("Could not hand over — browser storage is unavailable");
+      return;
+    }
+    location.href = "../leave/";
+  });
+
 /** Hand the tab stop and DOM focus to `state.focus`, taking both off `from`. */
 function moveGridFocus(from) {
   const previous = gridCell(from.row, from.col);
   if (previous !== null) previous.tabIndex = -1;
-  const next = gridCell(state.focus.row, state.focus.col);
+  const focus = state.focus;
+  const next = focus === null ? null : gridCell(focus.row, focus.col);
   if (next !== null) {
     next.tabIndex = 0;
     next.focus();
@@ -232,9 +499,16 @@ function onGridKeydown(event) {
       break;
     case "Enter":
     case " ":
-      if (from.row !== -1) return; // only the header row picks a day
       event.preventDefault();
-      pickDay(dates[from.col]);
+      // The header row picks the strip's day; a person's row picks days to send
+      // to Leave, with Shift extending the run — the keyboard's answer to a drag.
+      if (from.row === -1) pickDay(dates[from.col]);
+      else selectCell(gridCell(from.row, from.col), event.shiftKey);
+      return;
+    case "Escape":
+      if (state.sel === null) return;
+      event.preventDefault();
+      setSelection(null);
       return;
     default:
       return;
@@ -276,6 +550,9 @@ function loadState() {
     if (saved.view && (saved.view.mode === "month" || saved.view.mode === "quarter")) {
       state.view.mode = saved.view.mode;
     }
+    if (Array.isArray(saved.history)) {
+      state.history = saved.history.filter((e) => e !== null && typeof e === "object");
+    }
     if (Number.isInteger(saved.lowThreshold) && saved.lowThreshold >= 0) {
       state.lowThreshold = Math.min(100, saved.lowThreshold);
     }
@@ -300,6 +577,7 @@ function saveState() {
         tags: state.tags,
         teams: state.teams,
         lowThreshold: state.lowThreshold,
+        history: state.history,
         view: { mode: state.view.mode },
         model: state.model === null ? null : packModel(state.model),
       }),
@@ -322,9 +600,11 @@ function teamLabel(team) {
 }
 
 /** What one heatmap cell means, naming the holiday when a built-in set knows
- *  it — "Public holiday" alone doesn't say whether it's Tet or Bundesfeier. */
-function cellMeaning(info, code, date, location) {
-  if (info === null) return "no data";
+ *  it — "Public holiday" alone doesn't say whether it's Tet or Bundesfeier.
+ *  An empty cell has two quite different causes, and only one of them can be
+ *  written to, so the two are named apart rather than both reading "no data". */
+function cellMeaning(info, code, date, location, outside) {
+  if (info === null) return outside ? "outside the imported range" : "no data";
   const named = info.kind === "holiday" ? holidayName(date, location) : null;
   return named === null ? `${info.label} (${code})` : `${named} — ${info.label} (${code})`;
 }
@@ -364,9 +644,11 @@ function renderAll() {
   renderTeamChips(model);
   renderTags(model);
   renderWarnings();
+  renderHistory();
   renderStrip(model);
   renderHeatmap(model);
   renderCapacity(model);
+  renderBalances(model);
   saveState();
 }
 
@@ -438,6 +720,82 @@ function renderWarnings() {
   els.warningsSummary.textContent = `Workbook warnings (${warnings.length})`;
   els.warningsList.textContent = "";
   for (const w of warnings) els.warningsList.appendChild(el("li", "", w.message));
+}
+
+/**
+ * The log of changes other tools recorded here. It answers the question the
+ * grid itself cannot — "why does my row say sick leave?" — so each line names
+ * the tool that asked and when it was applied.
+ */
+function renderHistory() {
+  els.historyDetails.hidden = state.history.length === 0;
+  els.historySummary.textContent = `Recorded changes (${state.history.length})`;
+  els.historyList.textContent = "";
+  state.history.forEach((entry, index) => {
+    const item = el("li");
+    const text = el("div", "history-text");
+    text.append(el("span", "history-line", historyText(entry)));
+    text.append(
+      el("span", "history-meta", `${entry.source ?? "another tool"} · ${stamp(entry.at)}`),
+    );
+    // A record only carries what it overwrote if it was applied by a build that
+    // recorded it. Older ones can be deleted but not undone, and saying so on
+    // the line beats leaving the user to wonder why the grid did not move.
+    const undoable = Object.keys(entry.before ?? {}).length > 0;
+    if (!undoable) text.lastChild.textContent += " · can't be undone";
+    const del = el("button", "history-del", "×");
+    del.type = "button";
+    del.title = undoable
+      ? "Delete this record and put those days back"
+      : "Delete this record — its days stay as they are";
+    del.setAttribute("aria-label", `Delete record: ${historyText(entry)}`);
+    del.addEventListener("click", () => deleteHistoryEntry(index));
+    item.append(text, del);
+    els.historyList.appendChild(item);
+  });
+}
+
+/**
+ * Delete one record and undo what it did. Forgetting the log while leaving the
+ * days it wrote would make the panel a liar, so the two move together — and
+ * because that touches the roster, the toast offers the change back.
+ */
+function deleteHistoryEntry(index) {
+  const entry = state.history[index];
+  if (entry === undefined) return;
+  const reapply = () => {
+    if (state.model === null) return;
+    const result = applyDayCodes(state.model, entry);
+    if (result.written > 0) state.model = result.model;
+    state.history = [...state.history.slice(0, index), entry, ...state.history.slice(index)];
+    saveState();
+    renderAll();
+    toast(`Restored: ${historyText(entry)}`);
+  };
+
+  const result = state.model === null ? null : revertDayCodes(state.model, entry);
+  if (result !== null && result.restored > 0) state.model = result.model;
+  state.history = state.history.filter((_, i) => i !== index);
+  saveState();
+  renderAll();
+
+  const restored = result?.restored ?? 0;
+  const kept = result?.kept ?? 0;
+  const what = restored > 0
+    ? `Put ${restored} ${restored === 1 ? "day" : "days"} back`
+    : "Record deleted — the days were left as they are";
+  toast(
+    kept > 0 ? `${what} · ${kept} changed since, left alone` : what,
+    { label: "Undo", onAction: reapply },
+  );
+}
+
+/** "26.07 14:32" — local time, since the reader is the person it happened to. */
+function stamp(at) {
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return "unknown time";
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 function renderLegend() {
@@ -583,6 +941,11 @@ function renderHeatmap(model) {
   const dates = visibleRange();
   const people = visiblePeople(model);
   const today = todayIso();
+  // The view axis is the whole month or quarter; the data axis is what the
+  // workbook covered, and month navigation is not clamped to it. A day in the
+  // first but not the second draws a blank cell that looks exactly like a day
+  // the workbook left empty — and only one of the two can be marked.
+  const imported = new Set(model.days);
   const picked = state.pickedDay;
   // Row -1 is the day-header row; 0.. are people. Clamped every render because
   // filtering and month navigation change the grid under the focused cell.
@@ -665,6 +1028,11 @@ function renderHeatmap(model) {
       const cell = el("div", "hm-cell");
       cell.setAttribute("role", "gridcell");
       cell.setAttribute("aria-colindex", String(col + 2));
+      // Who and when the cell stands for — the selection reads these back.
+      cell.dataset.person = person.name;
+      cell.dataset.date = date;
+      if (code !== undefined) cell.dataset.code = code;
+      if (!imported.has(date)) cell.dataset.outside = "1";
       if (info === null) cell.classList.add("is-blank");
       else {
         cell.classList.add(`k-${info.kind}`);
@@ -674,15 +1042,18 @@ function renderHeatmap(model) {
       if (date === picked) cell.classList.add("is-picked");
       if (date.endsWith("-01")) cell.classList.add("m-start");
       cell.title = `${person.name} — ${prettyDay(date)} — ${
-        cellMeaning(info, code, date, person.location)
+        cellMeaning(info, code, date, person.location, !imported.has(date))
       }`;
-      cell.setAttribute("aria-label", cell.title);
+      cell.setAttribute("aria-label", `${cell.title}, press Enter to pick for a leave request`);
       markFocusable(cell, r, col);
       row.appendChild(cell);
     });
     frag.appendChild(row);
   });
   els.heatmap.appendChild(frag);
+  // The cells are new objects; a selection made before this render needs
+  // repainting onto them (a month step or a filter change re-renders).
+  paintSelection();
   if (hadFocus) gridCell(state.focus.row, state.focus.col)?.focus();
   els.rangeLabel.textContent = `${dates[0]} → ${dates[dates.length - 1]} · ${
     peopleCount(people.length)
@@ -784,6 +1155,120 @@ function renderCapacity(model) {
   els.capacity.appendChild(table);
 }
 
+/**
+ * The balance table's columns, in the sheet's own order: what the year counts,
+ * then what is left of it. The heading of the carry-over column is the previous
+ * year, exactly as the sheet heads it — the workbook year is what the rest of
+ * the page already runs on, so it needs no separate plumbing. Each column
+ * carries the phrase its cells' tooltips use, since a bare `2025` above a
+ * column of small numbers says nothing on its own.
+ */
+function balanceColumns() {
+  const previous = state.year - 1;
+  return [
+    { key: "working", head: "Working", what: "working days" },
+    { key: "carry", head: String(previous), what: `days carried over from ${previous}` },
+    { key: "allowance", head: "Annual", what: "annual leave for the year" },
+    { key: "planned", head: "Planned", what: "planned days" },
+    { key: "dayOffs", head: "Day offs", what: "days taken" },
+    { key: "annual", head: "Annual", what: "annual leave left", left: true },
+    { key: "core", head: "Core", what: "core leave left" },
+    { key: "sick", head: "Sick", what: "sick leave left" },
+  ];
+}
+
+/** How many leading columns of {@link balanceColumns} are counted days rather
+ *  than remainders — the span of the "Recorded" group header. */
+const BALANCE_RECORDED = 5;
+
+/** One balance cell: the number, or an explicit "not recorded" dash. Negative
+ *  is not a rendering accident — that allowance is overdrawn. */
+function balanceCell(value, column) {
+  if (value === null || value === undefined) {
+    const td = el("td", "cap-nodata", "–");
+    td.title = `${column.what}: not recorded`;
+    if (column.left) td.classList.add("bal-sep");
+    return td;
+  }
+  const td = el("td", "bal-num", trimNumber(value));
+  td.title = `${column.what}: ${trimNumber(value)}` + (value < 0 ? " — overdrawn" : "");
+  if (value < 0) td.classList.add("is-neg");
+  if (column.left) td.classList.add("bal-sep");
+  return td;
+}
+
+/**
+ * The year's leave accounting per person, from the workbook's "General" sheet:
+ * the days it counts (working, carried over, the annual allowance, planned and
+ * taken) beside what is left of each allowance. Unlike everything else on this
+ * page the numbers are the whole year's, not the visible period's — the heading
+ * says so, and the table deliberately has no week columns to suggest otherwise.
+ *
+ * The two groups share one header row because the sheet's own arithmetic ties
+ * them together (`Annual left = carried over + allowance − planned − taken`),
+ * and `Annual` heads a column in each — which is precisely why the group
+ * headings above them are not decoration.
+ *
+ * Follows the team/name filter and its sort, so it reads as the heatmap's own
+ * roster. Hidden outright when nothing carried a balance (the CSV path imports
+ * quarter grids only): an empty table would read as "everyone is at zero".
+ */
+function renderBalances(model) {
+  els.balances.textContent = "";
+  const people = model === null
+    ? []
+    : visiblePeople(model).filter((p) => p.balance !== undefined && p.balance !== null);
+  els.balTitle.hidden = people.length === 0;
+  els.balances.hidden = people.length === 0;
+  if (people.length === 0) return;
+  const columns = balanceColumns();
+
+  const table = el("table", "cap-table bal-table");
+  const thead = el("thead");
+  const groupRow = el("tr");
+  const who = el("th", "bal-who", "Person");
+  const team = el("th", "bal-team", "Team");
+  for (const cell of [who, team]) cell.rowSpan = 2;
+  const recorded = el("th", "bal-group", "Recorded");
+  recorded.colSpan = BALANCE_RECORDED;
+  const remaining = el("th", "bal-group bal-sep", "Remaining");
+  remaining.colSpan = columns.length - BALANCE_RECORDED;
+  groupRow.append(who, team, recorded, remaining);
+  const headRow = el("tr");
+  for (const column of columns) {
+    const th = el("th", column.left ? "bal-sep" : "", column.head);
+    th.title = column.what;
+    headRow.appendChild(th);
+  }
+  thead.append(groupRow, headRow);
+  table.appendChild(thead);
+
+  const tbody = el("tbody");
+  for (const person of people) {
+    const tr = el("tr");
+    tr.append(el("td", "bal-who", person.name), el("td", "bal-team", teamLabel(person.team)));
+    for (const column of columns) tr.appendChild(balanceCell(person.balance[column.key], column));
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+
+  const totals = balanceTotals(people);
+  const tfoot = el("tfoot");
+  const totalRow = el("tr");
+  totalRow.append(
+    el("td", "bal-who", "Total"),
+    el("td", "bal-team", peopleCount(totals.people)),
+  );
+  for (const column of columns) {
+    const td = el("td", "bal-num", trimNumber(totals[column.key]));
+    if (column.left) td.classList.add("bal-sep");
+    totalRow.appendChild(td);
+  }
+  tfoot.appendChild(totalRow);
+  table.appendChild(tfoot);
+  els.balances.appendChild(table);
+}
+
 /* ------------------------------- imports ------------------------------- */
 
 /**
@@ -800,6 +1285,9 @@ function adoptModel(incoming, year, replace) {
   state.year = year;
   state.view.anchor = clampAnchor(state.view.anchor, state.model.days);
   state.pickedDay = null; // the old pick may not exist in the new data
+  // Changes queued by Leave Request wait for a roster to write into, so the
+  // import that finally provides one is when they apply.
+  applyQueuedUpdates();
 }
 
 /** "1 person" / "7 people" — import toasts routinely carry a count of one. */
@@ -1101,10 +1589,50 @@ els.shareOffer.addEventListener("keydown", (e) => {
 
 els.heatmap.addEventListener("keydown", onGridKeydown);
 els.heatmap.addEventListener("pointerover", (event) => {
-  const cell = event.target.closest?.("[data-c]") ?? null;
+  const cell = /** @type {HTMLElement | null} */ (
+    /** @type {HTMLElement} */ (event.target).closest?.("[data-c]") ?? null
+  );
   setHoverColumn(cell === null ? null : cell.dataset.c);
 });
 els.heatmap.addEventListener("pointerleave", () => setHoverColumn(null));
+
+/**
+ * Drag along one person's row to pick a run of days. The move/up listeners sit
+ * on `document`, not on the cell: the pointer regularly leaves the grid on the
+ * way to the last column, and a drag that ends out there must still commit.
+ */
+function onDragMove(event) {
+  const cell = event.target?.closest?.(".hm-cell") ?? null;
+  // Leaving the row ends nothing — it just stops widening, so a wobble upwards
+  // mid-drag does not silently retarget the request at the person above.
+  if (cell !== null && cell.dataset.person === state.sel?.name) dragTo(cell);
+}
+function onDragEnd() {
+  document.removeEventListener("pointermove", onDragMove);
+}
+els.heatmap.addEventListener("pointerdown", (event) => {
+  const cell = /** @type {HTMLElement | null} */ (
+    /** @type {HTMLElement} */ (event.target).closest?.(".hm-cell") ?? null
+  );
+  if (cell === null || event.button !== 0) return;
+  event.preventDefault(); // a drag across cells would otherwise select their text
+  selectCell(cell, event.shiftKey);
+  // preventDefault took the click's focus with it; the grid's tab stop follows
+  // the pointer so the arrow keys carry on from where the drag started.
+  const previous = state.focus;
+  state.focus = { row: Number(cell.dataset.r), col: Number(cell.dataset.c) };
+  moveGridFocus(previous);
+  document.addEventListener("pointermove", onDragMove);
+  document.addEventListener("pointerup", onDragEnd, { once: true });
+});
+els.sendLeave.addEventListener("click", sendToLeave);
+els.historyClear.addEventListener("click", () => {
+  // The days themselves stay: this forgets the log, not the leave.
+  state.history = [];
+  renderHistory();
+  saveState();
+  toast("History cleared — the days themselves are unchanged");
+});
 
 els.lowThreshold.addEventListener("input", () => {
   const percent = Number(els.lowThreshold.value);
@@ -1151,6 +1679,7 @@ els.nameFilter.addEventListener("input", () => {
   const model = displayModel();
   renderHeatmap(model);
   renderCapacity(model);
+  renderBalances(model);
 });
 
 els.bulkVn.addEventListener("click", () => bulkTag("VN"));
@@ -1183,6 +1712,8 @@ els.clearData.addEventListener("click", () => {
   state.nameFilter = "";
   state.pickedDay = null;
   state.focus = null;
+  state.sel = null;
+  state.history = [];
   els.nameFilter.value = "";
   try {
     localStorage.removeItem(STORE_KEY);
@@ -1216,6 +1747,13 @@ registerCommands([
     run: () => els.fileInput.click(),
   },
   { icon: "📋", title: "Copy who's-out summary", hint: "action", run: copySummary },
+  {
+    icon: TOOL_ICONS.leave,
+    title: "Send picked days to Leave Request",
+    hint: "action",
+    keywords: ["leave", "request", "selection", "grid"],
+    run: sendToLeave,
+  },
   {
     icon: "📆",
     title: "Report on today",
@@ -1256,6 +1794,68 @@ registerCommands([
   },
 ]);
 
+/**
+ * Apply the leave requests Leave Request queued for this grid.
+ *
+ * Nothing is drained until there is a workbook to write into — what is drained
+ * is gone, and a change dropped because the roster hadn't been imported yet is
+ * exactly the change the user expected to find here. Days that can't be written
+ * are reported rather than swallowed: an unmatched name is usually a typo in
+ * the Leave form, and only the user can tell.
+ */
+function applyQueuedUpdates() {
+  if (state.model === null) return;
+  const queued = drainUpdates(localStorage, "availability");
+  if (queued.length === 0) return;
+  let model = state.model;
+  let written = 0;
+  let skipped = 0;
+  const missing = [];
+  for (const entry of queued) {
+    // The queue crossed a storage boundary, so its payload is `unknown` until
+    // `applyDayCodes` validates it — which it does, returning a null name for
+    // anything it cannot use.
+    const data = /** @type {{ name: string, from: string, to: string, code: string }} */ (
+      entry.data
+    );
+    const { from, at } = entry;
+    const result = applyDayCodes(model, data);
+    if (result.name === null) {
+      missing.push(String(data?.name ?? "").trim() || "someone unnamed");
+      continue;
+    }
+    model = result.model;
+    written += result.written;
+    skipped += result.weekend + result.outside;
+    // Record what actually landed, not what was asked for: the panel exists to
+    // explain the days on screen. A request that wrote nothing (a whole weekend,
+    // say) changed nothing to explain.
+    if (result.written > 0) {
+      state.history = pushHistory(state.history, {
+        name: result.name,
+        from: data.from,
+        to: data.to,
+        code: data.code,
+        days: result.written,
+        at: typeof at === "number" && at > 0 ? at : Date.now(),
+        source: from || "another tool",
+        // What these days held before — deleting the record puts it back.
+        before: result.before,
+      });
+    }
+  }
+  if (written > 0) {
+    state.model = model;
+    saveState();
+    renderAll();
+  }
+  const parts = [];
+  if (written > 0) parts.push(`${written} ${written === 1 ? "day" : "days"} from Leave Request`);
+  if (skipped > 0) parts.push(`${skipped} skipped (weekend or outside the imported range)`);
+  if (missing.length > 0) parts.push(`no row for ${[...new Set(missing)].join(", ")}`);
+  if (parts.length > 0) toast(parts.join(" · "));
+}
+
 /* ------------------------------- boot ------------------------------- */
 
 loadState();
@@ -1263,6 +1863,16 @@ els.lowThreshold.value = String(state.lowThreshold);
 els.lowThresholdOut.textContent = state.lowThreshold === 0 ? "off" : `${state.lowThreshold}%`;
 renderLegend();
 setViewMode(state.view.mode); // also triggers the first renderAll()
+applyQueuedUpdates();
+// The queue is durable and shared by every tab, so this page can be open while
+// another one saves a request: `storage` fires here when *another* tab writes,
+// and `pageshow` covers coming back through the bfcache.
+addEventListener("storage", (event) => {
+  if (event.key === INBOX_KEY) applyQueuedUpdates();
+});
+addEventListener("pageshow", (event) => {
+  if (event.persisted) applyQueuedUpdates();
+});
 consumeShareFragment(); // async — re-renders if a #share= link is accepted
 // Clicking a share link while already on this page changes only the hash
 // (same-document navigation, no reload) — handle that arrival too.

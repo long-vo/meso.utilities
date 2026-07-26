@@ -51,8 +51,13 @@ export async function readWorkbook(data) {
   const entries = readCentralDirectory(bytes);
   if (!entries.has("xl/workbook.xml")) throw new Error(NOT_XLSX);
 
-  const text = async (/** @type {string} */ name) =>
-    new TextDecoder().decode(await readEntry(bytes, entries.get(name)));
+  // Every caller checks `entries.has(name)` first — the throw is what keeps a
+  // future one from silently reading an absent part.
+  const text = async (/** @type {string} */ name) => {
+    const entry = entries.get(name);
+    if (entry === undefined) throw new Error(`workbook part is missing (${name})`);
+    return new TextDecoder().decode(await readEntry(bytes, entry));
+  };
 
   const rels = entries.has("xl/_rels/workbook.xml.rels")
     ? parseRels(await text("xl/_rels/workbook.xml.rels"))
@@ -157,7 +162,7 @@ async function readEntry(bytes, entry) {
  * @returns {Promise<Uint8Array>}
  */
 async function inflateRaw(compressed) {
-  const stream = new Blob([compressed]).stream()
+  const stream = new Blob([/** @type {BlobPart} */ (compressed)]).stream()
     .pipeThrough(new DecompressionStream("deflate-raw"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }

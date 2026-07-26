@@ -1,0 +1,23 @@
+{
+  "//": [
+    "Type-checking config for the browser-side files (static/**/*.js). They are",
+    "plain ES modules, not TypeScript, so `deno check` ignores them entirely",
+    "unless `checkJs` is on — without it the check passes on an undeclared",
+    "identifier, which is exactly the class of bug it exists to catch.",
+    "",
+    "This lives apart from deno.json because the flags have to differ. Browser",
+    "code here is untyped by design — parameters carry no annotations — so",
+    "`noImplicitAny` is off. `strictNullChecks` is deliberately kept ON: without",
+    "it TypeScript cannot narrow a discriminated union, so every `if (!r.ok)`",
+    "guard in the codebase would report a false error on `r.error`.",
+    "",
+    "`lib` needs `dom`, which the Deno default omits."
+  ],
+  "exclude": ["slidedown"],
+  "compilerOptions": {
+    "checkJs": true,
+    "strict": false,
+    "strictNullChecks": true,
+    "lib": ["esnext", "dom", "dom.iterable", "deno.ns"]
+  }
+}

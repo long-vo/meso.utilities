@@ -5,9 +5,12 @@
  */
 import {
   buildHandoff,
+  drainUpdates,
   HANDOFF_KEY,
   HANDOFF_MAX_AGE_MS,
+  INBOX_KEY,
   parseHandoff,
+  queueUpdate,
   sendHandoff,
   takeHandoff,
 } from "../static/handoff.mjs";
@@ -114,4 +117,53 @@ Deno.test("parseHandoff: rejects wrong target, bad shapes and future timestamps"
 
 Deno.test("sendHandoff: reports failure when storage is full or unavailable", () => {
   assertEquals(sendHandoff(new FullStorage(), "rest", "x"), false);
+});
+
+Deno.test("queueUpdate / drainUpdates: a durable, per-target queue", () => {
+  const storage = new FakeStorage();
+  assertEquals(drainUpdates(storage, "availability"), [], "nothing queued yet");
+
+  assertEquals(queueUpdate(storage, "availability", { from: "2026-07-27" }, "Leave", T0), true);
+  // Saving twice before the target opens must keep both changes.
+  assertEquals(queueUpdate(storage, "availability", { from: "2026-08-03" }, "Leave", T0 + 1), true);
+  queueUpdate(storage, "shortlink", { url: "x" }, "Leave", T0 + 2);
+
+  const drained = drainUpdates(storage, "availability");
+  assertEquals(drained, [
+    { data: { from: "2026-07-27" }, from: "Leave", at: T0 },
+    { data: { from: "2026-08-03" }, from: "Leave", at: T0 + 1 },
+  ], "oldest first");
+  assertEquals(drainUpdates(storage, "availability"), [], "draining removes what it returned");
+  assertEquals(
+    drainUpdates(storage, "shortlink"),
+    [{ data: { url: "x" }, from: "Leave", at: T0 + 2 }],
+    "another tool's queue is left alone",
+  );
+  assertEquals(storage.getItem(INBOX_KEY), null, "an emptied queue leaves no key behind");
+});
+
+Deno.test("queueUpdate / drainUpdates: age never expires an entry", () => {
+  const storage = new FakeStorage();
+  queueUpdate(storage, "availability", { from: "2026-07-27" }, "Leave", T0);
+  // A handoff this old would be refused (HANDOFF_MAX_AGE_MS); a queued change
+  // carries no expiry at all — it waits for however long the detour takes.
+  assertEquals(HANDOFF_MAX_AGE_MS > 0, true, "the handoff path does expire");
+  assertEquals(drainUpdates(storage, "availability").length, 1, "the queue does not");
+});
+
+Deno.test("drainUpdates: survives a corrupt or foreign queue", () => {
+  const storage = new FakeStorage();
+  storage.setItem(INBOX_KEY, "not json");
+  assertEquals(drainUpdates(storage, "availability"), [], "garbage reads as empty");
+  storage.setItem(INBOX_KEY, JSON.stringify({ v: 1, target: "availability" }));
+  assertEquals(drainUpdates(storage, "availability"), [], "an object, not a queue");
+  storage.setItem(
+    INBOX_KEY,
+    JSON.stringify([{ v: 2, target: "availability" }, { target: "availability" }, null]),
+  );
+  assertEquals(drainUpdates(storage, "availability"), [], "entries from another version");
+});
+
+Deno.test("queueUpdate: reports a storage that cannot take it", () => {
+  assertEquals(queueUpdate(new FullStorage(), "availability", {}, "Leave", T0), false);
 });

@@ -8,13 +8,13 @@ import { sendHandoff, takeHandoff } from "./handoff.mjs";
 import { registerCommands, TOOL_ICONS } from "./palette.js";
 import { escapeHtml, highlightJson, makeToast } from "./ui.mjs";
 
-const $ = (id) => document.getElementById(id);
+const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
 const els = {
-  fields: $("fields"),
-  keepRange: $("keep-range"),
-  keepNum: $("keep-num"),
-  input: $("input"),
+  fields: /** @type {HTMLInputElement} */ ($("fields")),
+  keepRange: /** @type {HTMLInputElement} */ ($("keep-range")),
+  keepNum: /** @type {HTMLInputElement} */ ($("keep-num")),
+  input: /** @type {HTMLTextAreaElement} */ ($("input")),
   inputError: $("input-error"),
   inputStatus: $("input-status"),
   output: $("output"),
@@ -22,8 +22,8 @@ const els = {
   chips: $("field-chips"),
   suggestBox: $("suggest-box"),
   suggestChips: $("suggest-chips"),
-  minify: $("minify"),
-  diff: $("diff"),
+  minify: /** @type {HTMLInputElement} */ ($("minify")),
+  diff: /** @type {HTMLInputElement} */ ($("diff")),
   copy: $("copy"),
   download: $("download"),
   loadExample: $("load-example"),
@@ -31,9 +31,9 @@ const els = {
   toast: $("toast"),
   modeJson: $("mode-json"),
   modeLog: $("mode-log"),
-  maskAll: $("mask-all"),
-  redact: $("redact"),
-  logfile: $("logfile"),
+  maskAll: /** @type {HTMLInputElement} */ ($("mask-all")),
+  redact: /** @type {HTMLInputElement} */ ($("redact")),
+  logfile: /** @type {HTMLInputElement} */ ($("logfile")),
   logfileName: $("logfile-name"),
   sendDecode: $("send-decode"),
 };
@@ -424,17 +424,19 @@ els.logfile.addEventListener("change", async () => {
 
 // Drop a log file anywhere on the editor panel, not just via the picker. Only
 // intercept file drags, so dragging selected text into the textarea still works.
-const editorPanel = document.querySelector(".panel.editor");
+const editorPanel = /** @type {HTMLElement} */ (document.querySelector(".panel.editor"));
 editorPanel.addEventListener("dragover", (e) => {
-  if (!e.dataTransfer.types.includes("Files")) return;
+  if (!(/** @type {DragEvent} */ (e)).dataTransfer?.types.includes("Files")) return;
   e.preventDefault();
   editorPanel.classList.add("drag-over");
 });
 editorPanel.addEventListener("dragleave", (e) => {
-  if (!editorPanel.contains(e.relatedTarget)) editorPanel.classList.remove("drag-over");
+  const leaving = /** @type {Node | null} */ ((/** @type {DragEvent} */ (e)).relatedTarget);
+  if (!editorPanel.contains(leaving)) editorPanel.classList.remove("drag-over");
 });
 editorPanel.addEventListener("drop", (e) => {
-  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  const dropped = (/** @type {DragEvent} */ (e)).dataTransfer;
+  const file = dropped?.files && dropped.files[0];
   if (!file) return;
   e.preventDefault();
   editorPanel.classList.remove("drag-over");
