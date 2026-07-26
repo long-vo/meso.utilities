@@ -378,11 +378,13 @@ Caret-bound IDE actions from the plugin (align carets, sort by subselection, mul
 
 Press **Ctrl/⌘ K** on any page (or the `⌘K` button in the top bar) to open the command palette: it
 jumps to any tool and runs the current page's main actions — copy result, send request, switch mode,
-toggle the theme, show/hide the controls sidebar — from the keyboard.
+toggle the theme, show/hide the side panels — from the keyboard.
 
 On every tool page the controls sidebar can be collapsed to give the editor and result the full
-width — via the sidebar toggle in the top bar, the palette, or **Ctrl/⌘ B**. The choice is
-remembered per tool (as is its drag-to-resize width).
+width — via the sidebar toggle in the top bar, the palette, or **Ctrl/⌘ B**. The tools with a
+right-hand rail (Leave's templates, Shortlink's filter and speed-dial, Text Transform's favourites,
+Team Availability's legend) have a second toggle beside it for that rail — **Ctrl/⌘ Shift B**. Both
+choices are remembered per tool, independently (as is the sidebar's drag-to-resize width).
 
 Tools also chain into each other. The **Send to** buttons next to a tool's result hand the output to
 another tool: decode a payload, send it to Sanitize to mask it; pick someone's days in Team

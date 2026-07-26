@@ -104,6 +104,24 @@ areas — Leave's `.page-leave .layout` adds a `templates` column. A shared `.la
 silently drop the extra area, hiding a panel. Check any shared layout change against every tool page
 (Leave especially), or scope it to the page's own `.page-<tool> .layout`.
 
+`sidebar.js` + `sidebar.mjs` collapse the side panels: `#controls-toggle` (Ctrl/⌘ B) the controls
+sidebar, `#rail-toggle` (Ctrl/⌘ Shift B) the third column on the tools that have one — Leave's
+templates, Shortlink's rail, Transform's favourites, Availability's legend. A rail opts in by
+carrying `class="rail"` and a `data-rail-label` (the button reads "Hide <label> panel"); the wiring
+then follows the sidebar's: a flag on `<html>` (`data-rail-collapsed`), set pre-paint by the inline
+head script from `meso-rail-hidden-<tool>`, so nothing flashes. Three consequences worth knowing:
+
+- Hiding the panel is shared (`:root[data-rail-collapsed] .rail`), but **dropping its grid column is
+  per page** — the three-column templates are page-scoped and outrank anything generic, so each page
+  spells out its own `[data-rail-collapsed]` and `[data-controls-collapsed][data-rail-collapsed]`
+  grids next to its existing rules. A new rail needs all of them, including the `:has()` variants
+  (Leave's hidden editor), which tie on specificity unless the two-attribute selector exists.
+- Those rules cover the side-by-side breakpoint only. Stacked, the rail's row is last, so an
+  unclaimed area costs one 18px gap and nothing else.
+- A rail the page itself hides (Availability's, until a workbook is imported) takes the button with
+  it — `sidebar.js` mirrors the panel's `hidden` onto the button via a `MutationObserver`, which is
+  why `#rail-toggle`'s `display` rule is scoped `:not([hidden])`.
+
 ### Tool iconography — keep it consistent
 
 Since the favicon refresh, every tool has **one visual identity**: a card color class

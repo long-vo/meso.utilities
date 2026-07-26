@@ -14,6 +14,7 @@
       var t = localStorage.getItem("meso-theme");
       if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
       if (localStorage.getItem("meso-controls-hidden-shortlink") === "1") document.documentElement.setAttribute("data-controls-collapsed", "");
+      if (localStorage.getItem("meso-rail-hidden-shortlink") === "1") document.documentElement.setAttribute("data-rail-collapsed", "");
     } catch (e) { /* storage unavailable; keep the default dark theme */ }
     if (location.hash.length > 1) document.documentElement.classList.add("resolving");
   </script>
@@ -43,6 +44,15 @@
           stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
           <rect x="2.75" y="4.5" width="14.5" height="11" rx="2.25" />
           <line x1="8" y1="4.5" x2="8" y2="15.5" />
+        </svg>
+      </button>
+      <button id="rail-toggle" class="icon-btn" type="button"
+        aria-controls="sl-rail" aria-expanded="true" title="Hide filters and favourites panel"
+        aria-label="Hide filters and favourites panel">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor"
+          stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
+          <rect x="2.75" y="4.5" width="14.5" height="11" rx="2.25" />
+          <line x1="12" y1="4.5" x2="12" y2="15.5" />
         </svg>
       </button>
       <button id="theme-toggle" class="icon-btn" type="button" aria-label="Toggle colour theme">
@@ -145,7 +155,7 @@
         this browser instantly.</p>
     </section>
 
-    <div class="sl-rail">
+    <div id="sl-rail" class="sl-rail rail" data-rail-label="filters and favourites">
       <section class="panel frequent sl-filter-panel" aria-label="Filter shortlinks">
         <input type="text" id="filter" class="sl-filter" placeholder="Filter links…"
           spellcheck="false" autocomplete="off" aria-label="Filter links" />

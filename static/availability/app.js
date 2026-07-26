@@ -56,6 +56,7 @@ import {
 import { availabilityUpdate } from "../leave/leave.mjs";
 import { drainUpdates, INBOX_KEY, sendHandoff } from "../handoff.mjs";
 import { registerCommands, TOOL_ICONS } from "../palette.js";
+import { parseHidden, serializeHidden } from "../sidebar.mjs";
 import { makeToast } from "../ui.mjs";
 
 const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
@@ -89,6 +90,8 @@ const els = {
   historyList: $("history-list"),
   historyClear: $("history-clear"),
   legend: $("legend"),
+  legendBody: $("legend-body"),
+  legendToggle: $("legend-toggle"),
   legendRail: $("legend-rail"),
   exportJson: $("export-json"),
   exportView: $("export-view"),
@@ -101,6 +104,7 @@ const els = {
   dayPick: /** @type {HTMLInputElement} */ ($("day-pick")),
   dayReset: $("day-reset"),
   strip: $("strip"),
+  stripToggle: $("strip-toggle"),
   rangeLabel: $("range-label"),
   selLabel: $("sel-label"),
   sendLeave: /** @type {HTMLButtonElement} */ ($("send-leave")),
@@ -2192,8 +2196,45 @@ function applyQueuedUpdates() {
   if (parts.length > 0) toast(parts.join(" · "));
 }
 
+/**
+ * Fold one panel's body away behind the chevron in its heading, remembering
+ * the choice. Distinct from the shared sidebar/rail toggles: those drop a whole
+ * layout column, this only hides a panel's contents while its head — the day
+ * picker and Copy summary, for the strip — stays reachable. The panels here
+ * are filled by render, so a collapsed body has nothing to flash before this
+ * runs and needs no pre-paint script.
+ */
+function setupCollapse(button, body, key) {
+  const caret = button.querySelector(".caret");
+  let hidden = false;
+  try {
+    hidden = parseHidden(localStorage.getItem(key));
+  } catch {
+    /* storage unavailable; start expanded */
+  }
+
+  const apply = () => {
+    body.hidden = hidden;
+    button.setAttribute("aria-expanded", String(!hidden));
+    if (caret) caret.textContent = hidden ? "▸" : "▾";
+  };
+
+  apply();
+  button.addEventListener("click", () => {
+    hidden = !hidden;
+    apply();
+    try {
+      localStorage.setItem(key, serializeHidden(hidden));
+    } catch {
+      /* storage unavailable; the choice just won't persist */
+    }
+  });
+}
+
 /* ------------------------------- boot ------------------------------- */
 
+setupCollapse(els.stripToggle, els.strip, `${STORE_KEY}-strip-collapsed`);
+setupCollapse(els.legendToggle, els.legendBody, `${STORE_KEY}-legend-collapsed`);
 loadState();
 els.lowThreshold.value = String(state.lowThreshold);
 els.lowThresholdOut.textContent = state.lowThreshold === 0 ? "off" : `${state.lowThreshold}%`;

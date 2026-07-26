@@ -180,6 +180,27 @@ function builtinCommands() {
       run: () => document.getElementById("controls-toggle")?.click(),
     });
   }
+  // Only the tools with a right-hand rail have this one.
+  if (document.getElementById("rail-toggle")) {
+    actions.push({
+      icon: "◨",
+      title: "Toggle side panel",
+      hint: "action",
+      keywords: [
+        "rail",
+        "panel",
+        "templates",
+        "favourites",
+        "favorites",
+        "legend",
+        "hide",
+        "show",
+        "collapse",
+        "expand",
+      ],
+      run: () => document.getElementById("rail-toggle")?.click(),
+    });
+  }
   return [...links, ...actions];
 }
 

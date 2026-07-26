@@ -14,6 +14,7 @@ import {
   addDays,
   applyDayCodes,
   applyLocationHolidays,
+  BALANCE_FIELDS,
   balanceTotals,
   capacityGrid,
   clampAnchor,
@@ -24,6 +25,7 @@ import {
   decodeShare,
   encodeShare,
   groupOutDates,
+  HISTORY_LIMIT,
   historyText,
   holidayName,
   HOLIDAYS_CH_ZURICH,
@@ -1820,4 +1822,645 @@ Deno.test("revertDayCodes: deleting a record puts the days back", () => {
   // Nothing to undo: an unknown person, or a record from before `before` existed.
   assertEquals(revertDayCodes(model, { name: "Nobody", code: "s", before: {} }).name, null);
   assertEquals(revertDayCodes(model, { name: "Mai Bui", code: "s" }).restored, 0, "no before map");
+});
+
+/* ---------------------------------------------------------------------------
+ * Data consistency
+ *
+ * The tests above each pin one function's output. These pin the *relationships*
+ * between them over one realistic half-year model: the aggregations must agree
+ * with the per-day readings they summarise, the round-trips must lose nothing,
+ * and the mutations must be exactly undoable. A function can be individually
+ * correct and still disagree with its neighbours, which is the class of bug the
+ * grid and the balances panel show to a reader as two different truths.
+ * ------------------------------------------------------------------------- */
+
+/** Sum with the tolerance half-days need (0.5 is exact, but sums of ~200 aren't). */
+function close(a: number, b: number): boolean {
+  return Math.abs(a - b) < 1e-9;
+}
+
+/** One quarter of day codes on the real calendar: weekends carry `e`, weekdays
+ *  cycle the legend, and every eighth weekday is left blank or dirtied so the
+ *  no-data and unknown-code paths are part of the fixture rather than a footnote. */
+function quarterCodes(year: number, quarter: number, seed: number): Cell[] {
+  const spread = ["w", "w", "p", "r", "v", "m", "c", "s", "ch", "sa", "si", "h", "cm", "ra"];
+  return quarterDates(year, quarter).map((iso, i) => {
+    if (isWeekend(iso)) return "e";
+    const n = i + seed;
+    if (n % 8 === 0) return ""; // never filled in — no data, not "out"
+    if (n % 23 === 0) return "zz"; // a dirty cell: counted as working, and warned about
+    return spread[n % spread.length];
+  });
+}
+
+/** Two quarters, six people across three teams, balances for all but one — the
+ *  shape every relationship below is checked against. */
+function wideModel(): Model {
+  const roster: Array<[string, string]> = [
+    ["Anh Pham", "mortal"],
+    ["Long Vo", "mortal"],
+    ["Giang Pham", "Pragma"],
+    ["Tam Tran", "pragma"], // same team, drifted label
+    ["Vinh Nguyen", "EL"],
+    ["Nhan Tran", "EL"], // deliberately absent from the balance block
+  ];
+  const sheet = (quarter: number, name: string) => ({
+    name,
+    rows: grid({
+      people: roster.map(([who, team], i) =>
+        [who, team, quarterCodes(2026, quarter, i * 5 + quarter)] as [string, string, Cell[]]
+      ),
+      nDays: daysInQuarter(2026, quarter),
+    }),
+  });
+  return parseVacationWorkbook([
+    sheet(1, "1st quarter"),
+    sheet(2, "2nd quarter"),
+    {
+      name: "General",
+      rows: general({
+        // The sheet's own arithmetic holds for each: carry + allowance - planned
+        // - dayOffs = annual. Nhan Tran is not listed at all.
+        people: roster.slice(0, 5).map((
+          [who],
+          i,
+        ) =>
+          [who, {
+            working: 200 + i,
+            carry: i % 3,
+            allowance: 12,
+            planned: 2,
+            dayOffs: 4 + (i % 2),
+            annual: (i % 3) + 12 - 2 - (4 + (i % 2)),
+            core: 3,
+            sick: 5,
+          }] as [string, Partial<Record<BalanceField, Cell>>]
+        ),
+      }),
+    },
+  ], { year: 2026 });
+}
+
+const WIDE = wideModel();
+const AXIS_FROM = WIDE.days[0];
+const AXIS_TO = WIDE.days[WIDE.days.length - 1];
+
+Deno.test("consistency: the fixture is the wide, dirty model these tests assume", () => {
+  assertEquals(WIDE.people.length, 6);
+  assertEquals([WIDE.days.length, AXIS_FROM, AXIS_TO], [181, "2026-01-01", "2026-06-30"]);
+  assertEquals(WIDE.warnings.length > 0, true, "the dirty cells must warn");
+  assertEquals(person(WIDE, "Nhan Tran").balance, undefined, "one person carries no balance");
+  assertEquals(person(WIDE, "Anh Pham").balance?.annual, 6);
+  const blanks = WIDE.days.filter((d) => person(WIDE, "Anh Pham").days[d] === undefined);
+  assertEquals(blanks.length > 0, true, "the model must hold never-filled-in days");
+});
+
+Deno.test("consistency: every kind has exactly one full-day code", () => {
+  // `personSummary` names a kind through the one code whose `half` is null
+  // (KIND_LABELS), and `codeShare` reads a half as 0.5 of a day. A kind with two
+  // full-day codes would make the first silently ambiguous, one with none would
+  // leave a chip labelled by its bare kind.
+  const fullDay = new Map<string, string[]>();
+  const halves = new Set<string>();
+  for (const [code, info] of Object.entries(CODES)) {
+    if (info.half === null) fullDay.set(info.kind, [...(fullDay.get(info.kind) ?? []), code]);
+    else halves.add(info.kind);
+    assertEquals(info.weight >= 0 && info.weight <= 1, true, `${code}: weight out of range`);
+    assertEquals(codeInfo(code), info, `${code}: codeInfo disagrees with the table`);
+  }
+  for (const [kind, codes] of fullDay) {
+    assertEquals(codes.length, 1, `kind "${kind}" has ${codes.length} full-day codes: ${codes}`);
+  }
+  for (const kind of halves) {
+    assertEquals(fullDay.has(kind), true, `kind "${kind}" has halves but no full-day code`);
+  }
+});
+
+Deno.test("consistency: outOn, remoteOn and outInRange read each day alike", () => {
+  for (const date of WIDE.days) {
+    const out = outOn(WIDE, date);
+    const away = remoteOn(WIDE, date);
+    // Being absent and being merely elsewhere are different answers to the same
+    // question — the strip renders them as separate groups, so they must not
+    // both claim the same person.
+    const both = out.filter((o) => away.some((a) => a.name === o.name)).map((o) => o.name);
+    assertEquals(both, [], `${date}: counted as out and as remote at once`);
+    // The range form must agree with the single-day form on a single day.
+    assertEquals(
+      outInRange(WIDE, date, date).map((p) => [p.name, p.dates[0].code]),
+      out.map((o) => [o.name, o.code]),
+      `${date}: outInRange(d, d) != outOn(d)`,
+    );
+    for (const o of out) {
+      assertEquals(isWeekend(date), false, `${date}: ${o.name} reported out on a weekend`);
+    }
+  }
+});
+
+Deno.test("consistency: dayCounts is exactly the per-day split of outOn", () => {
+  const counts = dayCounts(WIDE, AXIS_FROM, AXIS_TO);
+  const expect = WIDE.days.filter((d) => !isWeekend(d)).map((date) => {
+    const { holiday, other } = splitHoliday(outOn(WIDE, date));
+    return { date, count: other.length, holiday: holiday.length };
+  });
+  assertEquals(counts, expect);
+  // splitHoliday must lose nobody: the two cohorts partition the input.
+  for (const date of WIDE.days) {
+    const all = outOn(WIDE, date);
+    const { holiday, other } = splitHoliday(all);
+    assertEquals(
+      holiday.length + other.length,
+      all.length,
+      `${date}: splitHoliday dropped someone`,
+    );
+  }
+});
+
+Deno.test("consistency: teamCapacity reconciles with the roster and with personSummary", () => {
+  const teams = teamCapacity(WIDE, AXIS_FROM, AXIS_TO);
+  assertEquals(teams.map((t) => t.team), ["EL", "mortal", "pragma"], "case-insensitive grouping");
+  assertEquals(teams.reduce((n, t) => n + t.members, 0), WIDE.people.length);
+
+  for (const team of teams) {
+    const members = WIDE.people.filter((p) => p.team.toLowerCase() === team.team.toLowerCase());
+    assertEquals(team.members, members.length, `${team.team}: member count`);
+    let out = 0;
+    let worked = 0;
+    let possible = 0;
+    for (const m of members) {
+      const s = personSummary(WIDE, m.name)!;
+      out += s.out;
+      worked += s.worked;
+      possible += s.possible;
+    }
+    assertEquals(close(worked, team.available), true, `${team.team}: worked != available`);
+    assertEquals(close(out, team.out), true, `${team.team}: personSummary out != teamCapacity out`);
+    // The documented identity: nothing imported falls outside these two.
+    assertEquals(
+      close(team.available + team.out, possible),
+      true,
+      `${team.team}: available + out != known non-weekend days`,
+    );
+  }
+});
+
+Deno.test("consistency: personSummary's two counting bases each add up", () => {
+  for (const p of WIDE.people) {
+    const s = personSummary(WIDE, p.name)!;
+    const where = `${p.name}:`;
+    // Weight basis.
+    assertEquals(close(s.out + s.worked, s.possible), true, `${where} out + worked != possible`);
+    assertEquals(
+      close(s.months.reduce((n, m) => n + m.out, 0), s.out),
+      true,
+      `${where} the month run loses absence`,
+    );
+    assertEquals(
+      close(s.months.reduce((n, m) => n + m.possible, 0), s.possible),
+      true,
+      `${where} the month run loses days`,
+    );
+    // codeShare basis — the chips, the month bars and the ranges are one count
+    // seen three ways, so a month can never read empty for a chipped fortnight.
+    const chips = s.kinds.reduce((n, k) => n + k.days, 0);
+    assertEquals(
+      close(s.months.reduce((n, m) => n + m.days, 0), chips),
+      true,
+      `${where} sum(months.days) != sum(kinds.days)`,
+    );
+    assertEquals(
+      close(s.ranges.reduce((n, r) => n + r.days, 0), chips),
+      true,
+      `${where} sum(ranges.days) != sum(kinds.days)`,
+    );
+    // The absences among those ranges must name the same days outInRange does.
+    const fromRanges = new Set<string>();
+    for (const r of s.ranges) {
+      if (r.weight >= 1) continue; // WFH/onsite are chipped but cost nothing
+      for (let d = r.from; d <= r.to; d = nextDate(d)) if (!isWeekend(d)) fromRanges.add(d);
+    }
+    const listed = outInRange(WIDE, AXIS_FROM, AXIS_TO).find((x) => x.name === p.name);
+    assertEquals(
+      [...fromRanges].sort(),
+      (listed?.dates ?? []).map((d) => d.date).sort(),
+      `${where} the ranges and outInRange disagree about which days are absences`,
+    );
+  }
+  assertEquals(personSummary(WIDE, "Nobody At All"), null);
+});
+
+Deno.test("consistency: groupOutDates conserves the days it groups", () => {
+  for (const p of outInRange(WIDE, AXIS_FROM, AXIS_TO)) {
+    const groups = groupOutDates(p.dates);
+    const expect = p.dates.reduce((n, e) => n + (codeInfo(e.code).half === null ? 1 : 0.5), 0);
+    assertEquals(
+      close(groups.reduce((n, g) => n + g.days, 0), expect),
+      true,
+      `${p.name}: grouping changed the day count`,
+    );
+    let prev = "";
+    for (const g of groups) {
+      assertEquals(g.from <= g.to, true, `${p.name}: inverted range`);
+      assertEquals(prev === "" || prev < g.from, true, `${p.name}: overlapping ranges`);
+      prev = g.to;
+    }
+    // Every grouped range must describe one code, and the text forms must show
+    // exactly as many ranges as there are.
+    assertEquals(
+      outDatesText(p.dates).split(", ").length,
+      groups.length,
+      `${p.name}: outDatesText range count`,
+    );
+    assertEquals(
+      outDatesLabelText(p.dates).split(", ").length,
+      groups.length,
+      `${p.name}: outDatesLabelText range count`,
+    );
+  }
+});
+
+Deno.test("consistency: shiftBalance keeps the sheet's arithmetic and is reversible", () => {
+  const start = {
+    working: 235,
+    carry: -3,
+    allowance: 12,
+    planned: 3,
+    dayOffs: 6.5,
+    annual: -0.5,
+    core: 0,
+    sick: 1,
+  };
+  // The identity the General sheet computes with, and that the panel shows.
+  const identity = (b: Record<string, number | null>) =>
+    b.carry! + b.allowance! - b.planned! - b.dayOffs! - b.annual!;
+  assertEquals(identity(start), 0, "the fixture itself must satisfy it");
+
+  const changes: Array<[string, string]> = [
+    ["w", "p"],
+    ["", "v"],
+    ["r", "c"],
+    ["w", "sm"],
+    ["v", "m"],
+    ["s", "w"],
+    ["zz", "p"], // a dirty cell weighs a working day everywhere else, here too
+  ];
+  const moved = shiftBalance(start, changes)!;
+  assertEquals(close(identity(moved), 0), true, "annual = carry + allowance - planned - dayOffs");
+  assertEquals(
+    shiftBalance(moved, changes.map(([a, b]) => [b, a] as [string, string])),
+    start,
+    "replaying the changes swapped must land back on the original",
+  );
+  // A field the workbook never recorded is not invented by marking days.
+  const sparse = { ...NO_BALANCE, dayOffs: 2 };
+  const after = shiftBalance(sparse, [["w", "p"]])!;
+  assertEquals(after.dayOffs, 3);
+  assertEquals(after.annual, null, "a null field stays null");
+  assertEquals(shiftBalance(undefined, changes), undefined, "no balance stays no balance");
+});
+
+Deno.test("consistency: balanceTotals is additive over any split of the roster", () => {
+  const all = balanceTotals(WIDE.people);
+  for (const cut of [0, 1, 3, 5, 6]) {
+    const a = balanceTotals(WIDE.people.slice(0, cut));
+    const b = balanceTotals(WIDE.people.slice(cut));
+    for (const key of ["people", ...BALANCE_FIELDS]) {
+      assertEquals(close(all[key], a[key] + b[key]), true, `split at ${cut}: ${key} not additive`);
+    }
+  }
+  assertEquals(all.people, 5, "the person with no balance is not counted");
+  // Hand-summed against the fixture's own arithmetic.
+  assertEquals(all.allowance, 60);
+  assertEquals(all.core, 15);
+  assertEquals(balanceTotals([]), { people: 0, ...NO_BALANCE_TOTALS });
+});
+
+Deno.test("consistency: applyDayCodes accounts for every day of its range", () => {
+  const ranges = [
+    ["2026-03-09", "2026-03-20"], // two clean working weeks
+    ["2026-06-25", "2026-07-10"], // runs off the end of the imported axis
+    ["2026-03-14", "2026-03-15"], // nothing but a weekend
+    ["2026-01-01", "2026-01-01"], // a single day
+  ];
+  for (const [from, to] of ranges) {
+    const r = applyDayCodes(WIDE, { name: "Anh Pham", from, to, code: "p" });
+    let total = 0;
+    for (let d = from; d <= to; d = nextDate(d)) total++;
+    assertEquals(
+      r.written + r.weekend + r.outside,
+      total,
+      `${from}..${to}: days written, skipped and dropped must sum to the range`,
+    );
+    assertEquals(
+      Object.keys(r.before).length,
+      r.written,
+      `${from}..${to}: every written day must be recorded for undo`,
+    );
+    for (const date of Object.keys(r.before)) {
+      assertEquals(isWeekend(date), false, `${from}..${to}: ${date} is a weekend and was written`);
+      assertEquals(WIDE.days.includes(date), true, `${from}..${to}: ${date} is off-axis`);
+    }
+    // What leavableDays previews is what applyDayCodes does — including for the
+    // days the workbook never filled in.
+    const picked = [];
+    for (let d = from; d <= to; d = nextDate(d)) {
+      picked.push({
+        date: d,
+        code: person(WIDE, "Anh Pham").days[d] ?? "",
+        outside: !WIDE.days.includes(d),
+      });
+    }
+    assertEquals(
+      leavableDays(picked).markable,
+      r.written,
+      `${from}..${to}: the preview and the write disagree`,
+    );
+  }
+});
+
+Deno.test("consistency: a blank weekend cell is still a weekend", () => {
+  // A row the workbook has only partly filled in — a joiner's first weeks, a
+  // leaver's last — has no code at all on its weekends. Read from the day code
+  // alone, those Saturdays look markable, and a request spanning one used to be
+  // written onto it and booked against the balance: a leave day spent on a day
+  // nobody works. The calendar has the final say, exactly as `isWeekend` does.
+  // Thu 01.01 worked, then nothing filled in at all: Fri 02.01, Sat 03.01,
+  // Sun 04.01 and Mon 05.01 all hold no code.
+  const codes: Cell[] = ["w", "", "", ""];
+  const blank = grid({ people: [["Mai Bui", "a", codes]], nDays: 90 });
+  const model = parseVacationWorkbook([{ name: "1st quarter", rows: blank }], { year: 2026 });
+  assertEquals(person(model, "Mai Bui").days["2026-01-03"], undefined, "Saturday holds no code");
+  assertEquals(isWeekend("2026-01-03"), true);
+
+  const r = applyDayCodes(model, {
+    name: "Mai Bui",
+    from: "2026-01-01",
+    to: "2026-01-05",
+    code: "p",
+  });
+  assertEquals([r.written, r.weekend, r.outside], [3, 2, 0], "both weekend days are skipped");
+  assertEquals(Object.keys(r.before), ["2026-01-01", "2026-01-02", "2026-01-05"]);
+  assertEquals(person(r.model, "Mai Bui").days["2026-01-03"], undefined, "Saturday stays blank");
+  assertEquals(person(r.model, "Mai Bui").days["2026-01-04"], undefined, "Sunday stays blank");
+  assertEquals(outOn(r.model, "2026-01-03"), [], "nobody is out on the Saturday");
+});
+
+Deno.test("consistency: apply then revert restores the model exactly", () => {
+  for (const code of ["p", "c", "s", "v", "m", "sa", "r", "h"]) {
+    const applied = applyDayCodes(WIDE, {
+      name: "long vo", // matched case-insensitively, restored under the roster spelling
+      from: "2026-03-09",
+      to: "2026-03-20",
+      code,
+    });
+    assertEquals(applied.name, "Long Vo");
+    assertEquals(applied.written > 0, true, `${code}: nothing written`);
+    const back = revertDayCodes(applied.model, {
+      name: "Long Vo",
+      code,
+      before: applied.before,
+    });
+    assertEquals(back.restored, applied.written, `${code}: restored != written`);
+    assertEquals(back.kept, 0, `${code}: nothing should have moved on`);
+    // Days *and* balance: the panel and the grid must land back together.
+    assertEquals(back.model, WIDE, `${code}: apply + revert did not restore the model`);
+    // While it stands, the record must read as fully present on the grid.
+    const record = recordOnGrid(applied.model, {
+      name: "Long Vo",
+      from: "2026-03-09",
+      to: "2026-03-20",
+      code,
+      days: applied.written,
+      at: 0,
+      before: applied.before,
+    });
+    assertEquals(
+      [record.days, record.kept],
+      [applied.written, applied.written],
+      `${code}: recordOnGrid disagrees with what was just written`,
+    );
+    // …and, once undone, as standing only where the restored code happens to be
+    // that same code anyway — the record is gone, the coincidence is not a write.
+    const coincidental = Object.entries(applied.before)
+      .filter(([, previous]) => previous === code).length;
+    assertEquals(
+      recordOnGrid(back.model, {
+        name: "Long Vo",
+        from: "2026-03-09",
+        to: "2026-03-20",
+        code,
+        days: applied.written,
+        at: 0,
+        before: applied.before,
+      }).kept,
+      coincidental,
+      `${code}: the undone record reads as standing on days it did not write`,
+    );
+  }
+});
+
+Deno.test("consistency: marking days moves the balance by exactly what it wrote", () => {
+  const before = balanceTotals(WIDE.people);
+  const applied = applyDayCodes(WIDE, {
+    name: "Anh Pham",
+    from: "2026-03-09",
+    to: "2026-03-13",
+    code: "p", // annual leave: adds to dayOffs, takes the same off annual
+  });
+  const after = balanceTotals(applied.model.people);
+  assertEquals(after.people, before.people, "marking days changed who has a balance");
+  assertEquals(
+    close(after.dayOffs - before.dayOffs, -(after.annual - before.annual)),
+    true,
+    "a day booked off must come out of the allowance it was booked against",
+  );
+  const moved = person(applied.model, "Anh Pham").balance!;
+  assertEquals(
+    close(moved.carry! + moved.allowance! - moved.planned! - moved.dayOffs! - moved.annual!, 0),
+    true,
+    "the sheet's arithmetic must survive the write",
+  );
+  // Someone the balance block never listed is not given one by marking days.
+  const nobalance = applyDayCodes(WIDE, {
+    name: "Nhan Tran",
+    from: "2026-03-09",
+    to: "2026-03-13",
+    code: "p",
+  });
+  assertEquals(nobalance.written > 0, true);
+  assertEquals(person(nobalance.model, "Nhan Tran").balance, undefined, "a balance was invented");
+});
+
+Deno.test("consistency: packModel/unpackModel round-trips the whole model", () => {
+  // Through JSON, the way localStorage and the .json export actually carry it.
+  assertEquals(unpackModel(JSON.parse(JSON.stringify(packModel(WIDE)))), WIDE);
+
+  // The separators the packed form is built from must survive inside a value.
+  const dirty = {
+    people: [{
+      name: "Dirty Cell",
+      team: "mortal",
+      location: "VN" as const,
+      days: { "2026-01-01": "a,b", "2026-01-02": "100%", "2026-01-03": "x y", "2026-01-06": "e" },
+      balance: { ...NO_BALANCE, annual: 1.5 },
+    }],
+    days: ["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04", "2026-01-05", "2026-01-06"],
+    warnings: [{ sheet: "1st quarter", ref: "AB12", value: "a,b", message: "unknown code" }],
+  };
+  const round = unpackModel(JSON.parse(JSON.stringify(packModel(dirty))))!;
+  assertEquals(round, dirty);
+  assertEquals("2026-01-04" in round.people[0].days, false, "a blank day must not materialise");
+});
+
+Deno.test("consistency: the share link round-trips the whole model", async () => {
+  const encoded = await encodeShare(packModel(WIDE));
+  assertEquals(/^[A-Za-z0-9_-]+$/.test(encoded), true, "must be safe in a URL fragment");
+  assertEquals(unpackModel(await decodeShare(encoded)), WIDE);
+  // The compression is the point: the packed form is extremely repetitive.
+  assertEquals(encoded.length < JSON.stringify(packModel(WIDE)).length / 4, true);
+});
+
+Deno.test("consistency: mergeModels is idempotent on people, days and balances", () => {
+  const empty = { people: [], days: [], warnings: [] };
+  assertEquals(mergeModels(WIDE, empty), WIDE, "merging nothing must change nothing");
+
+  const twice = mergeModels(WIDE, WIDE);
+  assertEquals(twice.people, WIDE.people, "re-importing the same data must not duplicate people");
+  assertEquals(twice.days, WIDE.days, "…nor stutter the day axis");
+  // Warnings are an import log, not model state: they accumulate on purpose.
+  assertEquals(twice.warnings.length, WIDE.warnings.length * 2);
+
+  // The axis stays sorted and unique however the halves arrive.
+  const second = mergeModels(
+    { people: [], days: ["2026-07-02", "2026-01-05"], warnings: [] },
+    { people: [], days: ["2026-01-05", "2026-04-01"], warnings: [] },
+  );
+  assertEquals(second.days, ["2026-01-05", "2026-04-01", "2026-07-02"]);
+});
+
+Deno.test("consistency: applyLocationHolidays is pure and idempotent", () => {
+  const tags = { "Giang Pham": "CH" as const, "Tam Tran": "CH" as const };
+  const snapshot = JSON.stringify(WIDE);
+  const once = applyLocationHolidays(WIDE, tags, HOLIDAYS_CH_ZURICH);
+  assertEquals(JSON.stringify(WIDE), snapshot, "the input model was mutated");
+  assertEquals(applyLocationHolidays(once, tags, HOLIDAYS_CH_ZURICH), once, "not idempotent");
+
+  // The overlay reinterprets working days; it must not touch the leave accounting.
+  for (const p of once.people) {
+    assertEquals(p.balance, person(WIDE, p.name).balance, `${p.name}: the overlay moved a balance`);
+  }
+  // Nor may it change how many days the axis holds for anyone.
+  for (const p of once.people) {
+    assertEquals(
+      Object.keys(p.days).length,
+      Object.keys(person(WIDE, p.name).days).length,
+      `${p.name}: the overlay added or dropped a day`,
+    );
+  }
+});
+
+Deno.test("consistency: weekSlices and monthSpans partition the view", () => {
+  for (const [mode, anchor] of [["month", "2026-02-14"], ["quarter", "2026-05-02"]] as const) {
+    const dates = viewDates(mode, anchor);
+    const where = `${mode} ${anchor}:`;
+    const weeks = weekSlices(dates);
+    assertEquals(weeks.reduce((n, w) => n + w.days, 0), dates.length, `${where} weeks lose days`);
+    assertEquals(weeks[0].from, dates[0], `${where} the view's first day is off screen`);
+    assertEquals(
+      weeks[weeks.length - 1].to,
+      dates[dates.length - 1],
+      `${where} last day off screen`,
+    );
+    weeks.forEach((w, i) => {
+      assertEquals(w.days > 0, true, `${where} an empty week slice`);
+      assertEquals(mondayOf(w.from), w.monday, `${where} slice ${i} is not its own week`);
+      if (i > 0) assertEquals(nextDate(weeks[i - 1].to), w.from, `${where} a gap between weeks`);
+    });
+    const spans = monthSpans(dates);
+    assertEquals(spans.reduce((n, s) => n + s.days, 0), dates.length, `${where} months lose days`);
+    assertEquals(spans.length, mode === "month" ? 1 : 3, `${where} span count`);
+    // Every day of the view falls inside the model's clamp, so the two framings
+    // never disagree about what is on screen.
+    assertEquals(clampAnchor(anchor, WIDE.days), anchor, `${where} anchor should be in range`);
+  }
+  assertEquals(clampAnchor("2025-01-01", WIDE.days), AXIS_FROM, "an early anchor is pulled in");
+  assertEquals(clampAnchor("2027-01-01", WIDE.days), AXIS_TO, "a late anchor is pulled in");
+});
+
+Deno.test("consistency: capacityGrid agrees with teamCapacity week by week", () => {
+  const weeks = weekSlices(viewDates("quarter", "2026-05-02"));
+  const rows = capacityGrid(WIDE, weeks);
+  assertEquals(rows.map((r) => r.team), teamCapacity(WIDE, AXIS_FROM, AXIS_TO).map((t) => t.team));
+  for (const row of rows) {
+    assertEquals(row.cells.length, weeks.length, `${row.team}: one cell per week`);
+    row.cells.forEach((cell, i) => {
+      const week = weeks[i];
+      const team = teamCapacity(WIDE, week.from, week.to)
+        .find((t) => t.team.toLowerCase() === row.team.toLowerCase());
+      if (cell === null) return; // nothing imported for that week — not a zero
+      assertEquals(
+        close(cell.available, team!.available),
+        true,
+        `${row.team} week ${week.from}: grid ${cell.available} vs teamCapacity ${team!.available}`,
+      );
+      assertEquals(
+        cell.available <= cell.possible,
+        true,
+        `${row.team} ${week.from}: over capacity`,
+      );
+    });
+  }
+  // A week nobody has data for must read as missing, never as zero capacity.
+  const unimported = weekSlices(viewDates("month", "2027-03-15"));
+  for (const row of capacityGrid(WIDE, unimported)) {
+    assertEquals(row.cells.every((c) => c === null), true, `${row.team}: absent data read as zero`);
+  }
+  assertEquals(lowCoverage(capacityGrid(WIDE, unimported), unimported, 0.8), []);
+});
+
+Deno.test("consistency: the day axis covers each quarter and each year exactly", () => {
+  for (const year of [2026, 2028]) {
+    let total = 0;
+    for (let q = 1; q <= 4; q++) {
+      const dates = quarterDates(year, q);
+      assertEquals(dates.length, daysInQuarter(year, q), `${year} Q${q}: length != daysInQuarter`);
+      dates.forEach((d, i) => {
+        if (i > 0) assertEquals(nextDate(dates[i - 1]), d, `${year} Q${q}: a gap at ${d}`);
+      });
+      total += dates.length;
+    }
+    assertEquals(total, year === 2028 ? 366 : 365, `${year}: quarters do not tile the year`);
+  }
+  // addDays and nextDate must be the same walk.
+  let d = "2026-02-25";
+  for (let i = 0; i < 10; i++) {
+    assertEquals(addDays("2026-02-25", i), d, `addDays disagrees with nextDate at +${i}`);
+    d = nextDate(d);
+  }
+});
+
+Deno.test("consistency: the history keeps what it says it keeps", () => {
+  let history: Array<Parameters<typeof historyText>[0] & { at: number }> = [];
+  function entryFor(n: number) {
+    return {
+      name: "Long Vo",
+      from: "2026-03-09",
+      to: "2026-03-09",
+      code: "p",
+      days: 1,
+      at: n,
+      before: { "2026-03-09": "w" },
+    };
+  }
+  for (let n = 0; n < HISTORY_LIMIT + 5; n++) history = pushHistory(history, entryFor(n));
+  assertEquals(history.length, HISTORY_LIMIT, "the cap must hold");
+  assertEquals(history[0].at, HISTORY_LIMIT + 4, "newest first");
+  assertEquals(history[history.length - 1].at, 5, "the oldest entries fall off the end");
+  // The line a reader sees must describe the entry it came from.
+  assertEquals(historyText(entryFor(0)), "Long Vo · 09.03 · Annual leave (1 day)");
+  assertEquals(
+    historyText({ ...entryFor(0), to: "2026-03-13", days: 5 }),
+    "Long Vo · 09.03–13.03 · Annual leave (5 days)",
+  );
 });
