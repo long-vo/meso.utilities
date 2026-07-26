@@ -1578,6 +1578,7 @@ select:focus {
 }
 .btn-row {
   display: flex;
+  flex-wrap: wrap; /* three buttons in a stacked sidebar overflow a phone otherwise */
   gap: 10px;
 }
 
@@ -1735,8 +1736,14 @@ input[aria-invalid="true"] {
 
 /* ---- responsive ---- */
 @media (max-width: 1080px) {
+  /* `minmax(0, 1fr)`, never a bare `1fr`: a `1fr` track floors at the item's
+     min-content width, so one panel holding a scroll container (Sanitize's
+     `pre.code-out`, Availability's heatmap) or a non-wrapping row widened the
+     single column past the viewport and the whole page scrolled sideways on a
+     phone. The `minmax(0, …)` lets the track shrink and the inner element
+     scroll on its own, which is what those `overflow: auto` boxes are for. */
   .layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "controls"
       "editor"
@@ -1767,6 +1774,14 @@ input[aria-invalid="true"] {
   }
   .topbar-actions {
     margin-left: auto; /* keep the actions right-aligned once wrapped */
+  }
+  /* Same reasoning one level down: the breadcrumb is itself a nowrap row, and
+     `.crumb-current` is `white-space: nowrap` with the default `min-width: auto`,
+     so it cannot shrink below its label. On a 320px phone that pushed the whole
+     document sideways on the longest names (Decode Anything, Team Availability,
+     Text Transform) — the tool name has to be free to drop under the wordmark. */
+  .brand {
+    flex-wrap: wrap;
   }
 }
 
@@ -2651,6 +2666,30 @@ html.js body.page-hub .cards.is-ready {
   }
 }
 
+/* Phone: `.tour-top` is a single non-wrapping row and `.tour-body` clips it, so
+   at this width the eyebrow plus a ten-segment rail pushed the close button
+   clean off the panel — the tour could only be left with Esc or Skip. The
+   eyebrow is the expendable one (the dialog is self-evidently the tour), and
+   the rail is allowed to shrink so the ✕ keeps its place at the end. */
+@media (max-width: 560px) {
+  .tour-top {
+    gap: 10px;
+    padding: 12px 12px 12px 14px;
+  }
+  .tour-eyebrow {
+    display: none;
+  }
+  .tour-rail {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    margin: 0 auto 0 0;
+  }
+  .tour-close {
+    flex: 0 0 auto;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tour,
   .tour[open],
@@ -3464,6 +3503,7 @@ button.out:focus-visible::after {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap; /* title + view switch + tools are wider than a phone as one row */
   gap: 10px;
   margin-bottom: 10px;
 }
@@ -5236,4 +5276,23 @@ button.out:focus-visible::after {
 .page-availability .thresh-out {
   color: var(--accent);
   font-variant-numeric: tabular-nums;
+}
+
+/* Phone: the sticky name column is a fixed 200px, which is a small share of a
+   desktop grid but two thirds of a stacked panel — at 375px it left ~103px for
+   cells, so only about 6 of a month's 31 days were on screen at a time and the
+   heatmap had to be scrubbed sideways to read anything. Narrowing the column
+   roughly doubles the visible span; `.hm-person` already ellipsizes, so the
+   name degrades gracefully. The team tag goes because it is `flex: none` and
+   would otherwise eat the reclaimed width without shrinking — it is redundant
+   here anyway, since the rows are grouped and labelled by team.
+   `scroll-margin-left` tracks `--hm-name-w`, so keyboard scroll-into-view
+   follows the narrower column without a second rule. */
+@media (max-width: 560px) {
+  .page-availability {
+    --hm-name-w: 108px;
+  }
+  .page-availability .hm-team {
+    display: none;
+  }
 }
