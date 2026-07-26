@@ -1218,7 +1218,9 @@ export function leaveHandoffText({ name, code, from, to, type, duration }) {
  * silently dropped: an unknown person (the roster comes from the workbook, and
  * a leave form must not invent a row), days outside the imported range (the
  * grid has no column for them), and weekends (a request spanning one covers the
- * working days around it, and overwriting `e` would claim someone worked).
+ * working days around it, and overwriting `e` would claim someone worked) —
+ * weekends by the calendar as well as by the code, so a row the workbook has
+ * not filled in yet is not the one place a Saturday can be booked.
  *
  * The person's leave balance moves with the days ({@link shiftBalance}), so the
  * grid and the balances panel never disagree about the same absence.
@@ -1258,7 +1260,11 @@ export function applyDayCodes(model, update) {
       outside++;
       continue;
     }
-    if (codeInfo(days[date] ?? "").kind === "weekend") {
+    // The `e` code answers for the cells the workbook filled in, the calendar
+    // for the ones it left blank — the same rule {@link leavableDays} previews
+    // with. Reading the code alone would write leave onto a joiner's blank
+    // Saturday and book it against their balance.
+    if (codeInfo(days[date] ?? "").kind === "weekend" || isWeekend(date)) {
       weekend++;
       continue;
     }
