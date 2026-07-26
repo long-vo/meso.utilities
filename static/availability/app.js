@@ -73,6 +73,8 @@ const els = {
   navToday: $("nav-today"),
   navNext: $("nav-next"),
   teamChips: $("team-chips"),
+  memberField: $("member-field"),
+  memberChips: $("member-chips"),
   nameFilter: /** @type {HTMLInputElement} */ ($("name-filter")),
   bulkTeam: /** @type {HTMLSelectElement} */ ($("bulk-team")),
   bulkVn: $("bulk-vn"),
@@ -175,6 +177,7 @@ function el(tag, className, text) {
  *   year: number,
  *   tags: Record<string, "VN" | "CH">,
  *   teams: string[],
+ *   members: string[],
  *   view: { mode: "month" | "quarter", anchor: string },
  *   nameFilter: string,
  *   history: import("./availability.mjs").HistoryEntry[],
@@ -189,6 +192,9 @@ const state = {
   year: new Date().getFullYear(),
   tags: {}, // person name → "VN" | "CH"
   teams: [], // selected team keys (lowercase); empty = everyone
+  // Names picked out of the selected teams; empty = the whole team. Only ever
+  // holds people the current team selection covers — see renderMemberChips.
+  members: [],
   view: { mode: "month", anchor: todayIso() },
   nameFilter: "",
   // Changes another tool recorded here, newest first. Persisted with the model.
@@ -559,6 +565,9 @@ function loadState() {
     if (Number.isInteger(saved.year)) state.year = saved.year;
     if (saved.tags && typeof saved.tags === "object") state.tags = saved.tags;
     if (Array.isArray(saved.teams)) state.teams = saved.teams.filter((t) => typeof t === "string");
+    if (Array.isArray(saved.members)) {
+      state.members = saved.members.filter((m) => typeof m === "string");
+    }
     if (saved.view && (saved.view.mode === "month" || saved.view.mode === "quarter")) {
       state.view.mode = saved.view.mode;
     }
@@ -588,6 +597,7 @@ function saveState() {
         year: state.year,
         tags: state.tags,
         teams: state.teams,
+        members: state.members,
         lowThreshold: state.lowThreshold,
         history: state.history,
         view: { mode: state.view.mode },
@@ -634,6 +644,7 @@ function visiblePeople(model) {
   const needle = state.nameFilter.trim().toLowerCase();
   return model.people
     .filter((p) => state.teams.length === 0 || state.teams.includes(p.team.toLowerCase()))
+    .filter((p) => state.members.length === 0 || state.members.includes(p.name))
     .filter((p) => needle === "" || p.name.toLowerCase().includes(needle))
     .sort((a, b) =>
       a.team.toLowerCase().localeCompare(b.team.toLowerCase()) || a.name.localeCompare(b.name)
@@ -651,9 +662,12 @@ function renderAll() {
   const model = displayModel();
   document.body.classList.toggle("has-model", model !== null);
   els.legendRail.hidden = model === null; // the layout drops the rail column too
-  els.exportView.hidden = !filterActive();
   renderImportStatus();
   renderTeamChips(model);
+  // Before anything reads `visiblePeople` or `filterActive`: this prunes members
+  // the current team selection no longer covers.
+  renderMemberChips(model);
+  els.exportView.hidden = !filterActive();
   renderTags(model);
   renderWarnings();
   renderHistory();
@@ -695,6 +709,43 @@ function renderTeamChips(model) {
       renderAll();
     });
     els.teamChips.appendChild(chip);
+  }
+}
+
+/**
+ * The selected teams' people, as chips that narrow the view to individuals.
+ * Hidden until a team is picked: unfiltered, this is the entire roster, which is
+ * what the name filter is for.
+ *
+ * Also where `state.members` is pruned — deselecting a team must not leave that
+ * team's people filtering the view from a control that is no longer on screen.
+ */
+function renderMemberChips(model) {
+  els.memberChips.textContent = "";
+  if (model === null || state.teams.length === 0) {
+    els.memberField.hidden = true;
+    state.members = [];
+    return;
+  }
+  els.memberField.hidden = false;
+  const people = model.people
+    .filter((p) => state.teams.includes(p.team.toLowerCase()))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const names = new Set(people.map((p) => p.name));
+  state.members = state.members.filter((m) => names.has(m));
+  for (const person of people) {
+    const chip = el("button", "chip chip-btn", person.name);
+    chip.type = "button";
+    const active = state.members.includes(person.name);
+    chip.setAttribute("aria-pressed", String(active));
+    if (active) chip.classList.add("is-active");
+    chip.addEventListener("click", () => {
+      state.members = active
+        ? state.members.filter((m) => m !== person.name)
+        : [...state.members, person.name];
+      renderAll();
+    });
+    els.memberChips.appendChild(chip);
   }
 }
 
@@ -1628,9 +1679,9 @@ function exportJson() {
   );
 }
 
-/** Is the heatmap currently narrowed by a team or name filter? */
+/** Is the heatmap currently narrowed by a team, member or name filter? */
 function filterActive() {
-  return state.teams.length > 0 || state.nameFilter.trim() !== "";
+  return state.teams.length > 0 || state.members.length > 0 || state.nameFilter.trim() !== "";
 }
 
 /**
@@ -1983,6 +2034,7 @@ els.clearData.addEventListener("click", () => {
   state.model = null;
   state.tags = {};
   state.teams = [];
+  state.members = [];
   state.nameFilter = "";
   state.pickedDay = null;
   state.focus = null;
