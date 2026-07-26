@@ -4530,6 +4530,15 @@ button.out:focus-visible::after {
   font-weight: 400;
   font-size: 11.5px;
 }
+/* The part of a hint that names an interaction. Wears the same dotted rule the
+   headings it points at wear, so the sentence and the table read as one cue. */
+.page-availability .hint-inline .hint-hover {
+  color: var(--text-dim);
+  font-weight: 600;
+  text-decoration: underline dotted from-font;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--text-faint);
+}
 .page-availability .chip-btn {
   cursor: pointer;
 }
@@ -5232,6 +5241,19 @@ button.out:focus-visible::after {
 }
 .page-availability .bal-num {
   font-variant-numeric: tabular-nums;
+}
+/* The columns whose cells break down into the workbook's own days. A tooltip
+   nobody knows to hover is not a feature, so the heading carries the hint the
+   cells cannot: a dotted rule under it, and the help cursor over both. */
+.page-availability .bal-table th.bal-detail {
+  color: var(--accent);
+  text-decoration: underline dotted from-font;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.page-availability .bal-table th.bal-detail,
+.page-availability .bal-table td.bal-detail {
+  cursor: help;
 }
 /* Below zero means the allowance is overdrawn, which is the one thing in this
    table worth spotting without reading every row. */

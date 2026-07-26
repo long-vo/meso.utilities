@@ -21,6 +21,7 @@ import {
   holidayName,
   HOLIDAYS_CH_ZURICH,
   isWeekend,
+  KIND_LABELS,
   leavableDays,
   leaveHandoffDefaults,
   leaveHandoffText,
@@ -1278,6 +1279,9 @@ function renderCapacity(model) {
  * the page already runs on, so it needs no separate plumbing. Each column
  * carries the phrase its cells' tooltips use, since a bare `2025` above a
  * column of small numbers says nothing on its own.
+ *
+ * `kind` names the day code behind the number for the columns the grid can show
+ * its working for — see {@link balanceDetail}.
  */
 function balanceColumns() {
   const previous = state.year - 1;
@@ -1285,11 +1289,11 @@ function balanceColumns() {
     { key: "working", head: "Working", what: "working days" },
     { key: "carry", head: String(previous), what: `days carried over from ${previous}` },
     { key: "allowance", head: "Annual", what: "annual leave for the year" },
-    { key: "planned", head: "Planned", what: "planned days" },
-    { key: "dayOffs", head: "Day offs", what: "days taken" },
+    { key: "planned", head: "Planned", what: "planned days", kind: "planned" },
+    { key: "dayOffs", head: "Day offs", what: "days taken", kind: "leave" },
     { key: "annual", head: "Annual", what: "annual leave left", left: true },
-    { key: "core", head: "Core", what: "core leave left" },
-    { key: "sick", head: "Sick", what: "sick leave left" },
+    { key: "core", head: "Core", what: "core leave left", kind: "core" },
+    { key: "sick", head: "Sick", what: "sick leave left", kind: "sick" },
   ];
 }
 
@@ -1297,19 +1301,55 @@ function balanceColumns() {
  *  than remainders — the span of the "Recorded" group header. */
 const BALANCE_RECORDED = 5;
 
+/** How many absences a breakdown tooltip spells out before it stops naming them
+ *  — a year of single days would otherwise run off the screen. */
+const BALANCE_DETAIL_RANGES = 8;
+
+/**
+ * The workbook days behind one balance number, for the columns that have day
+ * codes to point at: which absences the person actually recorded, grouped the
+ * way the year dialog groups them.
+ *
+ * Deliberately counted over the imported days rather than the year — a quarter
+ * import cannot add up to a whole-year balance — so the line says which days it
+ * counted instead of implying the two numbers must agree. For `Core` and `Sick`
+ * they cannot agree in any case: the column is what is *left*, the breakdown is
+ * what was taken.
+ *
+ * @param {ReturnType<typeof personSummary>} summary
+ * @param {ReturnType<typeof balanceColumns>[number]} column
+ */
+function balanceDetail(summary, column) {
+  if (column.kind === undefined || summary === null) return "";
+  const label = KIND_LABELS[column.kind];
+  const ranges = summary.ranges.filter((r) => r.kind === column.kind);
+  if (ranges.length === 0) return `\n\nNo ${label.toLowerCase()} on the imported days.`;
+  const total = summary.kinds.find((k) => k.kind === column.kind)?.days ?? 0;
+  const lines = ranges.slice(0, BALANCE_DETAIL_RANGES).map((range) =>
+    `${shortDay(range.from)}${range.from === range.to ? "" : `–${shortDay(range.to)}`} ` +
+    `${range.label} · ${dayCount(range.days)}`
+  );
+  const rest = ranges.length - lines.length;
+  if (rest > 0) lines.push(`+ ${rest} more`);
+  return `\n\n${label} on the imported days — ${dayCount(total)}\n${lines.join("\n")}`;
+}
+
 /** One balance cell: the number, or an explicit "not recorded" dash. Negative
  *  is not a rendering accident — that allowance is overdrawn. */
-function balanceCell(value, column) {
+function balanceCell(value, column, summary) {
+  const detail = balanceDetail(summary, column);
   if (value === null || value === undefined) {
     const td = el("td", "cap-nodata", "–");
-    td.title = `${column.what}: not recorded`;
+    td.title = `${column.what}: not recorded${detail}`;
     if (column.left) td.classList.add("bal-sep");
+    if (detail !== "") td.classList.add("bal-detail");
     return td;
   }
   const td = el("td", "bal-num", trimNumber(value));
-  td.title = `${column.what}: ${trimNumber(value)}` + (value < 0 ? " — overdrawn" : "");
+  td.title = `${column.what}: ${trimNumber(value)}` + (value < 0 ? " — overdrawn" : "") + detail;
   if (value < 0) td.classList.add("is-neg");
   if (column.left) td.classList.add("bal-sep");
+  if (detail !== "") td.classList.add("bal-detail");
   return td;
 }
 
@@ -1352,8 +1392,11 @@ function renderBalances(model) {
   groupRow.append(who, team, recorded, remaining);
   const headRow = el("tr");
   for (const column of columns) {
-    const th = el("th", column.left ? "bal-sep" : "", column.head);
-    th.title = column.what;
+    const classes = [column.left ? "bal-sep" : "", column.kind === undefined ? "" : "bal-detail"];
+    const th = el("th", classes.filter((c) => c !== "").join(" "), column.head);
+    th.title = column.kind === undefined
+      ? column.what
+      : `${column.what} — hover a cell for the days behind it`;
     headRow.appendChild(th);
   }
   thead.append(groupRow, headRow);
@@ -1363,7 +1406,12 @@ function renderBalances(model) {
   for (const person of people) {
     const tr = el("tr");
     tr.append(el("td", "bal-who", person.name), el("td", "bal-team", teamLabel(person.team)));
-    for (const column of columns) tr.appendChild(balanceCell(person.balance[column.key], column));
+    // One summary per person, shared by the columns that break down — it walks
+    // the whole imported axis, so doing it per cell would walk it three times.
+    const summary = personSummary(model, person.name);
+    for (const column of columns) {
+      tr.appendChild(balanceCell(person.balance[column.key], column, summary));
+    }
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);

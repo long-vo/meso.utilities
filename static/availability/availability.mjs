@@ -1009,7 +1009,7 @@ export function teamCapacity(model, from, to) {
  * leave", `remote` → "WFH"). Every kind has exactly one code with `half: null`,
  * so this names a kind without a second table to keep in step with {@link CODES}.
  */
-const KIND_LABELS = Object.fromEntries(
+export const KIND_LABELS = Object.fromEntries(
   Object.values(CODES).filter((info) => info.half === null).map((info) => [info.kind, info.label]),
 );
 
