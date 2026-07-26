@@ -257,14 +257,18 @@ main:focus {
   transform: translateY(-1px);
 }
 
-/* Controls show/hide toggle: centre its inline SVG and read as "active"
-   (accent-tinted) while the sidebar is visible. */
-#controls-toggle {
+/* Panel show/hide toggles: centre the inline SVG and read as "active"
+   (accent-tinted) while the panel is visible. The rail toggle can itself be
+   [hidden] — Availability keeps its rail out of the page until a workbook is
+   imported — so its display rule must not outrank that. */
+#controls-toggle,
+#rail-toggle:not([hidden]) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
-#controls-toggle[aria-expanded="true"] {
+#controls-toggle[aria-expanded="true"],
+#rail-toggle[aria-expanded="true"] {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
 }
@@ -1306,6 +1310,20 @@ body.is-resizing {
 :root[data-controls-collapsed] .editor,
 :root[data-controls-collapsed] .result {
   max-width: none;
+}
+
+/* ---- rail show/hide ----
+   The same machinery, one axis over: #rail-toggle collapses the tool's
+   right-hand rail (Leave's templates, Shortlink's filter rail, Transform's
+   favourites, Availability's legend — every rail carries `.rail`). Hiding the
+   panel is shared; dropping its grid column is not, because the three-column
+   templates are page-scoped and outrank anything written here — each page
+   spells its collapsed grid out next to its own rules further down. Those
+   page rules cover the side-by-side breakpoint only: in the stacked layout the
+   rail's row is last, so an unclaimed area leaves a trailing gap and nothing
+   else. */
+:root[data-rail-collapsed] .rail {
+  display: none;
 }
 
 .editor {
@@ -2364,6 +2382,33 @@ kbd {
       "result templates"
       "result templates";
   }
+  /* Collapsed rail: back to the shared two-column layout and its width cap.
+     Every combination is spelled out — the `:has()` variants above match at the
+     same specificity as the plain rail rule, so only the two-attribute
+     selectors reliably win when both panels are collapsed. */
+  :root[data-rail-collapsed] .page-leave .layout {
+    max-width: 1440px;
+    grid-template-columns: var(--controls-w, 320px) minmax(0, 1fr);
+    grid-template-areas:
+      "controls editor"
+      "controls result";
+  }
+  :root[data-rail-collapsed] .page-leave .layout:has(> .editor[hidden]) {
+    grid-template-areas:
+      "controls result"
+      "controls result";
+  }
+  :root[data-controls-collapsed][data-rail-collapsed] .page-leave .layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "editor"
+      "result";
+  }
+  :root[data-controls-collapsed][data-rail-collapsed] .page-leave .layout:has(> .editor[hidden]) {
+    grid-template-areas:
+      "result"
+      "result";
+  }
   .templates {
     position: sticky;
     top: 86px;
@@ -2423,6 +2468,20 @@ kbd {
     grid-template-areas:
       "editor frequent"
       "result frequent";
+  }
+  /* Collapsed rail: back to the shared two-column layout and its width cap. */
+  :root[data-rail-collapsed] .page-shortlink .layout {
+    max-width: 1440px;
+    grid-template-columns: var(--controls-w, 320px) minmax(0, 1fr);
+    grid-template-areas:
+      "controls editor"
+      "controls result";
+  }
+  :root[data-controls-collapsed][data-rail-collapsed] .page-shortlink .layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "editor"
+      "result";
   }
   .sl-rail {
     position: sticky;
@@ -3321,6 +3380,16 @@ button.out:focus-visible::after {
     grid-template-columns: minmax(0, 1fr) 260px;
     grid-template-areas: "editor favs";
   }
+  /* Collapsed rail: back to the shared two-column layout and its width cap. */
+  :root[data-rail-collapsed] .page-transform .layout {
+    max-width: 1440px;
+    grid-template-columns: var(--controls-w, 320px) minmax(0, 1fr);
+    grid-template-areas: "controls editor";
+  }
+  :root[data-controls-collapsed][data-rail-collapsed] .page-transform .layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "editor";
+  }
   .page-transform .favorites {
     position: sticky;
     top: 86px;
@@ -3439,6 +3508,22 @@ button.out:focus-visible::after {
       "result legend";
   }
   :root[data-controls-collapsed] .page-availability .layout:has(> .legend-rail[hidden]) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "editor"
+      "result";
+  }
+  /* Collapsed rail: the same two columns the `[hidden]` rules above already
+     produce — written out again because the toggle can also collapse the rail
+     while a workbook *is* loaded. */
+  :root[data-rail-collapsed] .page-availability .layout {
+    max-width: 1440px;
+    grid-template-columns: var(--controls-w, 320px) minmax(0, 1fr);
+    grid-template-areas:
+      "controls editor"
+      "controls result";
+  }
+  :root[data-controls-collapsed][data-rail-collapsed] .page-availability .layout {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "editor"
