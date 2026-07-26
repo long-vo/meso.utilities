@@ -17,6 +17,10 @@
  *   deno run --allow-read --allow-env scripts/availability-share-url.ts \
  *     --dir ~/Downloads --max-age-min 10 --base https://long-vo.github.io/meso.utilities
  *
+ * `--auto` appends `?auto=1`, which makes the page replace its roster on open
+ * instead of showing the confirm banner — that is what an unattended run wants,
+ * since there is nobody there to click Replace.
+ *
  * The URL is the only thing on stdout, so it pipes; everything else is stderr.
  * That URL contains every name and absence in the workbook — treat it like the
  * roster itself and don't paste it anywhere.
@@ -32,12 +36,21 @@ import {
 const DEFAULT_BASE = "https://long-vo.github.io/meso.utilities";
 const DEFAULT_PATTERN = /^mesoneer-Vacation-.*\.xlsx$/i;
 
-/** Minimal flag parsing — no dependency, and every flag here is `--k v`. */
+/**
+ * Minimal flag parsing — no dependency. `--k v`, except that a valueless flag
+ * (`--auto`) must not swallow the flag that follows it, which would silently
+ * drop a `--dir` written after it.
+ */
 function flags(argv: string[]): Record<string, string> {
   const out: Record<string, string> = {};
   for (let i = 0; i < argv.length; i++) {
     if (!argv[i].startsWith("--")) continue;
-    out[argv[i].slice(2)] = argv[i + 1] ?? "";
+    const next = argv[i + 1];
+    if (next === undefined || next.startsWith("--")) {
+      out[argv[i].slice(2)] = "";
+      continue;
+    }
+    out[argv[i].slice(2)] = next;
     i++;
   }
   return out;
@@ -146,7 +159,10 @@ if (model.warnings.length > 5) {
 // the page swaps its roster instead of merging — otherwise people who left the
 // team would survive every refresh. Warnings are dropped: they describe this
 // workbook and the page recomputes its own.
-const url = `${base}/availability/#share=${await encodeShare({
+// `?auto=1` (opt-in via --auto) tells the page to take the payload without the
+// confirm banner — the unattended run has nobody to click Replace.
+const auto = opts.auto !== undefined ? "?auto=1" : "";
+const url = `${base}/availability/${auto}#share=${await encodeShare({
   v: 1,
   year,
   tags: {},

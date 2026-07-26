@@ -1785,6 +1785,13 @@ async function consumeShareFragment() {
   const teams = [...new Set(model.people.map((p) => p.team).filter((t) => t !== ""))];
   const who = teams.length > 0 ? ` (${teams.slice(0, 6).join(", ")})` : "";
   pendingShare = { model, payload, replace };
+  // `?auto=1` takes the payload without asking — the unattended refresh has
+  // nobody to click Load. It lives in the query string, not inside the opaque
+  // payload, so a recipient can see it on the link and strip it.
+  if (new URLSearchParams(location.search).get("auto") === "1") {
+    acceptShare();
+    return;
+  }
   els.shareOfferText.textContent =
     `This link carries availability for ${peopleCount(model.people.length)}${who}. ` +
     (replace
@@ -1802,8 +1809,12 @@ function acceptShare() {
   pendingShare = null;
   els.shareOffer.hidden = true;
   // Only drop the fragment once it has actually been taken. Clearing it before
-  // the question left a declined link with nothing to retry or bookmark.
-  history.replaceState(null, "", location.pathname + location.search);
+  // the question left a declined link with nothing to retry or bookmark. `auto`
+  // goes with it, so a link pasted into this tab afterwards is still asked about.
+  const params = new URLSearchParams(location.search);
+  params.delete("auto");
+  const query = params.size > 0 ? `?${params}` : "";
+  history.replaceState(null, "", location.pathname + query);
   adoptModel(model, Number.isInteger(payload.year) ? payload.year : state.year, replace);
   if (payload.tags && typeof payload.tags === "object") {
     state.tags = { ...state.tags, ...payload.tags };
