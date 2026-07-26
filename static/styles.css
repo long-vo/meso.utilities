@@ -1272,7 +1272,6 @@ button.wheel-chip:hover .chip-x {
   width: 3px;
   transform: translateX(-50%);
   border-radius: 3px;
-  background: var(--accent);
   opacity: 0; /* hidden until the resize edge itself is hovered/focused */
   transition: opacity 0.15s ease;
 }
