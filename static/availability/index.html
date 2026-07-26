@@ -171,7 +171,11 @@
 
     <section class="panel editor" aria-label="Who's out">
       <div class="panel-head">
-        <h2>Who's out</h2>
+        <!-- The heading itself is the collapse toggle (see the Legend panel and
+             app.js): the whole title is the button, so its label reads as the
+             panel's name. -->
+        <h2><button id="strip-toggle" class="panel-collapse" type="button" aria-controls="strip"
+            aria-expanded="true">Who's out<span class="caret" aria-hidden="true">▾</span></button></h2>
         <div class="result-tools">
           <input id="day-pick" class="day-pick needs-model" type="date"
             aria-label="Report on this day" title="Report on any day — the heatmap's day headers and the week index below pick one too" />
@@ -219,12 +223,18 @@
     <div id="legend-rail" class="legend-rail rail" data-rail-label="legend" hidden>
       <section class="panel" aria-label="Legend">
         <div class="panel-head">
-          <h2>Legend</h2>
+          <h2><button id="legend-toggle" class="panel-collapse" type="button"
+              aria-controls="legend-body" aria-expanded="true">Legend<span class="caret"
+                aria-hidden="true">▾</span></button></h2>
         </div>
-        <div id="legend" class="legend"></div>
-        <p class="hint">Tab into the grid, then move with the arrow keys (Page&nbsp;Up/Down by ten
-          rows, Ctrl&nbsp;+&nbsp;Home/End to the corners). Press Enter on a day header — or click it
-          — to report on that day.</p>
+        <!-- The legend and its keyboard hint fold away together; the wrapper
+             exists so one `hidden` covers both. -->
+        <div id="legend-body">
+          <div id="legend" class="legend"></div>
+          <p class="hint">Tab into the grid, then move with the arrow keys (Page&nbsp;Up/Down by ten
+            rows, Ctrl&nbsp;+&nbsp;Home/End to the corners). Press Enter on a day header — or click
+            it — to report on that day.</p>
+        </div>
       </section>
 
       <!-- Days written onto the grid by another tool, newest first. It sits
