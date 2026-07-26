@@ -8,10 +8,13 @@ import { sendHandoff, takeHandoff } from "../handoff.mjs";
 import { registerCommands, TOOL_ICONS } from "../palette.js";
 import { escapeHtml, highlightJson, makeToast } from "../ui.mjs";
 
-const $ = (id) => document.getElementById(id);
+const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
+// Entries are annotated where the code uses members `HTMLElement` does not
+// have (`value`, `disabled`, …) — the cast is what tells `deno check` which
+// element the page actually holds there.
 const els = {
-  input: $("input"),
+  input: /** @type {HTMLTextAreaElement} */ ($("input")),
   inputStatus: $("input-status"),
   steps: $("steps"),
   stats: $("stats"),
@@ -28,8 +31,8 @@ const els = {
   modeEncode: $("mode-encode"),
   encoderButtons: $("encoder-buttons"),
   layerChips: $("layer-chips"),
-  layerUndo: $("layer-undo"),
-  layerClear: $("layer-clear"),
+  layerUndo: /** @type {HTMLButtonElement} */ ($("layer-undo")),
+  layerClear: /** @type {HTMLButtonElement} */ ($("layer-clear")),
 };
 
 const EXAMPLES = {

@@ -38,18 +38,18 @@ import {
 import { registerCommands } from "../palette.js";
 import { makeToast } from "../ui.mjs";
 
-const $ = (id) => document.getElementById(id);
+const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
 const els = {
   missBanner: $("miss-banner"),
-  form: $("create-form"),
+  form: /** @type {HTMLFormElement} */ ($("create-form")),
   editCancel: $("edit-cancel"),
-  name: $("name"),
+  name: /** @type {HTMLInputElement} */ ($("name")),
   nameError: $("name-error"),
-  url: $("url"),
+  url: /** @type {HTMLTextAreaElement} */ ($("url")),
   urlError: $("url-error"),
   urlDup: $("url-dup"),
-  group: $("group"),
+  group: /** @type {HTMLInputElement} */ ($("group")),
   groupList: $("group-list"),
   preview: $("preview"),
   previewUrl: $("preview-url"),
@@ -63,17 +63,17 @@ const els = {
   viewList: $("view-list"),
   viewGrid: $("view-grid"),
   newGroup: $("new-group"),
-  filter: $("filter"),
+  filter: /** @type {HTMLInputElement} */ ($("filter")),
   shareBtn: $("share"),
   exportBtn: $("export"),
   importBtn: $("import"),
-  importFile: $("import-file"),
+  importFile: /** @type {HTMLInputElement} */ ($("import-file")),
   picker: $("picker"),
   pickerTitle: $("picker-title"),
   pickerHint: $("picker-hint"),
   pickerList: $("picker-list"),
-  pickAll: $("pick-all"),
-  pickImport: $("pick-import"),
+  pickAll: /** @type {HTMLInputElement} */ ($("pick-all")),
+  pickImport: /** @type {HTMLButtonElement} */ ($("pick-import")),
   pickCancel: $("pick-cancel"),
   toast: $("toast"),
 };
@@ -607,7 +607,9 @@ function renderDirectory() {
     // on the per-group action buttons or the inline rename form are excluded so
     // they don't also fold the group.
     headRow.addEventListener("click", (event) => {
-      if (event.target.closest(".sl-group-edit, .sl-group-rename")) return;
+      if (/** @type {HTMLElement} */ (event.target).closest(".sl-group-edit, .sl-group-rename")) {
+        return;
+      }
       const next = loadCollapsed();
       if (next.has(path)) next.delete(path);
       else next.add(path);
@@ -1160,6 +1162,7 @@ function onPickAll() {
 
 function onPickImport() {
   const chosen = pickerCandidates.filter((_, index) => pickerCheckboxes[index].checked);
+  /** @type {import("./shortlink.mjs").Links} */
   const imported = {};
   for (const { name, url, group, order } of chosen) {
     imported[name] = group === "" ? { url } : { url, group };

@@ -5,7 +5,7 @@
 // sidebar (e.g. the hub).
 import { clampWidth, DEFAULT_WIDTH, MAX_WIDTH, MIN_WIDTH, STEP, storageKey } from "./resize.mjs";
 
-const layout = document.querySelector(".layout");
+const layout = /** @type {HTMLElement | null} */ (document.querySelector(".layout"));
 const controls = layout ? layout.querySelector(".controls") : null;
 
 if (layout && controls) {

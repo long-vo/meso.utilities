@@ -293,7 +293,9 @@ export function hierarchicalSort(text) {
     const nonBlank = lines.filter((line) => line.trim() !== "");
     if (nonBlank.length === 0) return lines;
     const base = Math.min(...nonBlank.map((line) => line.match(/^[ \t]*/)[0].length));
+    /** @type {Array<{ head: string, children: string[] }>} */
     const blocks = [];
+    /** @type {{ head: string, children: string[] } | undefined} */
     let current;
     for (const line of lines) {
       const startsBlock = line.trim() !== "" && line.match(/^[ \t]*/)[0].length === base;

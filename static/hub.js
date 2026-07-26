@@ -34,9 +34,17 @@ if (shareBtn) shareBtn.addEventListener("click", shareToSlack);
    "card order" below), so starring a tool never moves it. */
 
 const FAVORITES_KEY = "meso-fav-tools";
-const cardsSection = document.querySelector(".cards");
+// Both are present on the hub page; every other page loads a different script.
+const cardsSection = /** @type {HTMLElement} */ (document.querySelector(".cards"));
+/** A card's tool id. The selector that collects cards requires `data-tool`,
+ *  so this only falls back for a card assembled by hand.
+ *  @param {HTMLElement} card */
+const toolOf = (card) => card.dataset.tool ?? "";
+
 /** Cards in their authored order, so unstarring restores the default sort. */
-const originalCards = [...document.querySelectorAll(".cards .card[data-tool]")];
+const originalCards = /** @type {HTMLElement[]} */ ([
+  ...document.querySelectorAll(".cards .card[data-tool]"),
+]);
 
 function readFavorites() {
   try {
@@ -84,9 +92,9 @@ for (const card of originalCards) {
   button.addEventListener("click", (event) => {
     event.preventDefault(); // the card is a link — don't navigate
     event.stopPropagation();
-    toggleFavorite(card.dataset.tool, button);
+    toggleFavorite(toolOf(card), button);
   });
-  applyFavoriteState(button, savedFavorites.has(card.dataset.tool));
+  applyFavoriteState(button, savedFavorites.has(toolOf(card)));
   card.appendChild(button);
 }
 
@@ -118,25 +126,29 @@ function writeOrder(ids) {
 
 /** The order the cards ship in — what "Reset order" goes back to. */
 function authoredOrder() {
-  return originalCards.map((card) => card.dataset.tool);
+  return originalCards.map((card) => toolOf(card));
 }
 
-/** Every card in current DOM order (hidden ones included). */
+/** Every card in current DOM order (hidden ones included).
+ *  @returns {HTMLElement[]} */
 function domCards() {
-  return [...cardsSection.querySelectorAll(".card[data-tool]")];
+  return /** @type {HTMLElement[]} */ ([...cardsSection.querySelectorAll(".card[data-tool]")]);
 }
 
 /** Ids in current DOM order. */
 function domOrder() {
-  return domCards().map((card) => card.dataset.tool);
+  return domCards().map((card) => toolOf(card));
 }
 
 /** Lay the grid out in `ids` order; ids are reconciled against the page first. */
 function applyOrder(ids) {
   if (!cardsSection) return;
-  const byTool = new Map(originalCards.map((card) => [card.dataset.tool, card]));
+  const byTool = new Map(originalCards.map((card) => [toolOf(card), card]));
   for (const tool of reconcileOrder(ids, authoredOrder())) {
-    cardsSection.appendChild(byTool.get(tool));
+    // `reconcileOrder` only ever returns ids that are on the page, so the
+    // lookup holds — but a saved order must not be able to throw here.
+    const card = byTool.get(tool);
+    if (card !== undefined) cardsSection.appendChild(card);
   }
 }
 
@@ -177,7 +189,7 @@ function visibleCards() {
 
 /** Ids of the visible cards, in current DOM order. */
 function visibleOrder() {
-  return visibleCards().map((card) => card.dataset.tool);
+  return visibleCards().map((card) => toolOf(card));
 }
 
 /**
@@ -325,11 +337,11 @@ function onGripKeyDown(event, card, grip) {
   if (delta === undefined) return;
   event.preventDefault();
   settleCards();
-  const moved = moveBy(visible, card.dataset.tool, delta);
+  const moved = moveBy(visible, toolOf(card), delta);
   if (moved.join() === visible.join()) return;
   commitVisibleOrder(domOrder(), moved);
   grip.focus(); // moving the card in the DOM can drop focus
-  showToast(`Moved to position ${moved.indexOf(card.dataset.tool) + 1} of ${moved.length}`);
+  showToast(`Moved to position ${moved.indexOf(toolOf(card)) + 1} of ${moved.length}`);
 }
 
 for (const card of originalCards) {
@@ -397,17 +409,17 @@ function writeFavOnly(on) {
 
 // The toggle pill and empty-state hint live in the static HTML (so the grid
 // doesn't shift when this deferred module runs); here we just wire them up.
-const favFilterBtn = document.getElementById("fav-filter");
-const favEmptyState = document.querySelector(".cards-empty");
+const favFilterBtn = /** @type {HTMLElement} */ (document.getElementById("fav-filter"));
+const favEmptyState = /** @type {HTMLElement} */ (document.querySelector(".cards-empty"));
 
 /** Hide non-favourites when the filter is on; show the hint if none remain. */
 function applyFilter() {
   const favOnly = readFavOnly();
   const favorites = new Set(readFavorites());
   for (const card of originalCards) {
-    card.classList.toggle("card--hidden", favOnly && !favorites.has(card.dataset.tool));
+    card.classList.toggle("card--hidden", favOnly && !favorites.has(toolOf(card)));
   }
-  const hasFavorites = originalCards.some((card) => favorites.has(card.dataset.tool));
+  const hasFavorites = originalCards.some((card) => favorites.has(toolOf(card)));
   favEmptyState.hidden = !(favOnly && !hasFavorites);
   favFilterBtn.classList.toggle("is-active", favOnly);
   favFilterBtn.setAttribute("aria-pressed", String(favOnly));

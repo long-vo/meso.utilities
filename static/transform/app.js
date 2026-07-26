@@ -16,18 +16,18 @@ import { sendHandoff, takeHandoff } from "../handoff.mjs";
 import { registerCommands, TOOL_ICONS } from "../palette.js";
 import { makeToast } from "../ui.mjs";
 
-const $ = (id) => document.getElementById(id);
+const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
 const els = {
-  input: $("input"),
-  search: $("action-search"),
+  input: /** @type {HTMLTextAreaElement} */ ($("input")),
+  search: /** @type {HTMLInputElement} */ ($("action-search")),
   actionList: $("action-list"),
-  pattern: $("opt-pattern"),
-  delimiter: $("opt-delimiter"),
+  pattern: /** @type {HTMLInputElement} */ ($("opt-pattern")),
+  delimiter: /** @type {HTMLInputElement} */ ($("opt-delimiter")),
   favList: $("fav-list"),
   favEmpty: $("fav-empty"),
-  undo: $("undo"),
-  redo: $("redo"),
+  undo: /** @type {HTMLButtonElement} */ ($("undo")),
+  redo: /** @type {HTMLButtonElement} */ ($("redo")),
   copy: $("copy"),
   clear: $("clear"),
   sendSanitize: $("send-sanitize"),

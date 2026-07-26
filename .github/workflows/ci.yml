@@ -26,8 +26,11 @@ jobs:
       - name: Lint
         run: deno lint
 
+      # `deno task check` covers both halves: the parity tests (strict, via
+      # deno.json) and the browser modules (deno.browser.json). It used to name
+      # a single test file, which left every other module unchecked here.
       - name: Type check
-        run: deno check src/sanitize.test.ts
+        run: deno task check
 
       - name: Test
         run: deno test --allow-read

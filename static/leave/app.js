@@ -5,6 +5,7 @@
 import {
   addRecipients,
   applyRecipientCompletion,
+  availabilityUpdate,
   buildLeaveRequest,
   filterRecipientSuggestions,
   isValidEmailList,
@@ -12,45 +13,48 @@ import {
   nextWorkingDay,
   outlookComposeUrl,
   parseEmails,
+  parseLeaveHandoff,
   removeRecipient,
   summarizePeriod,
   templateSummary,
   TYPES,
 } from "./leave.mjs";
-import { registerCommands } from "../palette.js";
+import { queueUpdate, takeHandoff } from "../handoff.mjs";
+import { registerCommands, TOOL_ICONS } from "../palette.js";
 import { makeToast } from "../ui.mjs";
 
-const $ = (id) => document.getElementById(id);
+const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
 const els = {
-  name: $("name"),
-  type: $("type"),
-  duration: $("duration"),
+  name: /** @type {HTMLInputElement} */ ($("name")),
+  type: /** @type {HTMLSelectElement} */ ($("type")),
+  duration: /** @type {HTMLSelectElement} */ ($("duration")),
   durationHint: $("duration-hint"),
-  start: $("start"),
-  end: $("end"),
+  start: /** @type {HTMLInputElement} */ ($("start")),
+  end: /** @type {HTMLInputElement} */ ($("end")),
   endField: $("end-field"),
   fromSub: $("from-sub"),
   dateLabel: $("date-label"),
   dateSummary: $("date-summary"),
-  reason: $("reason"),
+  reason: /** @type {HTMLInputElement} */ ($("reason")),
   reasonField: $("reason-field"),
-  lead: $("lead"),
+  lead: /** @type {HTMLInputElement} */ ($("lead")),
   leadField: $("lead-field"),
   leadSave: $("lead-save"),
-  recipients: $("recipients"),
+  recipients: /** @type {HTMLInputElement} */ ($("recipients")),
   recipientsSave: $("recipients-save"),
   formStatus: $("form-status"),
   emailCard: $("email-card"),
   emailCc: $("email-cc"),
   emailCcBlock: $("email-cc-block"),
   emailSubject: $("email-subject"),
-  emailBody: $("email-body"),
+  emailBody: /** @type {HTMLTextAreaElement} */ ($("email-body")),
   bodyReset: $("body-reset"),
   openMail: $("open-mail"),
   openOutlook: $("open-outlook"),
   copySubject: $("copy-subject"),
-  copyBody: $("copy-body"),
+  saveAvailability: $("save-availability"),
+  copyBody: /** @type {HTMLButtonElement} */ ($("copy-body")),
   emailDone: $("email-done"),
   eventDone: $("event-done"),
   eventTitle: $("event-title"),
@@ -61,7 +65,7 @@ const els = {
   copyRecipients: $("copy-recipients"),
   tplSave: $("tpl-save"),
   tplSaveForm: $("tpl-save-form"),
-  tplTitle: $("tpl-title"),
+  tplTitle: /** @type {HTMLInputElement} */ ($("tpl-title")),
   tplSaveCancel: $("tpl-save-cancel"),
   tplList: $("tpl-list"),
   tplEmpty: $("tpl-empty"),
@@ -129,7 +133,9 @@ const recipientsError = attachErrorSlot(els.recipients);
 const showToast = makeToast(els.toast);
 
 function readInput() {
-  return {
+  // The form's <select>s are constrained to the union's members in the HTML,
+  // but to the checker `value` is only ever a `string`.
+  return /** @type {import("./leave.mjs").LeaveInput} */ ({
     name: els.name.value,
     type: els.type.value,
     duration: els.duration.value,
@@ -138,7 +144,7 @@ function readInput() {
     reason: els.reason.value,
     teamLead: els.lead.value,
     recipients: els.recipients.value,
-  };
+  });
 }
 
 /** Core leave is full-day only — disable the half-day options for it. */
@@ -202,7 +208,11 @@ function render() {
 
   current = result;
 
-  const summary = summarizePeriod(input.startDate, input.endDate, els.duration.value);
+  const summary = summarizePeriod(
+    input.startDate,
+    input.endDate ?? "",
+    /** @type {"full" | "morning" | "afternoon"} */ (els.duration.value),
+  );
   els.dateSummary.hidden = !summary;
   if (summary) {
     els.dateSummary.textContent = summary.warning
@@ -269,7 +279,9 @@ function setActionsEnabled(formOk, emailApplies) {
   actionsEnabled.eventCopy = formOk;
   actionsEnabled.eventSend = formOk && recipientsOk;
   for (const [group, buttons] of Object.entries(ACTION_GROUPS)) {
-    for (const button of buttons) button.disabled = !actionsEnabled[group];
+    for (const button of /** @type {HTMLButtonElement[]} */ (buttons)) {
+      button.disabled = !actionsEnabled[group];
+    }
   }
   return { leadOk, recipientsOk };
 }
@@ -336,6 +348,27 @@ function addEventToOutlook() {
   stepsDone.event = true;
   paintSteps();
   globalThis.open(current.event.outlookWebUrl, "_blank", "noopener");
+}
+
+/**
+ * Queue these days for Team Availability's grid. Nothing is written here: this
+ * page has no business reshaping another tool's roster, and that tool may not
+ * even have a workbook imported yet. It parks the change in localStorage —
+ * durable and visible to every tab — and Availability applies it, or explains
+ * why it couldn't, the next time it opens.
+ */
+function saveToAvailability() {
+  const update = availabilityUpdate(readInput());
+  if (update === null) {
+    showToast("Enter your name and a start date first");
+    return;
+  }
+  if (!queueUpdate(localStorage, "availability", update, "Leave Request")) {
+    showToast("Could not save — browser storage is unavailable");
+    return;
+  }
+  const days = update.from === update.to ? update.from : `${update.from} → ${update.to}`;
+  showToast(`Saved for Team Availability — ${days} as "${update.code}". Open it to see it.`);
 }
 
 /** Remember the name across visits — everything else stays per-session. */
@@ -728,7 +761,7 @@ for (const out of document.querySelectorAll("button.out")) {
       showToast("Nothing to copy yet");
       return;
     }
-    copy(text, out.dataset.copy ?? "Value");
+    copy(text, /** @type {HTMLElement} */ (out).dataset.copy ?? "Value");
   });
 }
 
@@ -739,6 +772,7 @@ els.openOutlook.addEventListener("click", openOutlookWeb);
 els.copySubject.addEventListener("click", () => copy(current?.email.subject, "Subject"));
 els.copyBody.addEventListener("click", () => copy(els.emailBody.value, "Body"));
 els.addEventOutlook.addEventListener("click", addEventToOutlook);
+els.saveAvailability.addEventListener("click", saveToAvailability);
 els.copyEventSubject.addEventListener("click", () => copy(current?.event.subject, "Event subject"));
 els.copyRecipients.addEventListener(
   "click",
@@ -792,6 +826,13 @@ registerCommands([
     run: guarded("eventCopy", () => copy(current?.event.subject, "Event subject")),
   },
   {
+    icon: TOOL_ICONS.availability,
+    title: "Save these days to Team Availability",
+    hint: "action",
+    keywords: ["grid", "heatmap", "roster", "availability"],
+    run: saveToAvailability,
+  },
+  {
     icon: "🗓️",
     title: "Add leave event to Outlook (web)",
     hint: "action",
@@ -819,6 +860,36 @@ els.start.value = nextWorkingDay([
   String(today.getMonth() + 1).padStart(2, "0"),
   String(today.getDate()).padStart(2, "0"),
 ].join("-"));
+
+/**
+ * Take the days picked in Team Availability's grid: name, dates and the leave
+ * type its day code implied. A remembered name is not overwritten by an empty
+ * one, so a handoff that could not name the person leaves yours in place.
+ */
+function receiveHandoff() {
+  const handoff = takeHandoff(sessionStorage, "leave");
+  if (!handoff) return false;
+  const fields = parseLeaveHandoff(handoff.text);
+  if (fields === null) return false;
+  if (fields.name !== "") {
+    els.name.value = fields.name;
+    saveName();
+  }
+  els.type.value = fields.type;
+  els.duration.value = fields.duration;
+  els.start.value = fields.startDate;
+  els.end.value = fields.endDate;
+  render();
+  showToast(`Dates received from ${handoff.from || "another tool"}`);
+  return true;
+}
+
+// Re-check on back/forward-cache restores too: Send to → Back → Send to again
+// revives this page without re-running the script.
+globalThis.addEventListener("pageshow", (event) => {
+  if (event.persisted) receiveHandoff();
+});
+
 render();
 renderTemplates();
-els.name.focus();
+if (!receiveHandoff()) els.name.focus();

@@ -146,6 +146,13 @@
         <ul id="warnings-list" class="warnings-list"></ul>
       </details>
 
+      <details id="history-details" class="field" hidden>
+        <summary id="history-summary">Recorded changes</summary>
+        <ul id="history-list" class="history-list"></ul>
+        <button id="history-clear" class="btn btn-ghost btn-small" type="button"
+          title="Forget the recorded changes — the days themselves stay as they are">Clear history</button>
+      </details>
+
       <div class="field btn-row">
         <button id="export-json" class="btn btn-ghost btn-small" type="button"
           title="Download everything (model, tags, year) as availability.json">Export data</button>
@@ -179,6 +186,13 @@
       <div class="panel-head">
         <h2>Heatmap</h2>
         <div class="result-tools">
+          <span id="sel-label" class="status"></span>
+          <button id="send-leave" class="btn btn-small" type="button" hidden
+            title="Open Leave Request with the picked person and dates filled in"><span
+              class="crumb-icon card--green" aria-hidden="true"><svg width="14" height="14"
+                viewBox="0 0 16 16"><circle class="i1" cx="8" cy="13" r="1.6" /><path class="is1"
+                  d="M8 13C7 8 9.5 4.5 13.5 4M8 13c1-5-1.5-8.5-5-9.5M8 13c0-6 3-6.5 2.5-11"
+                  stroke-width="1.6" stroke-linecap="round" /></svg></span> Send to Leave</button>
           <span id="range-label" class="status"></span>
         </div>
       </div>
@@ -189,6 +203,9 @@
       <h3 class="cap-title needs-model">Team capacity <span class="hint-inline">available person-days per week, over the week's maximum</span></h3>
       <p id="cap-warn" class="cap-warn needs-model" role="status" hidden></p>
       <div id="capacity" class="cap-wrap needs-model"></div>
+      <h3 id="bal-title" class="cap-title" hidden>Leave balances <span class="hint-inline">the
+        year's leave accounting per person — from the workbook's General sheet</span></h3>
+      <div id="balances" class="cap-wrap" hidden></div>
     </section>
 
     <section id="legend-rail" class="panel legend-rail" aria-label="Legend" hidden>
@@ -196,9 +213,6 @@
         <h2>Legend</h2>
       </div>
       <div id="legend" class="legend"></div>
-      <p class="hint">Half-coloured cells describe half a day (left = morning) — the other half is
-        worked. <code>rm</code>/<code>ra</code> are therefore full days: remote for one half, in the
-        office for the other. Dotted cells have no data for that day.</p>
       <p class="hint">Tab into the grid, then move with the arrow keys (Page&nbsp;Up/Down by ten
         rows, Ctrl&nbsp;+&nbsp;Home/End to the corners). Press Enter on a day header — or click it —
         to report on that day.</p>
@@ -210,6 +224,49 @@
     is uploaded. <strong>Share link</strong> is the one exception: it packs the names and absences
     you filtered into the link itself, so treat that link like the roster.
   </footer>
+
+  <!-- Confirm-and-adjust step for "Send to Leave". The grid pick prefills every
+       field, all of them editable; the checkbox additionally writes the matching
+       day code onto the heatmap itself and books those days against the person's
+       leave balance, for when the request should show on the grid right away
+       rather than after the Leave round-trip. -->
+  <dialog id="leave-dialog" class="modal" aria-labelledby="leave-dialog-title">
+    <form method="dialog">
+      <h2 id="leave-dialog-title">Send to Leave</h2>
+      <p id="leave-dialog-days" class="hint"></p>
+      <div class="field">
+        <label for="leave-name">Name</label>
+        <select id="leave-name"></select>
+      </div>
+      <div class="field">
+        <label for="leave-type">Leave type</label>
+        <select id="leave-type">
+          <option value="annual">Annual leave</option>
+          <option value="sick">Sick leave</option>
+          <option value="core">Core leave</option>
+          <option value="remote">Remote</option>
+          <option value="wfh">WFH</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="leave-duration">Duration</label>
+        <select id="leave-duration">
+          <option value="full">Full day(s)</option>
+          <option value="morning">Morning</option>
+          <option value="afternoon">Afternoon</option>
+        </select>
+      </div>
+      <label class="check-row">
+        <input id="leave-mark" type="checkbox" />
+        Also mark these days on the heatmap — and book them against the leave balance
+      </label>
+      <p id="leave-mark-note" class="hint" hidden></p>
+      <div class="btn-row modal-actions">
+        <button value="send" class="btn btn-small" type="submit">Send to Leave</button>
+        <button value="cancel" class="btn btn-ghost btn-small" type="submit">Cancel</button>
+      </div>
+    </form>
+  </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 

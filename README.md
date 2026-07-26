@@ -118,6 +118,13 @@ Nothing is sent — the buttons hand off to your own mail app and to Outlook on 
   semicolon-separated). **Add to Outlook (web)** prefills the subject, dates, all-day flag and
   attendees; reminder chips flag what a URL can't set — the one manual step is to **uncheck "Request
   Response"**.
+- **Save to Availability.** Records the request on your row in Team Availability's grid: Annual
+  leave writes `p` (`m`/`a` for a half day), Sick `s`/`sm`/`sa`, Core `c`, and Remote/WFH
+  `r`/`rm`/`ra`. Nothing is written from here — the change is parked in `localStorage` and applied
+  the next time Team Availability opens, in any tab, however long the detour takes. It reports what
+  it could not do rather than guessing: weekends inside the range and days outside the imported
+  workbook are skipped, and a name the roster doesn't know is named back to you instead of adding a
+  row. What lands is logged in Team Availability's **Recorded changes** panel.
 - **Saved recipients.** Addresses used in the Cc and PO/extra fields are remembered (in
   `localStorage`, shared by both) and offered as autocomplete — pick one to complete the address
   you're typing, ✕ a suggestion to forget it, or **Save recipients** to keep the current addresses
@@ -166,6 +173,80 @@ person-days fall under a **threshold you set** (default 60% of that week's maxim
 switch it off) is marked in the table, and a line above it counts them and names the thinnest first.
 People or whole teams can be tagged **VN**/**CH**; CH-tagged people get the built-in canton Zürich
 holiday set overlaid on their working days.
+
+Under it, **Leave balances** shows the year's leave accounting per person, read from the workbook's
+`General` sheet: the days it **records** — working days, the balance carried over from the previous
+year, the year's annual allowance, planned days and day-offs taken — beside what is **remaining** of
+the annual, core and sick allowances. The two groups share one header because the sheet's own
+arithmetic ties them together (`Annual remaining = carried over + allowance − planned − taken`), and
+`Annual` heads a column in each — which is why the group captions above them are not decoration.
+
+The block is located by its own `Annual leave | Core leave | Sick Leave` / `remain` header rather
+than by position, and each recorded column by its own heading, so a column that moves between
+workbook years costs only itself. The carry-over column is headed by the bare previous year (`2025`
+in the 2026 workbook), which is why it's matched as a year and not as a word. Rows join the roster
+by name; a balance row matching nobody lands in the warnings panel instead of inventing a person.
+
+The table follows the team/name filter and its sort, so it reads as the heatmap's own roster, and it
+totals the visible rows. Two distinctions it keeps: a **negative** number is marked — that allowance
+is overdrawn, not a rendering fault — and a blank cell prints `–` rather than `0`, because "nothing
+recorded yet" is not "nothing left". These numbers are the whole year's, unlike everything else on
+the page, which is why the table has no week columns. The panel is hidden entirely when nothing
+carried a balance, e.g. after importing only a quarter `.csv`.
+
+Requests saved in Leave Request land back on the person's row the next time this tool opens (see
+**Save to Availability**), so the round trip closes: pick days here, file the request there, see it
+here. Each applied request is logged under **Recorded changes** in the sidebar — who, which days,
+what was written and how many days took it, plus the tool that asked and when — so a code you didn't
+expect on your row has an explanation instead of a mystery. The last 20 are kept, alongside the rest
+of the data in `localStorage`.
+
+Deleting a single record (the × beside it) also undoes it: those days go back to exactly what they
+held before — the previous code, not a blanket "working" — and the toast offers **Undo**. A day that
+moved on since, because a later request overwrote it, is left at its newer value and counted in the
+toast rather than silently rolled back. **Clear history** is the other half of that pair: it forgets
+the whole log without touching a single day.
+
+Days picked in the grid go to the Leave Request tool. Drag along one person's row (or press
+**Enter** on a cell, **Shift + Enter** to extend the run, **Esc** to drop it). **Send to Leave** is
+only offered for a pick that holds a day someone could actually take off: a run that is entirely
+weekend, entirely public holiday, or both leaves the button disabled and says which
+(`weekend only — nothing to request`), because there is no day to request and marking a holiday
+would spend a leave day on a day nobody works. The pick still paints, so you can see what you
+grabbed and adjust it. A mixed run is fine — Friday to Monday is the normal case, and the weekend in
+the middle is simply skipped. Days already marked as leave stay requestable: filing the HR request
+for days blocked on the grid is what the button is for. The ⌘K command refuses the same picks the
+disabled button does.
+
+Month navigation isn't clamped to the imported range, so you can step into a month the workbook
+never covered — its cells are blank but still pickable, and their tooltip says
+`outside the imported range` rather than `no data`, which is the other reason a cell can be empty.
+Those days are **still requestable**: the dates are real, and HR doesn't care where your local copy
+of the workbook stops. What they can't do is take a mark, so the pick's label counts them
+(`· 3 outside the imported range`) and the dialog's mark checkbox tells you what will actually
+happen — how many days will be written, or, when none of them can be, the checkbox is disabled
+outright. That matters because the mark runs immediately before the tab navigates to Leave Request,
+so a tick that would do nothing has no way to report back; the only honest place to say so is before
+you tick it.
+
+**Send to Leave** opens a dialog prefilled with the name, the dates and the leave type the picked
+day code implies — `v`/`p` annual, `c` core, `s` sick, `r` WFH; a half-day code picked on its own
+arrives as that half day. Adjust any field before sending, and tick **Also mark these days on the
+heatmap — and book them against the leave balance** to write the matching day code onto the grid
+right away (recorded in the change history, so it's undoable) — otherwise the grid only changes when
+the request comes back from Leave's own "save to grid".
+
+Days written onto the grid — by that checkbox or by a request coming back from Leave — move the
+person's leave balance with them, so the grid and the balances panel never describe the same absence
+differently. A day booked as annual leave comes off `Working`, goes onto `Day offs` and comes off
+what's `Annual` remaining; planned vacation books to `Planned` instead; core and sick come off their
+own remainders; remote and WFH are still worked days, so they move nothing. Half-day codes move half
+a day, and the sheet's own arithmetic
+(`Annual remaining = carried over + allowance − planned − taken`) holds after every change. Two
+things it deliberately won't do: a field the workbook never recorded stays blank rather than being
+invented from zero, and a person with no balance row is left alone. Undo gives back exactly what was
+booked — and only for the days actually restored, so a day a later request moved on keeps the
+booking that request gave it.
 
 Everything (model, tags, filters) persists in this browser's `localStorage` and can be exported to /
 imported from `availability.json` — either the full model, or (**Export view**, shown while a
@@ -283,9 +364,9 @@ width — via the sidebar toggle in the top bar, the palette, or **Ctrl/⌘ B**.
 remembered per tool (as is its drag-to-resize width).
 
 Tools also chain into each other. The **Send to** buttons next to a tool's result hand the output to
-another tool: decode a payload, send it to Sanitize to mask it. The handoff travels through
-`sessionStorage` in your browser (same tab only, consumed on arrival, expires after 5 minutes) —
-nothing is uploaded.
+another tool: decode a payload, send it to Sanitize to mask it; pick someone's days in Team
+Availability's heatmap, send them to Leave Request. The handoff travels through `sessionStorage` in
+your browser (same tab only, consumed on arrival, expires after 5 minutes) — nothing is uploaded.
 
 ## Run locally
 

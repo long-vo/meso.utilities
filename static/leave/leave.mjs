@@ -387,6 +387,83 @@ export function nextWorkingDay(isoDate) {
 }
 
 /**
+ * Leave type + duration → the workbook day code Team Availability's grid draws.
+ * Core leave is full-day only (see TYPES), so its halves resolve to the full-day
+ * code rather than inventing `cm`/`ca` for a request the form cannot produce.
+ * @type {Record<string, Record<string, string>>}
+ */
+const AVAILABILITY_CODES = {
+  annual: { full: "p", morning: "m", afternoon: "a" },
+  sick: { full: "s", morning: "sm", afternoon: "sa" },
+  core: { full: "c", morning: "c", afternoon: "c" },
+  remote: { full: "r", morning: "rm", afternoon: "ra" },
+  wfh: { full: "r", morning: "rm", afternoon: "ra" },
+};
+
+/**
+ * The change to record in Team Availability for the request on screen. Half
+ * days describe a single date, the same reading formatPeriod uses, so `to`
+ * collapses to `from` for them.
+ *
+ * Every field is validated here rather than trusted: these values come from
+ * form inputs, and the same shape is read back out of storage.
+ *
+ * @param {{ name?: string, type?: string, duration?: string, startDate?: string,
+ *   endDate?: string }} input
+ * @returns {{ name: string, from: string, to: string, code: string } | null} null
+ *   when there is no name or no start date to record against.
+ */
+export function availabilityUpdate(input) {
+  const name = String(input?.name ?? "").trim();
+  const from = String(input?.startDate ?? "").trim();
+  if (name === "" || dayOfWeek(from) === null) return null;
+  const type = String(input?.type ?? "");
+  const codes = AVAILABILITY_CODES[type] ?? AVAILABILITY_CODES.annual;
+  const duration = input?.duration === "morning" || input?.duration === "afternoon"
+    ? input.duration
+    : "full";
+  const end = String(input?.endDate ?? "").trim();
+  const to = duration === "full" && dayOfWeek(end) !== null && end > from ? end : from;
+  return { name, from, to, code: codes[duration] };
+}
+
+/**
+ * Read a handoff sent by Team Availability's grid selection into form fields.
+ * Everything but a usable start date is optional: an unmappable leave type or a
+ * missing name falls back to what the empty form would have shown, so a partial
+ * payload still saves the user the date entry.
+ *
+ * @param {string} text the envelope text `leaveHandoffText` produced.
+ * @returns {{ name: string, type: string, duration: "full"|"morning"|"afternoon",
+ *   startDate: string, endDate: string } | null} null when there is no start date
+ *   to work from.
+ */
+export function parseLeaveHandoff(text) {
+  let data;
+  try {
+    data = JSON.parse(String(text));
+  } catch {
+    return null;
+  }
+  if (data === null || typeof data !== "object" || data.v !== 1) return null;
+  /** @param {unknown} value @returns {string | null} */
+  const iso = (value) =>
+    typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+  const startDate = iso(data.from);
+  if (startDate === null) return null;
+  const endDate = iso(data.to);
+  const duration = data.duration;
+  return {
+    name: typeof data.name === "string" ? data.name : "",
+    type: TYPES[data.type] ? data.type : "annual",
+    duration: duration === "morning" || duration === "afternoon" ? duration : "full",
+    startDate,
+    // A backwards range describes one day, the same reading formatPeriod uses.
+    endDate: endDate === null || endDate < startDate ? startDate : endDate,
+  };
+}
+
+/**
  * Day count and weekend feedback for the picked period, shown under the date
  * fields. Catches the two expensive mistakes: an off-by-one range and a request
  * that falls on a weekend. Follows formatPeriod's semantics: half days and an
