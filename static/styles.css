@@ -3933,6 +3933,48 @@ button.out:focus-visible::after {
   color: var(--text-faint);
 }
 
+/* ---- Team Availability: fold a panel away ----
+   The heading of the "Who's out" and Legend panels is itself the toggle, so it
+   has to keep looking like the h2 it sits in. `.strip` sets its own `display`,
+   which outranks the UA's `[hidden]` rule — hence the explicit one. */
+.page-availability .panel-collapse {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.page-availability .panel-collapse:hover {
+  color: var(--text);
+}
+/* Fixed width so the title sits in the same place either way. The triangle's
+   ink sits low in its own line box, so centring the boxes still leaves the
+   glyph ~1.5px under the middle of the uppercase label; the bottom margin
+   lifts it back by half that, since centring works off the margin box. Done
+   with margin rather than a transform or `top` on purpose — either of those
+   puts the glyph on its own layer, and it then fails to paint. */
+.page-availability .panel-collapse .caret {
+  width: 11px;
+  font-size: 14px;
+  line-height: 1;
+  margin-bottom: 3px;
+  color: var(--text-dim);
+}
+.page-availability .strip[hidden] {
+  display: none;
+}
+/* Collapsed, the head is the whole panel — its bottom margin would read as
+   padding that belongs to nothing. */
+.page-availability .panel-head:has(+ [hidden]) {
+  margin-bottom: 0;
+}
+
 /* Day-kind dots — legend and strip chips. */
 .page-availability .dot {
   display: inline-block;
