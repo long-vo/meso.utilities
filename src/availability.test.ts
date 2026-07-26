@@ -1355,13 +1355,13 @@ Deno.test("leaveHandoffText: carries who and when, and maps the code to a leave 
   assertEquals(typeOf("p"), "annual", "annual leave");
   assertEquals(typeOf("c"), "core", "core leave");
   assertEquals(typeOf("s"), "sick", "sick leave");
+  assertEquals(typeOf("si"), "social", "social leave");
   assertEquals(typeOf("r"), "wfh", "remote is WFH");
   // Kinds with no leave equivalent leave the target on its own default.
   assertEquals(typeOf("w"), null, "a working day implies no leave type");
   assertEquals(typeOf("ch"), null, "onsite is not a leave type");
   assertEquals(typeOf("h"), null, "a public holiday is not requested");
   assertEquals(typeOf("e"), null, "nor is a weekend");
-  assertEquals(typeOf("si"), null, "social leave has no Leave-tool equivalent");
   assertEquals(typeOf("?"), null, "unknown codes carry no type");
 
   // A half-day code describes one day, so it only sets a half duration there.

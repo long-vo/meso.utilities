@@ -15,7 +15,7 @@ export const EVENT_RECIPIENT = "mesoneer_vn@mesoneer.io";
 /**
  * Leave types → the Outlook event bracket, the HR "Leave type" label, whether an
  * HR email is normally expected (Remote/WFH are not leave), and whether the type is
- * full-day only (Core leave can't be taken as a half day).
+ * full-day only (Core and Social leave can't be taken as half days).
  * @type {Record<string, { bracket: string, label: string, emailApplicable: boolean,
  *   fullDayOnly?: boolean }>}
  */
@@ -23,6 +23,12 @@ export const TYPES = {
   annual: { bracket: "OFF", label: "Annual leave", emailApplicable: true },
   sick: { bracket: "Sick Leave", label: "Sick leave", emailApplicable: true },
   core: { bracket: "Core Leave", label: "Core leave", emailApplicable: true, fullDayOnly: true },
+  social: {
+    bracket: "Social Leave",
+    label: "Social leave",
+    emailApplicable: true,
+    fullDayOnly: true,
+  },
   remote: { bracket: "Remote", label: "Remote", emailApplicable: false },
   wfh: { bracket: "WFH", label: "WFH", emailApplicable: false },
 };
@@ -30,7 +36,7 @@ export const TYPES = {
 /**
  * @typedef {Object} LeaveInput
  * @property {string} name Full name, e.g. "John Doe".
- * @property {"annual"|"sick"|"core"|"remote"|"wfh"} type
+ * @property {"annual"|"sick"|"core"|"social"|"remote"|"wfh"} type
  * @property {"full"|"morning"|"afternoon"} duration
  * @property {string} startDate ISO date, e.g. "2026-07-20".
  * @property {string} [endDate] ISO date; a full-day period end. Ignored for half days.
@@ -58,7 +64,7 @@ export function buildLeaveRequest(input) {
   const name = String(input?.name ?? "").trim();
   const type = TYPES[input?.type] ? input.type : "annual";
   const meta = TYPES[type];
-  // Core leave is full-day only, so a half-day selection is ignored for it.
+  // Full-day-only types ignore a half-day selection.
   const duration = !meta.fullDayOnly &&
       (input?.duration === "morning" || input?.duration === "afternoon")
     ? input.duration
@@ -388,14 +394,16 @@ export function nextWorkingDay(isoDate) {
 
 /**
  * Leave type + duration → the workbook day code Team Availability's grid draws.
- * Core leave is full-day only (see TYPES), so its halves resolve to the full-day
- * code rather than inventing `cm`/`ca` for a request the form cannot produce.
+ * Core and Social leave are full-day only (see TYPES), so their halves resolve to
+ * the full-day code rather than inventing halves for a request the form cannot
+ * produce.
  * @type {Record<string, Record<string, string>>}
  */
 const AVAILABILITY_CODES = {
   annual: { full: "p", morning: "m", afternoon: "a" },
   sick: { full: "s", morning: "sm", afternoon: "sa" },
   core: { full: "c", morning: "c", afternoon: "c" },
+  social: { full: "si", morning: "si", afternoon: "si" },
   remote: { full: "r", morning: "rm", afternoon: "ra" },
   wfh: { full: "r", morning: "rm", afternoon: "ra" },
 };

@@ -1115,6 +1115,7 @@ const LEAVE_TYPE_BY_KIND = {
   leave: "annual",
   core: "core",
   sick: "sick",
+  social: "social",
   remote: "wfh",
 };
 

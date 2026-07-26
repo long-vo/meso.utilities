@@ -147,14 +147,16 @@ function readInput() {
   });
 }
 
-/** Core leave is full-day only — disable the half-day options for it. */
+/** Core and Social leave are full-day only — disable the half-day options for them. */
 function syncDurationConstraint() {
-  const fullOnly = Boolean(TYPES[els.type.value]?.fullDayOnly);
+  const meta = TYPES[els.type.value];
+  const fullOnly = Boolean(meta?.fullDayOnly);
   for (const option of els.duration.options) {
     if (option.value !== "full") option.disabled = fullOnly;
   }
   if (fullOnly && els.duration.value !== "full") els.duration.value = "full";
   els.durationHint.hidden = !fullOnly;
+  if (fullOnly) els.durationHint.textContent = `${meta.label} is full-day only.`;
 }
 
 /** Recompute both artifacts and paint them; called on every field change. */
