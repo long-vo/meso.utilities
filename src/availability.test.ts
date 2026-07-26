@@ -46,6 +46,7 @@ import {
   parseCsv,
   parseQuarterCsv,
   parseVacationWorkbook,
+  personSummary,
   prettyDay,
   pushHistory,
   quarterDates,
@@ -703,6 +704,91 @@ Deno.test("groupOutDates: accepts outInRange output directly", () => {
     ["2026-07-01", "2026-07-06", "c"],
     ["2026-07-07", "2026-07-07", "v"],
   ]);
+});
+
+Deno.test("groupOutDates: days counts the run, not the span it reaches across", () => {
+  const rows = grid({
+    people: [["Cuong Ngo", "dexi", ["c", "c", "c", "e", "e", "c", "sm", "sa"]]],
+    nDays: 92,
+  });
+  const model = parseVacationWorkbook([{ name: "3rd quarter", rows }], { year: 2026 });
+  const [person] = outInRange(model, "2026-07-01", "2026-07-08");
+  assertEquals(groupOutDates(person.dates).map((g) => [g.from, g.to, g.days]), [
+    // Wed–Fri plus the bridged Monday: four days off, not the six the range spans.
+    ["2026-07-01", "2026-07-06", 4],
+    ["2026-07-07", "2026-07-07", 0.5],
+    ["2026-07-08", "2026-07-08", 0.5],
+  ]);
+});
+
+/* -------- one person's whole imported axis -------- */
+
+/** 2026-07-01 is a Wednesday; 04/05 are the weekend. The quarter sheet runs
+ *  Jul–Sep, so the month run is three buckets wide however little is filled. */
+function summaryPersonModel(codes: Cell[]) {
+  const rows = grid({ people: [["Mai Bui", "aeon", codes]], nDays: 92 });
+  return parseVacationWorkbook([{ name: "3rd quarter", rows }], { year: 2026 });
+}
+
+Deno.test("personSummary: chips count code shares, out stays weight-based", () => {
+  //         Wed  Thu  Fri  Sa   Su   Mon   Tue  Wed
+  const codes = ["p", "m", "r", "e", "e", "rm", "w", "zz"];
+  const summary = personSummary(summaryPersonModel(codes), "Mai Bui");
+  if (summary === null) throw new Error("expected a summary");
+  assertEquals(summary.team, "aeon");
+  assertEquals(
+    summary.kinds,
+    [
+      { kind: "leave", label: "Annual leave", days: 1.5 }, // p + half of m
+      { kind: "remote", label: "WFH", days: 1.5 }, // r + half of rm
+    ],
+    "WFH earns a chip of its own, which 1 - weight would have counted as nothing",
+  );
+  // Weekends contribute to none of the three; the working day and the dirty
+  // cell count as worked, and neither gets a chip.
+  assertEquals([summary.out, summary.worked, summary.possible], [1.5, 4.5, 6]);
+  assertEquals(summary.out + summary.worked, summary.possible);
+});
+
+Deno.test("personSummary: the month run covers the axis, absence or not", () => {
+  const summary = personSummary(summaryPersonModel(["p", "m", "r"]), "Mai Bui");
+  if (summary === null) throw new Error("expected a summary");
+  // `days` counts what the chips count and `out` what availability costs, so a
+  // month of nothing but WFH is a month with something in it.
+  assertEquals(summary.months.map((m) => [m.label, m.days, m.out, m.possible]), [
+    ["Jul 2026", 2.5, 1.5, 3],
+    ["Aug 2026", 0, 0, 0], // a month with nothing in it keeps its (empty) bucket
+    ["Sep 2026", 0, 0, 0],
+  ]);
+});
+
+Deno.test("personSummary: ranges bridge a weekend and cover every chipped kind", () => {
+  const codes = ["p", "p", "p", "e", "e", "p", "r", "r"];
+  const summary = personSummary(summaryPersonModel(codes), "Mai Bui");
+  if (summary === null) throw new Error("expected a summary");
+  assertEquals(summary.ranges.map((r) => [r.from, r.to, r.code, r.days]), [
+    ["2026-07-01", "2026-07-06", "p", 4],
+    // WFH is in the list too, so every chip has ranges that account for it.
+    ["2026-07-07", "2026-07-08", "r", 2],
+  ]);
+  assertEquals(
+    summary.kinds.map((k) => k.days),
+    summary.kinds.map((k) =>
+      summary.ranges.filter((r) => r.kind === k.kind).reduce((n, r) => n + r.days, 0)
+    ),
+    "chips and ranges count on the same basis",
+  );
+});
+
+Deno.test("personSummary: unknown name is null, an empty row is zeros", () => {
+  const model = summaryPersonModel([]);
+  assertEquals(personSummary(model, "Nobody At All"), null);
+  const summary = personSummary(model, "Mai Bui");
+  if (summary === null) throw new Error("a person with no days is still a person");
+  assertEquals(summary.kinds, []);
+  assertEquals(summary.ranges, []);
+  assertEquals([summary.out, summary.worked, summary.possible], [0, 0, 0]);
+  assertEquals(summary.months.length, 3);
 });
 
 Deno.test("teamCapacity: hand-computed sums, case-insensitive team grouping", () => {

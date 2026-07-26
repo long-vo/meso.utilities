@@ -174,6 +174,17 @@ switch it off) is marked in the table, and a line above it counts them and names
 People or whole teams can be tagged **VN**/**CH**; CH-tagged people get the built-in canton Zürich
 holiday set overlaid on their working days.
 
+Clicking a name in the grid (or ⌘K → **Person year summary**) opens that person's whole imported
+axis, whatever month the heatmap is showing: their days by kind, a bar per month scaled against
+their heaviest one, and every absence as a grouped date range — a Friday-to-Monday run reads as one
+two-day absence, not four. Two counts live side by side on purpose: the chips count what each code
+_describes_, so WFH earns "8 days" of its own, while the line above them counts availability, where
+WFH costs nothing. Another person can be picked from the dialog itself, and the absence list is
+narrowed by a tick box per **leave type** — only the types that person actually has, so no box leads
+anywhere empty. **WFH and public holidays start unticked**: neither is a day someone chose to take
+off, and left in, the two of them bury the ones that are. Both still count in the chips and the
+month bars, which are the whole person by design.
+
 Under it, **Leave balances** shows the year's leave accounting per person, read from the workbook's
 `General` sheet: the days it **records** — working days, the balance carried over from the previous
 year, the year's annual allowance, planned days and day-offs taken — beside what is **remaining** of
@@ -231,10 +242,12 @@ you tick it.
 
 **Send to Leave** opens a dialog prefilled with the name, the dates and the leave type the picked
 day code implies — `v`/`p` annual, `c` core, `s` sick, `r` WFH; a half-day code picked on its own
-arrives as that half day. Adjust any field before sending, and tick **Also mark these days on the
-heatmap — and book them against the leave balance** to write the matching day code onto the grid
-right away (recorded in the change history, so it's undoable) — otherwise the grid only changes when
-the request comes back from Leave's own "save to grid".
+arrives as that half day. Adjust any field before sending. **Also mark these days on the heatmap —
+and book them against the leave balance** is ticked by default: a request filed from the grid is
+nearly always meant to show on it, so the matching day code is written straight away (recorded in
+the change history, so it's undoable). Untick it to leave the grid alone until the request comes
+back from Leave's own "save to grid". It starts unticked, and disabled, when there is nothing on the
+grid to write — every picked day being a weekend or outside the imported range.
 
 Days written onto the grid — by that checkbox or by a request coming back from Leave — move the
 person's leave balance with them, so the grid and the balances panel never describe the same absence

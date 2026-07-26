@@ -33,6 +33,7 @@ import {
   packModel,
   parseQuarterCsv,
   parseVacationWorkbook,
+  personSummary,
   prettyDay,
   pushHistory,
   remoteOn,
@@ -105,6 +106,13 @@ const els = {
   leaveName: /** @type {HTMLSelectElement} */ ($("leave-name")),
   leaveType: /** @type {HTMLSelectElement} */ ($("leave-type")),
   leaveDuration: /** @type {HTMLSelectElement} */ ($("leave-duration")),
+  yearDialog: /** @type {HTMLDialogElement} */ ($("year-dialog")),
+  yearPerson: /** @type {HTMLSelectElement} */ ($("year-person")),
+  yearKind: $("year-kind"),
+  yearTotals: $("year-totals"),
+  yearKinds: $("year-kinds"),
+  yearMonths: $("year-months"),
+  yearRanges: $("year-ranges"),
   heatmap: $("heatmap"),
   capacity: $("capacity"),
   capWarn: $("cap-warn"),
@@ -371,15 +379,16 @@ function sendToLeave() {
   // annual — the same reading the Leave form gives a null type.
   els.leaveType.value = defaults.type ?? "annual";
   els.leaveDuration.value = defaults.duration;
-  // Marking the grid rewrites day codes and books them against the balance, so
-  // it is opt-in on every open rather than remembered — a leftover tick from the
-  // last request must not write.
-  els.leaveMark.checked = false;
   // A tick that would write nothing is worse than no tick: `markOnGrid` runs
   // immediately before navigating to Leave, so it has no way to report back — a
   // silent no-op is all the user would get. Say it here, before the choice.
   const { markable, outside, weekend } = selSummary;
   els.leaveMark.disabled = markable === 0;
+  // Ticked by default: a request filed from the grid is nearly always meant to
+  // show on it. It writes day codes and books the balance, so it is re-derived
+  // on every open rather than remembered — and never left ticked when there is
+  // nothing to write, because a disabled box still reports `checked`.
+  els.leaveMark.checked = markable > 0;
   els.leaveMarkNote.hidden = markable > 0 && outside === 0;
   els.leaveMarkNote.textContent = markable === 0
     ? outside > 0
@@ -649,6 +658,11 @@ function renderAll() {
   renderHeatmap(model);
   renderCapacity(model);
   renderBalances(model);
+  // The year dialog is modal, so nothing on this page can change the model
+  // behind it — but another tab saving a leave request can: `storage` fires
+  // here and applies it. Left alone, the dialog would go on showing the year as
+  // it was before the request landed.
+  if (els.yearDialog.open) renderYearSummary();
   saveState();
 }
 
@@ -1019,6 +1033,8 @@ function renderHeatmap(model) {
     const name = el("div", "hm-name");
     name.setAttribute("role", "rowheader");
     name.setAttribute("aria-colindex", "1");
+    name.dataset.person = person.name;
+    name.title = `${person.name} — click for the whole imported year`;
     name.append(el("span", "hm-person", person.name), el("span", "hm-team", person.team));
     if (person.location === "CH") name.appendChild(el("span", "hm-loc", "CH"));
     row.appendChild(name);
@@ -1267,6 +1283,187 @@ function renderBalances(model) {
   tfoot.appendChild(totalRow);
   table.appendChild(tfoot);
   els.balances.appendChild(table);
+}
+
+/* --------------------- one person's imported year --------------------- */
+
+/**
+ * The leave types the year dialog hides until asked. WFH is not an absence at
+ * all, and every VN row carries the same handful of public-holiday runs — left
+ * ticked, the two of them bury the days someone actually took off. They stay in
+ * the chips and the month bars, which are the whole person by design.
+ */
+const YEAR_KINDS_OFF = ["remote", "holiday"];
+/** Types currently unticked. Off is what's remembered rather than on, so a type
+ *  the current person happens not to have keeps its state for the next one. */
+let yearKindsOff = new Set(YEAR_KINDS_OFF);
+
+/** "1 day" / "8 days" / "0.5 days" — half-day counts are never singular. */
+function dayCount(days) {
+  return `${trimNumber(days)} ${days === 1 ? "day" : "days"}`;
+}
+
+/** The person whose row holds the grid's tab stop, or null — the focus starts
+ *  on the header row, which is nobody. */
+function focusedPerson() {
+  const model = displayModel();
+  if (model === null || state.focus === null || state.focus.row < 0) return null;
+  return visiblePeople(model)[state.focus.row]?.name ?? null;
+}
+
+/**
+ * Open the year dialog on `name`. The roster it offers is the visible one, so
+ * the dialog stays inside whatever the filters have narrowed the page to, and
+ * the person is a control rather than a heading because the grid's names are
+ * rowheaders outside its roving tabindex — the select is the keyboard way in.
+ */
+function openYearSummary(name) {
+  const model = displayModel();
+  if (model === null) {
+    toast("Import a workbook first — there is no year to summarise yet");
+    return;
+  }
+  const people = visiblePeople(model);
+  if (people.length === 0) {
+    toast("Nobody is visible — clear the team or name filter first");
+    return;
+  }
+  els.yearPerson.replaceChildren(...people.map((p) => new Option(p.name, p.name)));
+  els.yearPerson.value = people.some((p) => p.name === name) ? name : people[0].name;
+  renderYearSummary(true); // a fresh open shows everything, whatever the last one filtered to
+  els.yearDialog.showModal();
+}
+
+/**
+ * Fill the dialog from the picked person — also the select's change handler, so
+ * flipping between people re-renders in place.
+ *
+ * The chips and the absence list count in code shares ("8 days WFH"), while the
+ * totals line counts availability, so the two deliberately disagree: WFH costs
+ * no availability but is still a day worth naming. The line spells out which
+ * number it is rather than leaving the reader to reconcile them.
+ *
+ * @param {boolean} [reset] drop the leave-type filter — what a fresh open wants,
+ *   where switching person mid-dialog keeps whatever kind is being read.
+ */
+function renderYearSummary(reset) {
+  const model = displayModel();
+  const summary = model === null ? null : personSummary(model, els.yearPerson.value);
+  if (summary === null) {
+    // Only reachable from `renderAll`, when an import that replaced the roster
+    // took this person with it. Showing their old year over the new data would
+    // be a lie; closing says what happened.
+    if (els.yearDialog.open) {
+      els.yearDialog.close();
+      toast(`${els.yearPerson.value} is not in the imported data any more`);
+    }
+    return;
+  }
+  renderYearKinds(summary, reset === true);
+
+  const where = summary.location === "CH" ? " · CH" : "";
+  els.yearTotals.textContent = summary.possible === 0
+    ? `${teamLabel(summary.team)}${where} — no days imported for this person`
+    : `${teamLabel(summary.team)}${where} — ${trimNumber(summary.out)} of ${summary.possible} ` +
+      `days out, ${trimNumber(summary.worked)} worked`;
+
+  els.yearKinds.replaceChildren(
+    ...summary.kinds.map((kind) => {
+      const chip = el("span", "chip");
+      chip.append(
+        el("span", `dot dot-${kind.kind}`),
+        ` ${kind.label} `,
+        el("span", "strip-detail", dayCount(kind.days)),
+      );
+      return chip;
+    }),
+  );
+  els.yearKinds.hidden = summary.kinds.length === 0;
+
+  // Bars scale against the heaviest month rather than against the month's own
+  // length: the question a distribution answers is which month was the busy
+  // one, and a percentage-of-month bar flattens that out. They count what the
+  // chips count, so a month of remote work is not drawn as an empty one.
+  const worst = Math.max(0, ...summary.months.map((m) => m.days));
+  els.yearMonths.replaceChildren(
+    ...summary.months.map((month) => {
+      const cell = el("div", "year-month");
+      const bar = el("div", "year-bar");
+      bar.style.setProperty("--h", String(worst === 0 ? 0 : (month.days / worst) * 100));
+      cell.append(bar, el("span", "year-month-label", month.label.slice(0, 3)));
+      cell.title = `${month.label} — ${dayCount(month.days)} recorded, ` +
+        `${trimNumber(month.out)} of ${month.possible} out`;
+      return cell;
+    }),
+  );
+
+  renderYearRanges(summary);
+}
+
+/** The absence list, filtered to the ticked types — the only part a type toggle
+ *  redraws, so ticking one does not pull the focus off the box you ticked. */
+function renderYearRanges(summary) {
+  const ranges = summary.ranges.filter((r) => !yearKindsOff.has(r.kind));
+  els.yearRanges.replaceChildren(
+    ...ranges.map((range) => {
+      const item = el("li", "year-range");
+      item.append(
+        el("span", `dot dot-${range.kind}`),
+        el(
+          "span",
+          "year-range-days",
+          range.from === range.to
+            ? shortDay(range.from)
+            : `${shortDay(range.from)}–${shortDay(range.to)}`,
+        ),
+        el("span", "year-range-label", range.label),
+        el("span", "strip-detail", trimNumber(range.days)),
+      );
+      return item;
+    }),
+  );
+  if (ranges.length === 0) {
+    // Two quite different empty lists: one the workbook explains, one the
+    // reader's own filter does — and only the second has an obvious fix.
+    els.yearRanges.appendChild(el(
+      "li",
+      "hint",
+      summary.ranges.length === 0
+        ? "Nothing recorded on the imported days."
+        : "Nothing of the ticked types — tick another above.",
+    ));
+  }
+}
+
+/**
+ * Refill the type toggles from the kinds this person actually has, so no box
+ * leads anywhere empty. What is *off* is what's remembered, in `yearKindsOff`:
+ * a person without sick days must not silently re-tick sick leave for the next
+ * person who has it.
+ *
+ * @param {NonNullable<ReturnType<typeof personSummary>>} summary
+ * @param {boolean} reset
+ */
+function renderYearKinds(summary, reset) {
+  if (reset) yearKindsOff = new Set(YEAR_KINDS_OFF);
+  els.yearKind.replaceChildren(
+    ...summary.kinds.map((kind) => {
+      const label = el("label", "year-kind-toggle");
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.value = kind.kind;
+      box.checked = !yearKindsOff.has(kind.kind);
+      box.addEventListener("change", () => {
+        if (box.checked) yearKindsOff.delete(kind.kind);
+        else yearKindsOff.add(kind.kind);
+        const model = displayModel();
+        const current = model === null ? null : personSummary(model, els.yearPerson.value);
+        if (current !== null) renderYearRanges(current);
+      });
+      label.append(box, el("span", `dot dot-${kind.kind}`), ` ${kind.label}`);
+      return label;
+    }),
+  );
 }
 
 /* ------------------------------- imports ------------------------------- */
@@ -1587,6 +1784,19 @@ els.shareOffer.addEventListener("keydown", (e) => {
   if (e.key === "Escape") discardShare();
 });
 
+// Wrapped, not passed straight in: the handler's Event argument would land on
+// `reset` and clear the leave-type filter on every change.
+els.yearPerson.addEventListener("change", () => renderYearSummary());
+
+// Delegated, not per row: every filter change and month step rebuilds the rows,
+// and a listener bound in `renderHeatmap` would be re-attached on each of them.
+els.heatmap.addEventListener("click", (event) => {
+  const name = /** @type {HTMLElement | null} */ (
+    /** @type {HTMLElement} */ (event.target).closest?.(".hm-name") ?? null
+  );
+  if (name?.dataset.person !== undefined) openYearSummary(name.dataset.person);
+});
+
 els.heatmap.addEventListener("keydown", onGridKeydown);
 els.heatmap.addEventListener("pointerover", (event) => {
   const cell = /** @type {HTMLElement | null} */ (
@@ -1747,6 +1957,16 @@ registerCommands([
     run: () => els.fileInput.click(),
   },
   { icon: "📋", title: "Copy who's-out summary", hint: "action", run: copySummary },
+  {
+    icon: TOOL_ICONS.availability,
+    title: "Person year summary…",
+    hint: "action",
+    keywords: ["person", "year", "who", "history"],
+    // Whoever the page is already about: the picked row, else the focused one
+    // (which is the header row, and so nobody, until the grid is used). The
+    // dialog falls back to the first visible person on its own.
+    run: () => openYearSummary(state.sel?.name ?? focusedPerson() ?? ""),
+  },
   {
     icon: TOOL_ICONS.leave,
     title: "Send picked days to Leave Request",

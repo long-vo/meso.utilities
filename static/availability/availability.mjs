@@ -817,10 +817,14 @@ export function outInRange(model, from, to) {
  * five single-day entries. Gaps consisting solely of weekend days are
  * bridged: being off Friday and Monday reads as one absence.
  *
+ * `days` counts what the range actually covers in {@link codeShare} terms, so
+ * a Friday-to-Monday absence is two days rather than the four the endpoints
+ * span, and a range of half-days is half a day each.
+ *
  * @param {Array<{ date: string, code: string, kind: string, label: string, weight: number }>}
  *   entries one person's out-days, ascending
  * @returns {Array<{ from: string, to: string, code: string, kind: string, label: string,
- *   weight: number }>}
+ *   weight: number, days: number }>}
  */
 export function groupOutDates(entries) {
   const groups = [];
@@ -830,6 +834,7 @@ export function groupOutDates(entries) {
       last !== undefined && entry.code === last.code && onlyWeekendsBetween(last.to, entry.date)
     ) {
       last.to = entry.date;
+      last.days += codeShare(entry.code);
     } else {
       groups.push({
         from: entry.date,
@@ -838,10 +843,23 @@ export function groupOutDates(entries) {
         kind: entry.kind,
         label: entry.label,
         weight: entry.weight,
+        days: codeShare(entry.code),
       });
     }
   }
   return groups;
+}
+
+/**
+ * How much of a day the code *describes* — a full day, or the half its `half`
+ * names. Deliberately not `1 - weight`: WFH weighs a full working day (the
+ * person is available) but still describes a whole day of working from home,
+ * and `1 - weight` would report that as nothing at all.
+ *
+ * @param {string} code
+ */
+function codeShare(code) {
+  return codeInfo(code).half === null ? 1 : 0.5;
 }
 
 /** True when `b` follows `a` with nothing but weekend days in between. */
@@ -984,6 +1002,105 @@ export function teamCapacity(model, from, to) {
     }
   }
   return [...teams.values()].sort((a, b) => a.team.localeCompare(b.team));
+}
+
+/**
+ * Kind → the label of the full-day code that stands for it (`leave` → "Annual
+ * leave", `remote` → "WFH"). Every kind has exactly one code with `half: null`,
+ * so this names a kind without a second table to keep in step with {@link CODES}.
+ */
+const KIND_LABELS = Object.fromEntries(
+  Object.values(CODES).filter((info) => info.half === null).map((info) => [info.kind, info.label]),
+);
+
+/** Kinds a summary chip would only clutter the row with: the two that mean
+ *  "nothing happened", plus `unknown` — a dirty cell weighs a full working day
+ *  everywhere else, and a chip for it would read as a real absence. */
+const UNCHIPPED_KINDS = new Set(["weekend", "working", "unknown"]);
+
+/**
+ * Everything the imported axis records about one person, independent of the
+ * month or quarter the heatmap happens to show: their days by kind, the run of
+ * months, and every absence as a grouped range.
+ *
+ * Two counting bases live here on purpose, because no single one is honest:
+ *
+ * - `kinds`, each month's `days` and each range's `days` count in
+ *   {@link codeShare} terms, which is what "8 days WFH" means. WFH and onsite
+ *   earn a chip even though they cost no availability. The month run shares
+ *   that basis so the distribution can't show an empty month for someone the
+ *   chips above it credit with a fortnight of remote work.
+ * - `out` and `worked` stay weight-based (`1 - weight` / `weight`), matching
+ *   {@link teamCapacity}, and so `out` is *not* the sum of the chips.
+ *
+ * `possible` is every day the axis holds a code for that isn't a weekend, which
+ * makes `out + worked === possible` exactly. Weekends and days the workbook
+ * left blank count towards nothing at all, the same way {@link teamCapacity}
+ * skips them.
+ *
+ * The month run comes from {@link monthSpans} over the model's own axis — a
+ * workbook covering two years gets more than twelve buckets, and a month with
+ * no absence in it keeps its (empty) bucket, because a gap in the distribution
+ * is data.
+ *
+ * @param {Model} model
+ * @param {string} name roster spelling
+ * @returns {{ name: string, team: string, location: string,
+ *   kinds: Array<{ kind: string, label: string, days: number }>,
+ *   months: Array<{ month: string, label: string, days: number, out: number, possible: number }>,
+ *   ranges: ReturnType<typeof groupOutDates>,
+ *   out: number, worked: number, possible: number } | null}
+ *   `null` when the roster has no such person.
+ */
+export function personSummary(model, name) {
+  const person = model.people.find((p) => p.name === name);
+  if (person === undefined) return null;
+
+  const months = monthSpans(model.days)
+    .map((span) => ({ month: span.month, label: span.label, days: 0, out: 0, possible: 0 }));
+  const byMonth = new Map(months.map((month) => [month.month, month]));
+  /** @type {Map<string, number>} */
+  const kindDays = new Map();
+  /** @type {Parameters<typeof groupOutDates>[0]} */
+  const entries = [];
+  let out = 0;
+  let worked = 0;
+  let possible = 0;
+
+  for (const date of model.days) {
+    const code = person.days[date];
+    if (code === undefined) continue;
+    const info = codeInfo(code);
+    if (info.kind === "weekend") continue;
+    out += 1 - info.weight;
+    worked += info.weight;
+    possible++;
+    const month = byMonth.get(date.slice(0, 7));
+    if (month !== undefined) {
+      month.out += 1 - info.weight;
+      month.possible++;
+    }
+    if (UNCHIPPED_KINDS.has(info.kind)) continue;
+    if (month !== undefined) month.days += codeShare(code);
+    kindDays.set(info.kind, (kindDays.get(info.kind) ?? 0) + codeShare(code));
+    entries.push({ date, code, kind: info.kind, label: info.label, weight: info.weight });
+  }
+
+  const kinds = [...kindDays]
+    .map(([kind, days]) => ({ kind, label: KIND_LABELS[kind] ?? kind, days }))
+    .sort((a, b) => b.days - a.days || a.kind.localeCompare(b.kind));
+
+  return {
+    name: person.name,
+    team: person.team,
+    location: person.location,
+    kinds,
+    months,
+    ranges: groupOutDates(entries),
+    out,
+    worked,
+    possible,
+  };
 }
 
 // --- handoff to Leave --------------------------------------------------------------

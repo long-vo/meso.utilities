@@ -3535,6 +3535,100 @@ button.out:focus-visible::after {
   margin-top: 4px;
 }
 
+/* The person-year dialog carries a chart and a list rather than a form, and
+   does not fit the width the Send-to-Leave dialog is sized for. */
+.page-availability #year-dialog {
+  width: min(520px, calc(100vw - 32px));
+}
+/* Caption for a group of boxes, not a control — so it can't be a <label>, and
+   it repeats the shared label rule to sit level with Person above it. */
+.page-availability .year-kind-head {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.page-availability .year-kind {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+/* These labels *are* controls; the shared rule's block/600/margin would stack
+   them and make each read as a heading of its own. */
+.page-availability .year-kind-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 400;
+  cursor: pointer;
+}
+.page-availability .year-head {
+  margin: 4px 0 -4px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.page-availability .year-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.page-availability .year-kinds .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.page-availability .year-months {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 4px;
+  height: 92px;
+}
+.page-availability .year-month {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 4px;
+}
+/* Bars are scaled against the worst month, so the heavy one reads at a glance.
+   A month with no absence keeps a stub: an empty column is data, and a bar of
+   no height at all reads as a rendering fault. */
+.page-availability .year-bar {
+  align-self: end;
+  height: max(2px, calc(var(--h, 0) * 1%));
+  border-radius: 2px;
+  background: var(--av-leave);
+}
+.page-availability .year-month-label {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.page-availability .year-ranges {
+  display: grid;
+  gap: 5px;
+  max-height: 220px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.page-availability .year-range {
+  display: grid;
+  grid-template-columns: 9px 96px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.page-availability .year-range-days,
+.page-availability .year-ranges .strip-detail {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
 .page-availability {
   --hm-cell: 17px;
   --hm-name-w: 200px;
@@ -3982,6 +4076,7 @@ button.out:focus-visible::after {
   padding: 0 10px;
   font-size: 12.5px;
   border-top: 1px solid var(--av-grid);
+  cursor: pointer; /* the name opens that person's whole imported year */
 }
 .page-availability .hm-person {
   overflow: hidden;
