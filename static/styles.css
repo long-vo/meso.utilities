@@ -74,6 +74,13 @@ body {
     radial-gradient(1000px 500px at -10% 0%, color-mix(in srgb, var(--accent) 10%, transparent),
     transparent),
     var(--bg);
+  /* `html, body { height: 100% }` pins this background box to the viewport, so on
+     a page taller than one screen the default `repeat` tiles the two corner
+     washes again further down — a hard seam with a re-tinted band beside it (the
+     hub, whose grid outgrows the viewport, is where it shows). Both gradients
+     fade out well inside one tile, so painting a single tile over `--bg` is
+     seamless. */
+  background-repeat: no-repeat;
   color: var(--text);
   font-family: var(--sans);
   font-size: 15px;
