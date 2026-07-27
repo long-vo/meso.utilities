@@ -2793,6 +2793,7 @@ html.js body.page-hub .cards.is-ready {
   .join-panel h1,
   .panel-head h2,
   .controls .field > label:not(.switch),
+  .controls .field > .field-collapse,
   .room-label,
   .story-panel > label,
   .pick-label,
@@ -4602,6 +4603,15 @@ button.out:focus-visible::after {
 .page-availability .nav-row {
   margin-top: 8px;
 }
+/* The period in view, wearing the heatmap's month-header type so the sidebar
+   and the grid read as one label. */
+.page-availability .view-period {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
 /* Up to five data buttons (Export/Export view/Share/Import/Clear) share one
    row — they don't fit the 320px sidebar on a single line. */
 .page-availability .controls .btn-row {
@@ -4612,6 +4622,42 @@ button.out:focus-visible::after {
   font-weight: 600;
   font-size: 13px;
   color: var(--text-dim);
+}
+/* Nested inside the workbook field, this one is the field's last child, so the
+   `.field` bottom margin `:last-child` drops is the only spacing it had. It
+   needs the gap above the summary instead, off the import status line. */
+.page-availability #csv-details {
+  margin-top: 12px;
+}
+/* Locations and Workbook warnings collapse natively, so they keep their own
+   type — but they wear the same right-edge chevron as the `.field-collapse`
+   headings around them, or the sidebar would read as two kinds of foldable row.
+   The CSV paste is deliberately left out: it is a second way to fill the
+   Vacation workbook field above it rather than a field of its own, and it says
+   so by keeping the native marker on its left. */
+.page-availability details.field:not(#csv-details) > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  list-style: none;
+}
+.page-availability details.field:not(#csv-details) > summary::-webkit-details-marker {
+  display: none;
+}
+.page-availability details.field:not(#csv-details) > summary::after {
+  content: "▸";
+  margin-left: auto;
+  margin-bottom: 3px;
+  width: 11px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-faint);
+}
+.page-availability details.field:not(#csv-details)[open] > summary::after {
+  content: "▾";
+}
+.page-availability details.field > summary:hover {
+  color: var(--text);
 }
 .page-availability details.field[open] > summary {
   margin-bottom: 8px;
@@ -4784,12 +4830,66 @@ button.out:focus-visible::after {
    lifts it back by half that, since centring works off the margin box. Done
    with margin rather than a transform or `top` on purpose — either of those
    puts the glyph on its own layer, and it then fails to paint. */
-.page-availability .panel-collapse .caret {
+.page-availability .panel-collapse .caret,
+.page-availability .controls .field-collapse .caret {
   width: 11px;
   font-size: 14px;
   line-height: 1;
   margin-bottom: 3px;
   color: var(--text-dim);
+}
+
+/* ---- Team Availability: fold one field of the controls sidebar ----
+   The field's heading is the button, so it has to keep looking exactly like the
+   `<label>` it replaced (see `.controls .field > label`) — including the shared
+   gradient fill, which is why the reset below clears `background-color` rather
+   than `background`: `background: none` would drop the gradient image the
+   @supports block sets, leaving transparently-filled text on nothing. */
+.page-availability .controls .field-collapse {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--text-dim);
+  margin-bottom: 7px;
+  cursor: pointer;
+}
+.page-availability .controls .field-collapse:hover {
+  color: var(--text);
+}
+/* Pushed to the panel edge rather than sitting against the title: the fields are
+   a stack of rows, and a ragged column of chevrons reads as decoration instead
+   of one control repeated. `auto` rather than `space-between` because the
+   threshold field's heading carries its value between title and chevron. */
+.page-availability .controls .field-collapse .caret {
+  margin-left: auto;
+}
+/* Folded, the heading is the whole field — its bottom margin would read as
+   padding under a rule that isn't there. */
+.page-availability .controls .field-collapse[aria-expanded="false"] {
+  margin-bottom: 0;
+}
+/* The Legend's head holds nothing but its title, so its chevron sits at the
+   panel's right edge like the controls fields' headings. The "Who's out" head
+   keeps its chevron beside the title — that edge is the day picker's. */
+.page-availability .panel-head:has(#legend-toggle) h2 {
+  flex: 1;
+}
+.page-availability #legend-toggle {
+  display: flex;
+  width: 100%;
+}
+.page-availability #legend-toggle .caret {
+  margin-left: auto;
 }
 .page-availability .strip[hidden] {
   display: none;

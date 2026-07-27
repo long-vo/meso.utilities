@@ -47,6 +47,7 @@ import {
   trimNumber,
   unpackModel,
   viewDates,
+  viewLabel,
   WEEKDAYS,
   weekSlices,
   yearFromFilename,
@@ -65,12 +66,14 @@ const els = {
   dropZone: $("drop-zone"),
   fileInput: /** @type {HTMLInputElement} */ ($("file-input")),
   importStatus: $("import-status"),
+  importUpdated: $("import-updated"),
   csvText: /** @type {HTMLTextAreaElement} */ ($("csv-text")),
   csvQuarter: /** @type {HTMLSelectElement} */ ($("csv-quarter")),
   csvImport: $("csv-import"),
   year: /** @type {HTMLInputElement} */ ($("year-input")),
   viewMonth: $("view-month"),
   viewQuarter: $("view-quarter"),
+  viewPeriod: $("view-period"),
   navPrev: $("nav-prev"),
   navToday: $("nav-today"),
   navNext: $("nav-next"),
@@ -186,6 +189,7 @@ function el(tag, className, text) {
  *   view: { mode: "month" | "quarter", anchor: string },
  *   nameFilter: string,
  *   history: import("./availability.mjs").HistoryEntry[],
+ *   updatedAt: number | null,
  *   pickedDay: string | null,
  *   focus: { row: number, col: number } | null,
  *   sel: { name: string, from: string, to: string, anchor?: string, code?: string } | null,
@@ -204,6 +208,9 @@ const state = {
   nameFilter: "",
   // Changes another tool recorded here, newest first. Persisted with the model.
   history: [],
+  // When the model was last imported — not when it was last edited, which the
+  // history panel stamps per record. Says how fresh the workbook data is.
+  updatedAt: null,
   pickedDay: null, // the day the strip reports on; null = today
   focus: null, // heatmap cell holding the grid's single tab stop; see markFocusable
   // One person's run of days picked in the grid, for handing to Leave:
@@ -579,6 +586,9 @@ function loadState() {
     if (Array.isArray(saved.history)) {
       state.history = saved.history.filter((e) => e !== null && typeof e === "object");
     }
+    if (Number.isInteger(saved.updatedAt) && saved.updatedAt > 0) {
+      state.updatedAt = saved.updatedAt;
+    }
     if (Number.isInteger(saved.lowThreshold) && saved.lowThreshold >= 0) {
       state.lowThreshold = Math.min(100, saved.lowThreshold);
     }
@@ -605,6 +615,7 @@ function saveState() {
         members: state.members,
         lowThreshold: state.lowThreshold,
         history: state.history,
+        updatedAt: state.updatedAt,
         view: { mode: state.view.mode },
         model: state.model === null ? null : packModel(state.model),
       }),
@@ -673,6 +684,8 @@ function renderAll() {
   // the current team selection no longer covers.
   renderMemberChips(model);
   els.exportView.hidden = !filterActive();
+  // Same range the heatmap draws, so the two can't name different periods.
+  els.viewPeriod.textContent = viewLabel(visibleRange());
   renderTags(model);
   renderWarnings();
   renderHistory();
@@ -692,11 +705,18 @@ function renderImportStatus() {
   els.year.value = String(state.year);
   if (state.model === null) {
     els.importStatus.textContent = "Nothing imported yet.";
+    els.importUpdated.hidden = true;
     return;
   }
   els.importStatus.textContent = `${
     peopleCount(state.model.people.length)
   } · ${state.model.days.length} days · year ${state.year}`;
+  // Absent for a model stored by a build that did not record it — a made-up
+  // time would be worse than none, so the line stays away.
+  els.importUpdated.hidden = state.updatedAt === null;
+  els.importUpdated.textContent = state.updatedAt === null
+    ? ""
+    : `Updated ${stamp(state.updatedAt)}`;
 }
 
 function renderTeamChips(model) {
@@ -1648,6 +1668,7 @@ function renderYearKinds(summary, reset) {
 function adoptModel(incoming, year, replace) {
   state.model = replace || state.model === null ? incoming : mergeModels(state.model, incoming);
   state.year = year;
+  state.updatedAt = Date.now();
   state.view.anchor = clampAnchor(state.view.anchor, state.model.days);
   state.pickedDay = null; // the old pick may not exist in the new data
   // Changes queued by Leave Request wait for a roster to write into, so the
@@ -2123,6 +2144,7 @@ els.clearData.addEventListener("click", () => {
   state.focus = null;
   state.sel = null;
   state.history = [];
+  state.updatedAt = null;
   els.nameFilter.value = "";
   try {
     localStorage.removeItem(STORE_KEY);
@@ -2314,6 +2336,13 @@ function setupCollapse(button, body, key) {
 
 setupCollapse(els.stripToggle, els.strip, `${STORE_KEY}-strip-collapsed`);
 setupCollapse(els.legendToggle, els.legendBody, `${STORE_KEY}-legend-collapsed`);
+// Every field in the controls sidebar folds the same way, keyed off the body it
+// controls — the inline script at the end of that section restores these before
+// first paint and derives the key identically.
+for (const button of document.querySelectorAll("#controls .field-collapse")) {
+  const body = $(String(button.getAttribute("aria-controls")));
+  setupCollapse(button, body, `${STORE_KEY}-${body.id}-collapsed`);
+}
 loadState();
 els.lowThreshold.value = String(state.lowThreshold);
 els.lowThresholdOut.textContent = state.lowThreshold === 0 ? "off" : `${state.lowThreshold}%`;

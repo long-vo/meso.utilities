@@ -63,6 +63,7 @@ import {
   trimNumber,
   unpackModel,
   viewDates,
+  viewLabel,
   weekSlices,
   yearFromFilename,
 } from "../static/availability/availability.mjs";
@@ -1118,6 +1119,15 @@ Deno.test("monthSpans: one span per month run, in view order", () => {
     { month: "2026-02", label: "Feb 2026", days: 28 },
   ]);
   assertEquals(monthSpans([]), []);
+});
+
+Deno.test("viewLabel: names the period the heatmap is showing", () => {
+  assertEquals(viewLabel(viewDates("month", "2026-02-01")), "Feb 2026");
+  assertEquals(viewLabel(viewDates("quarter", "2026-08-14")), "Jul – Sep 2026");
+  assertEquals(viewLabel([]), "");
+  // Not a view any control produces, but the year is only written once when the
+  // two ends share it.
+  assertEquals(viewLabel(["2025-12-31", "2026-01-01"]), "Dec 2025 – Jan 2026");
 });
 
 Deno.test("clampAnchor: pulls the view into the imported span", () => {

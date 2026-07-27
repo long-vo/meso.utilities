@@ -73,81 +73,114 @@
 
   <main class="layout" id="main" tabindex="-1">
     <section id="controls" class="panel controls" aria-label="Import, filters and options">
+      <!-- Every field's own heading folds it away (see setupCollapse in app.js).
+           The heading is the button, so it can't stay a `<label for>`: a click
+           would toggle *and* activate the control — on this field, that opens the
+           file dialog. The controls carry their own aria-label instead. -->
       <div class="field">
-        <label for="file-input">Vacation workbook</label>
-        <div id="drop-zone" class="drop-zone" role="button" tabindex="0"
-          aria-label="Import the vacation workbook (.xlsx), one quarter as .csv, or an availability.json export">
-          <strong>Drop the .xlsx here</strong>
-          <span class="hint">or click to choose — a quarter .csv or an availability.json
-            export works too</span>
+        <button class="field-collapse" type="button" aria-controls="import-body"
+          aria-expanded="true">Vacation workbook<span class="caret" aria-hidden="true">▾</span></button>
+        <div id="import-body">
+          <div id="drop-zone" class="drop-zone" role="button" tabindex="0"
+            aria-label="Import the vacation workbook (.xlsx), one quarter as .csv, or an availability.json export">
+            <strong>Drop the .xlsx here</strong>
+            <span class="hint">or click to choose — a quarter .csv or an availability.json
+              export works too</span>
+          </div>
+          <input id="file-input" type="file" accept=".xlsx,.csv,.json,application/json" hidden />
+          <p id="import-status" class="hint" aria-live="polite">Nothing imported yet.</p>
+          <p id="import-updated" class="hint" hidden></p>
+          <!-- Inside this field, not beside it: pasting a quarter is another way
+               to fill the workbook, so folding the field takes it along. -->
+          <details id="csv-details" class="field">
+            <summary>…or paste one quarter as CSV</summary>
+            <textarea id="csv-text" class="code-area csv-area" spellcheck="false"
+              placeholder="Export a quarter sheet as CSV and paste it here"></textarea>
+            <div class="btn-row">
+              <select id="csv-quarter" aria-label="Which quarter the CSV covers">
+                <option value="1">1st quarter</option>
+                <option value="2">2nd quarter</option>
+                <option value="3" selected>3rd quarter</option>
+                <option value="4">4th quarter</option>
+              </select>
+              <button id="csv-import" class="btn btn-small" type="button">Import CSV</button>
+            </div>
+          </details>
         </div>
-        <input id="file-input" type="file" accept=".xlsx,.csv,.json,application/json" hidden />
-        <p id="import-status" class="hint" aria-live="polite">Nothing imported yet.</p>
       </div>
 
-      <details id="csv-details" class="field">
-        <summary>…or paste one quarter as CSV</summary>
-        <textarea id="csv-text" class="code-area csv-area" spellcheck="false"
-          placeholder="Export a quarter sheet as CSV and paste it here"></textarea>
-        <div class="btn-row">
-          <select id="csv-quarter" aria-label="Which quarter the CSV covers">
-            <option value="1">1st quarter</option>
-            <option value="2">2nd quarter</option>
-            <option value="3" selected>3rd quarter</option>
-            <option value="4">4th quarter</option>
-          </select>
-          <button id="csv-import" class="btn btn-small" type="button">Import CSV</button>
-        </div>
-      </details>
-
       <div class="field">
-        <label for="year-input">Workbook year</label>
-        <input id="year-input" type="number" min="2000" max="2100" step="1" />
-        <p class="hint">Used when a filename or CSV has no year. Dates always derive from
-          quarter + column position — never from the sheet's own date headers.</p>
-      </div>
-
-      <div class="field needs-model">
-        <label>View</label>
-        <!-- Toggle buttons, not tabs: there is no tabpanel to select, so
-             aria-pressed is the honest state (same for sanitize and decode). -->
-        <div class="mode-switch" role="group" aria-label="Zoom">
-          <button id="view-month" class="mode-btn is-active" type="button" aria-pressed="true">Month</button>
-          <button id="view-quarter" class="mode-btn" type="button" aria-pressed="false">Quarter</button>
-        </div>
-        <div class="btn-row nav-row">
-          <button id="nav-prev" class="btn btn-ghost btn-small" type="button" aria-label="Previous period">‹ Prev</button>
-          <button id="nav-today" class="btn btn-small" type="button">Today</button>
-          <button id="nav-next" class="btn btn-ghost btn-small" type="button" aria-label="Next period">Next ›</button>
+        <button class="field-collapse" type="button" aria-controls="year-body"
+          aria-expanded="true">Workbook year<span class="caret" aria-hidden="true">▾</span></button>
+        <div id="year-body">
+          <input id="year-input" type="number" min="2000" max="2100" step="1"
+            aria-label="Workbook year" />
+          <p class="hint">Used when a filename or CSV has no year. Dates always derive from
+            quarter + column position — never from the sheet's own date headers.</p>
         </div>
       </div>
 
       <div class="field needs-model">
-        <label>Teams</label>
-        <div id="team-chips" class="chips" role="group" aria-label="Filter by team"></div>
-        <p class="hint">Click to filter — nothing selected shows everyone.</p>
+        <button class="field-collapse" type="button" aria-controls="view-body"
+          aria-expanded="true">View<span class="caret" aria-hidden="true">▾</span></button>
+        <div id="view-body">
+          <!-- Toggle buttons, not tabs: there is no tabpanel to select, so
+               aria-pressed is the honest state (same for sanitize and decode). -->
+          <div class="mode-switch" role="group" aria-label="Zoom">
+            <button id="view-month" class="mode-btn is-active" type="button" aria-pressed="true">Month</button>
+            <button id="view-quarter" class="mode-btn" type="button" aria-pressed="false">Quarter</button>
+          </div>
+          <!-- Which month or quarter the heatmap is on, in the heatmap's own
+               spelling — the buttons below move it. -->
+          <p id="view-period" class="view-period"></p>
+          <div class="btn-row nav-row">
+            <button id="nav-prev" class="btn btn-ghost btn-small" type="button" aria-label="Previous period">‹ Prev</button>
+            <button id="nav-today" class="btn btn-small" type="button">Today</button>
+            <button id="nav-next" class="btn btn-ghost btn-small" type="button" aria-label="Next period">Next ›</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="field needs-model">
+        <button class="field-collapse" type="button" aria-controls="teams-body"
+          aria-expanded="true">Teams<span class="caret" aria-hidden="true">▾</span></button>
+        <div id="teams-body">
+          <div id="team-chips" class="chips" role="group" aria-label="Filter by team"></div>
+          <p class="hint">Click to filter — nothing selected shows everyone.</p>
+        </div>
       </div>
 
       <div id="member-field" class="field needs-model" hidden>
-        <label>Team members</label>
-        <!-- One `.member-group` per selected team, each with its own labelled
-             chip group — see renderMemberChips. -->
-        <div id="member-chips" class="member-groups"></div>
-        <p class="hint">Click to narrow to individuals — nothing selected shows the whole team.</p>
+        <button class="field-collapse" type="button" aria-controls="members-body"
+          aria-expanded="true">Team members<span class="caret" aria-hidden="true">▾</span></button>
+        <div id="members-body">
+          <!-- One `.member-group` per selected team, each with its own labelled
+               chip group — see renderMemberChips. -->
+          <div id="member-chips" class="member-groups"></div>
+          <p class="hint">Click to narrow to individuals — nothing selected shows the whole team.</p>
+        </div>
       </div>
 
       <div class="field needs-model">
-        <label for="name-filter">Find a person</label>
-        <input id="name-filter" type="search" placeholder="Filter by name…" />
+        <button class="field-collapse" type="button" aria-controls="find-body"
+          aria-expanded="true">Find a person<span class="caret" aria-hidden="true">▾</span></button>
+        <div id="find-body">
+          <input id="name-filter" type="search" placeholder="Filter by name…"
+            aria-label="Find a person" />
+        </div>
       </div>
 
       <div class="field needs-model">
-        <label for="low-threshold">Flag thin weeks below
+        <button class="field-collapse" type="button" aria-controls="thresh-body"
+          aria-expanded="true">Flag thin weeks below
           <output id="low-threshold-out" for="low-threshold" class="thresh-out">60%</output>
-        </label>
-        <input id="low-threshold" type="range" min="0" max="100" step="5" value="60" />
-        <p class="hint">A team-week whose available person-days fall under this share of the week's
-          maximum is marked in the capacity table. Drag to 0 to switch it off.</p>
+          <span class="caret" aria-hidden="true">▾</span></button>
+        <div id="thresh-body">
+          <input id="low-threshold" type="range" min="0" max="100" step="5" value="60"
+            aria-label="Flag thin weeks below this share of the week's maximum" />
+          <p class="hint">A team-week whose available person-days fall under this share of the week's
+            maximum is marked in the capacity table. Drag to 0 to switch it off.</p>
+        </div>
       </div>
 
       <details id="tags-details" class="field needs-model">
@@ -177,6 +210,21 @@
         <button id="clear-data" class="btn btn-ghost btn-small" type="button">Clear</button>
       </div>
     </section>
+    <!-- Re-fold the fields the reader folded last time, before first paint. The
+         panels app.js folds are filled by render and have nothing to flash; these
+         bodies are authored markup, so waiting for the deferred module would show
+         them open for a frame. app.js reads the same keys and agrees. -->
+    <script>
+      try {
+        for (var b of document.querySelectorAll("#controls .field-collapse")) {
+          var body = document.getElementById(b.getAttribute("aria-controls"));
+          if (localStorage.getItem("meso-availability-" + body.id + "-collapsed") !== "1") continue;
+          body.hidden = true;
+          b.setAttribute("aria-expanded", "false");
+          b.querySelector(".caret").textContent = "▸";
+        }
+      } catch (e) { /* storage unavailable; every field starts open */ }
+    </script>
 
     <section class="panel editor" aria-label="Who's out">
       <div class="panel-head">

@@ -134,6 +134,34 @@ head script from `meso-rail-hidden-<tool>`, so nothing flashes. Three consequenc
   it — `sidebar.js` mirrors the panel's `hidden` onto the button via a `MutationObserver`, which is
   why `#rail-toggle`'s `display` rule is scoped `:not([hidden])`.
 
+### Foldable sections — the chevron belongs to the label
+
+Anything foldable inside a panel is folded **by its own label**, and the chevron (`▾` open, `▸`
+folded) is **attached to that label, pushed to the panel's right edge** — never a separate control
+beside it, never floating mid-row. Availability's controls sidebar is the reference: every field
+heading is a `.field-collapse` button carrying a `<span class="caret">`, wired through
+`setupCollapse(button, body, key)` in its `app.js` and persisted per field. Adding another one means
+matching all of it, because each piece is load-bearing:
+
+- The heading is the button, so it **cannot stay a `<label for=…>`** — a click would toggle _and_
+  activate the control, which on a file field opens the file dialog. Give the input its own
+  `aria-label` instead, and keep the button's `aria-controls`/`aria-expanded` honest.
+- The field's contents get a wrapper div (the `aria-controls` target), since `setupCollapse` hides
+  one element.
+- Sidebar labels wear the shared `background-clip: text` gradient (see the `@supports` block), so a
+  new label-button must join that selector list and reset **`background-color`**, not `background` —
+  `background: none` drops the gradient image and leaves transparently-filled text on nothing.
+- Authored bodies need the pre-paint inline script at the end of the section: unlike the
+  render-filled panels, they would flash open while the deferred module loads. It derives the
+  storage key the same way `app.js` does (`meso-<tool>-<body id>-collapsed`).
+- Native `<details>` fields keep their own type but get the same right-edge chevron via
+  `summary::after` (`list-style: none` + the `-webkit-details-marker` reset).
+
+Two deliberate exceptions, both about what the right edge already holds: the "Who's out" panel keeps
+its chevron beside the title, because that edge is the day picker and Copy summary; and
+Availability's CSV paste keeps the native left-hand marker with **no** chevron — it is a second way
+to fill the Vacation workbook field it now nests inside, not a field of its own.
+
 ### Tool iconography — keep it consistent
 
 Since the favicon refresh, every tool has **one visual identity**: a card color class

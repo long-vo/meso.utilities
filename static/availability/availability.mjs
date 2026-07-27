@@ -1508,6 +1508,25 @@ export function monthSpans(dates) {
 }
 
 /**
+ * The period a view covers, spelled the way the heatmap's own month header
+ * spells it: "Jul 2026" for a month, "Jul – Sep 2026" for a quarter. The shared
+ * year is written once — a quarter cannot straddle two, and the sidebar line
+ * this labels is 320px wide.
+ *
+ * @param {string[]} dates ascending, as {@link viewDates} returns them
+ * @returns {string} "" when there is nothing in view
+ */
+export function viewLabel(dates) {
+  const spans = monthSpans(dates);
+  if (spans.length === 0) return "";
+  const first = spans[0].label;
+  const last = spans[spans.length - 1].label;
+  if (first === last) return first;
+  const sameYear = first.slice(-4) === last.slice(-4);
+  return `${sameYear ? first.slice(0, 3) : first} – ${last}`;
+}
+
+/**
  * Pull `anchor` into the span `days` covers — the nearest end wins, an anchor
  * already inside is returned unchanged. Without this, importing a workbook
  * for any year but the current one lands the heatmap on an empty month.
