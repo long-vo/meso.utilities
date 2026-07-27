@@ -130,7 +130,9 @@
 
       <div id="member-field" class="field needs-model" hidden>
         <label>Team members</label>
-        <div id="member-chips" class="chips" role="group" aria-label="Filter by team member"></div>
+        <!-- One `.member-group` per selected team, each with its own labelled
+             chip group — see renderMemberChips. -->
+        <div id="member-chips" class="member-groups"></div>
         <p class="hint">Click to narrow to individuals — nothing selected shows the whole team.</p>
       </div>
 

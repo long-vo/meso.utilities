@@ -4529,6 +4529,20 @@ button.out:focus-visible::after {
 .page-availability .chip-btn {
   cursor: pointer;
 }
+/* Member chips, one labelled list per selected team. The label is quieter than
+   the field's own heading — it names a group inside the field, not the field. */
+.page-availability .member-groups {
+  display: grid;
+  gap: 10px;
+}
+.page-availability .member-group-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--text-faint);
+}
 .page-availability .chip.is-active {
   border-color: var(--accent);
   color: var(--accent);

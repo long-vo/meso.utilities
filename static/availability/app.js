@@ -718,7 +718,10 @@ function renderTeamChips(model) {
 }
 
 /**
- * The selected teams' people, as chips that narrow the view to individuals.
+ * The selected teams' people, as chips that narrow the view to individuals —
+ * one labelled list per team, in the heatmap's own team-then-name order, so two
+ * teams' rosters never read as a single merged column of names.
+ *
  * Hidden until a team is picked: unfiltered, this is the entire roster, which is
  * what the name filter is for.
  *
@@ -727,30 +730,47 @@ function renderTeamChips(model) {
  */
 function renderMemberChips(model) {
   els.memberChips.textContent = "";
-  if (model === null || state.teams.length === 0) {
+  const picked = model === null
+    ? []
+    : model.people.filter((p) => state.teams.includes(p.team.toLowerCase()));
+  // A selected team the current workbook doesn't have (a key left over from
+  // another import) leaves nothing to list — the same as no team at all.
+  if (picked.length === 0) {
     els.memberField.hidden = true;
     state.members = [];
     return;
   }
   els.memberField.hidden = false;
-  const people = model.people
-    .filter((p) => state.teams.includes(p.team.toLowerCase()))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const names = new Set(people.map((p) => p.name));
+  const names = new Set(picked.map((p) => p.name));
   state.members = state.members.filter((m) => names.has(m));
-  for (const person of people) {
-    const chip = el("button", "chip chip-btn", person.name);
-    chip.type = "button";
-    const active = state.members.includes(person.name);
-    chip.setAttribute("aria-pressed", String(active));
-    if (active) chip.classList.add("is-active");
-    chip.addEventListener("click", () => {
-      state.members = active
-        ? state.members.filter((m) => m !== person.name)
-        : [...state.members, person.name];
-      renderAll();
-    });
-    els.memberChips.appendChild(chip);
+  const labels = teamLabels(/** @type {import("./availability.mjs").Model} */ (model));
+  for (const key of [...state.teams].sort((a, b) => a.localeCompare(b))) {
+    const members = picked
+      .filter((p) => p.team.toLowerCase() === key)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    if (members.length === 0) continue;
+    const label = labels.get(key) ?? teamLabel(key);
+    const group = el("div", "member-group");
+    group.appendChild(el("span", "member-group-label", label));
+    const chips = el("div", "chips");
+    chips.setAttribute("role", "group");
+    chips.setAttribute("aria-label", `Filter by ${label} member`);
+    for (const person of members) {
+      const chip = el("button", "chip chip-btn", person.name);
+      chip.type = "button";
+      const active = state.members.includes(person.name);
+      chip.setAttribute("aria-pressed", String(active));
+      if (active) chip.classList.add("is-active");
+      chip.addEventListener("click", () => {
+        state.members = active
+          ? state.members.filter((m) => m !== person.name)
+          : [...state.members, person.name];
+        renderAll();
+      });
+      chips.appendChild(chip);
+    }
+    group.appendChild(chips);
+    els.memberChips.appendChild(group);
   }
 }
 
