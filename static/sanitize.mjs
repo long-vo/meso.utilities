@@ -256,6 +256,36 @@ export function redactPatterns(text, keepLast, patterns = REDACT_PATTERNS) {
 }
 
 /**
+ * The leading whitespace of the line `at` falls on — the base indent a
+ * multi-line block is re-emitted against.
+ * @param {string} src
+ * @param {number} at
+ * @returns {string}
+ */
+function lineIndent(src, at) {
+  const start = src.lastIndexOf("\n", at) + 1;
+  return (/^[ \t]*/.exec(src.slice(start, at)) ?? [""])[0];
+}
+
+/**
+ * Re-emit a masked JSON block in the shape it arrived in.
+ *
+ * A block logged on one line leaves on one line. A block that was
+ * pretty-printed across several lines is re-emitted pretty-printed rather than
+ * collapsed: collapsing turns a readable payload into one long line, and — more
+ * quietly — changes the log's line count, which breaks the positional pairing
+ * the Diff view and the log view's "only changed" filter rely on.
+ * @param {unknown} value the masked block
+ * @param {string} source the block exactly as it appeared
+ * @param {string} indent leading whitespace of the line the block opened on
+ * @returns {string}
+ */
+function emitJsonBlock(value, source, indent) {
+  if (!source.includes("\n")) return JSON.stringify(value);
+  return JSON.stringify(value, null, 2).split("\n").join(`\n${indent}`);
+}
+
+/**
  * Does the inside of a `{...}` look like a flat Java map: `key=value, ...`?
  * @param {string} inner
  * @returns {boolean}
@@ -332,7 +362,8 @@ function maskBraceBlocks(src, keepLast, fieldSet, maskAll) {
         maskedBlock = sanitize(parsed, fieldSet, keepLast, stats);
         masked += stats.maskedValues;
       }
-      out += src.slice(lastCut, i) + JSON.stringify(maskedBlock);
+      out += src.slice(lastCut, i) +
+        emitJsonBlock(maskedBlock, candidate, lineIndent(src, i));
       jsonBlocks++;
       lastCut = end;
       i = end - 1;

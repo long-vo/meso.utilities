@@ -126,7 +126,9 @@
           <label class="switch" title="Show the original next to the masked output, line by line">
             <input id="diff" type="checkbox" /> <span>Diff</span>
           </label>
-          <label class="switch" title="Collapse to a single line">
+          <!-- JSON only: the log path re-emits the log as text, so there is
+               nothing for Minify to collapse. -->
+          <label class="switch only-json" title="Collapse to a single line">
             <input id="minify" type="checkbox" /> <span>Minify</span>
           </label>
           <button id="copy" class="btn btn-small" type="button">Copy</button>
@@ -138,7 +140,28 @@
           </span>
         </div>
       </div>
-      <pre class="code-out" role="region" aria-label="Sanitized output"><code id="output"></code></pre>
+      <!-- Reading aids for log output. View-only: none of these change what
+           Copy and Download hand over. -->
+      <div class="logview only-log">
+        <div class="logview-find">
+          <input id="log-search" type="search" spellcheck="false" autocomplete="off"
+            placeholder="Find in result…" aria-label="Find in the masked log" />
+          <span id="log-search-count" class="status" aria-live="polite"></span>
+          <button id="log-prev" class="btn btn-small" type="button"
+            title="Previous match (Shift+Enter)" aria-label="Previous match">↑</button>
+          <button id="log-next" class="btn btn-small" type="button"
+            title="Next match (Enter)" aria-label="Next match">↓</button>
+        </div>
+        <div id="log-levels" class="chips logview-levels" role="group"
+          aria-label="Filter by log level"></div>
+        <label class="switch" title="Hide the lines masking left untouched">
+          <input id="log-changed" type="checkbox" /> <span>Only changed</span>
+        </label>
+        <label class="switch" title="Wrap long lines instead of scrolling sideways">
+          <input id="log-wrap" type="checkbox" /> <span>Wrap</span>
+        </label>
+      </div>
+      <pre id="output-box" class="code-out" role="region" aria-label="Sanitized output"><code id="output"></code></pre>
       <div id="stats" class="stats" aria-live="polite"></div>
     </section>
   </main>

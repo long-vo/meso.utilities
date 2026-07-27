@@ -1618,6 +1618,15 @@ select:focus {
 .switch input {
   accent-color: var(--accent);
 }
+/* In the result toolbars a switch sits in a centred row next to taller buttons
+   and inputs. The generic `label` bottom margin (for field labels stacked above
+   their input) makes the margin box taller than the label, and `align-items:
+   center` centres that box — leaving the checkbox itself sitting high. The
+   sidebar switches keep the margin: it spaces them from their hint text. */
+.result-tools .switch,
+.logview .switch {
+  margin-bottom: 0;
+}
 
 .status {
   font-size: 12px;
@@ -2956,6 +2965,101 @@ kbd {
 .d-add {
   color: var(--good);
   background: color-mix(in srgb, var(--good) 9%, transparent);
+}
+
+/* ---- sanitize: log view (line numbers, level filter, find, wrap) ----
+   Reading aids over the masked log. All view-only: Copy and Download ignore
+   every filter here and hand over the whole masked log. */
+.logview {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-bottom: 10px;
+}
+.logview-find {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* type="search" is outside the shared input rule, so it styles itself — at the
+   toolbar's smaller scale rather than the sidebar's. */
+.logview-find input[type="search"] {
+  width: 180px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 6px 10px;
+  font-family: var(--sans);
+  font-size: 13px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+/* The chips sit inline in the toolbar, not stacked under a field label. */
+.logview-levels {
+  margin-top: 0;
+}
+.chip-level {
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+.chip-level.is-off {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+.chip-level.level-error {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+}
+.chip-level.level-warn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 55%, transparent);
+}
+.chip-level.level-info {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* --log-gutter is set per render from the widest line number, so the numbers
+   line up across rows — a per-row max-content track would not. */
+.log-row {
+  display: grid;
+  grid-template-columns: var(--log-gutter, 4ch) 1fr;
+  column-gap: 14px;
+}
+.log-n {
+  color: var(--text-faint);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  user-select: none; /* keep the gutter out of a copied selection */
+}
+.log-t {
+  white-space: pre;
+}
+.code-out.is-wrap .log-t {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.log-row.is-del {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
+}
+.log-row.is-add {
+  color: var(--good);
+  background: color-mix(in srgb, var(--good) 9%, transparent);
+}
+.log-hit {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  border-radius: 2px;
+}
+.log-hit.is-current {
+  background: var(--accent);
+  color: #fff;
+}
+.stats .warn {
+  color: var(--warn);
 }
 
 .chip-add {

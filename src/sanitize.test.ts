@@ -137,6 +137,35 @@ Deno.test("maskLog: handles multiple blocks and nested objects", () => {
   assertEquals(r.stats.maskedValues, 2);
 });
 
+Deno.test("maskLog: a pretty-printed block stays pretty-printed, line for line", () => {
+  const log = [
+    "12:00 INFO body={",
+    '  "customer": {',
+    '    "lastName": "Weber"',
+    "  }",
+    "}",
+    "12:01 INFO done",
+  ].join("\n");
+  const r = runSanitizeLog(log, { keepLast: 0, maskAll: true });
+  assertEquals(r.text.split("\n").length, log.split("\n").length);
+  assertEquals(r.text.split("\n")[2], '    "lastName": "*****"');
+  // Preserving the line count is what keeps the Diff view's positional pairing
+  // honest — collapsing the block would mis-pair every line after it.
+  assertEquals(r.text.split("\n")[5], "12:01 INFO done");
+});
+
+Deno.test("maskLog: a multi-line block is re-emitted at its own indent", () => {
+  const log = ["    body={", '      "a": "secret"', "    }"].join("\n");
+  const r = runSanitizeLog(log, { keepLast: 0, maskAll: true });
+  assertEquals(r.text, ["    body={", '      "a": "******"', "    }"].join("\n"));
+});
+
+Deno.test("maskLog: a single-line block is still emitted on a single line", () => {
+  const log = '12:00 INFO body={"a":"secret"}\n12:01 INFO done';
+  const r = runSanitizeLog(log, { keepLast: 0, maskAll: true });
+  assertEquals(r.text, '12:00 INFO body={"a":"******"}\n12:01 INFO done');
+});
+
 Deno.test("maskLog: field-list mode masks only matching keys inside blocks", () => {
   const line = 'msg={"email":"a@b.com","name":"Jara"}';
   const r = runSanitizeLog(line, { keepLast: 0, maskAll: false, fields: "email" });

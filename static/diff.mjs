@@ -1,7 +1,10 @@
-// meso.utilities — line-pair diff for the Sanitize JSON tool. Masking never
-// adds or removes lines (values change in place), so pairing line N with
-// line N is an exact diff of what was hidden. Pure logic (no DOM), imported
-// by the browser UI and the parity tests.
+// meso.utilities — line-pair diff for the Sanitize JSON tool. Masking normally
+// changes values in place, so pairing line N with line N is an exact diff of
+// what was hidden. Log input can break that: a JSON block whose source packed
+// several keys onto one line comes back expanded, and every later line then
+// mis-pairs. Callers guard with `linesAligned` (static/logview.mjs) rather than
+// trusting the flags blindly. Pure logic (no DOM), imported by the browser UI
+// and the parity tests.
 
 /**
  * Pair the lines of two texts positionally. Returns one row per line:

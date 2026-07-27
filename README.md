@@ -71,7 +71,10 @@ Slack modal masked it.
 Switch to **Log file** mode to sanitize a whole log. Attach a `.log`/`.txt` file (or paste it) and
 the tool masks the structured payloads it finds, in three forms:
 
-- **JSON blocks** — `… request={"logonId":"L006344"}` → `… request={"logonId":"*******"}`.
+- **JSON blocks** — `… request={"logonId":"L006344"}` → `… request={"logonId":"*******"}`. A block
+  that was pretty-printed across several lines comes back pretty-printed, not collapsed onto one
+  line — which also keeps the log's line count intact, so the Diff view keeps pairing line N with
+  line N.
 - **Java `toString` object dumps** — `class Req { id: a08…; tenantId: f34… }` — each `field: value`
   is masked (structure openers and `null` are left alone).
 - **Java maps** — `{application=baloise-id, client=172.31.138.81, …}` — each `key=value` is masked.
@@ -81,6 +84,30 @@ turn off to mask only the field names you list) and **Redact IDs** (default off)
 enabled — additionally masks values by shape (UUIDs, IPv4 addresses, emails and IBANs) anywhere in
 the log, even outside a structured block. It's opt-in because it will also mask loose identifiers in
 plain log lines (e.g. `dossierId=<uuid>`), which you often want to keep for debugging.
+
+### Reading the result
+
+A masked log is still a log — thousands of lines, with the handful you care about buried in the
+middle. The result panel carries four reading aids, all of them **view-only**: Copy and Download
+always hand over the whole masked log, no matter what is filtered out on screen.
+
+- **Line numbers** down a gutter, so you can point someone at a line. The gutter is excluded from a
+  copied selection.
+- **Find** highlights every occurrence and steps through them with ↑/↓ (or Enter / Shift+Enter),
+  showing `3 of 17`. Searching never hides a line — the context around a hit stays put.
+- **Level chips** (ERROR, WARN, INFO, DEBUG, TRACE) filter by severity, and only appear for the
+  levels the log actually uses. A line that declares no level inherits the one above it, so
+  filtering to ERROR keeps the stack trace and the object dump under the error, not just its header.
+- **Only changed** collapses to the lines masking altered, and **Wrap** soft-wraps long lines with a
+  hanging indent instead of scrolling sideways.
+
+With **Diff** on, the same numbering and filters apply to the before/after pairs.
+
+Both change-flag features (Diff and Only changed) compare line N against line N. Masking preserves
+the line count for ordinary logs, but a JSON block whose source packed several keys onto one line —
+or held an inline array — is re-emitted expanded, and the pairing stops meaning anything. When that
+happens the two controls are disabled with a note, rather than flagging most of the log as changed.
+Line numbers, level filtering and Find are unaffected: they only read the masked text.
 
 ## How decoding works
 
@@ -438,6 +465,7 @@ src/
   handoff.test.ts     cross-tool handoff tests (import the module from static/)
   palette.test.ts     command-palette filtering tests (import the module from static/)
   diff.test.ts        diff-view line-pairing tests (import the module from static/)
+  logview.test.ts     log-view numbering/level/search tests (import the module from static/)
   suggest.test.ts     sensitive-field suggestion tests (import the module from static/)
   encode.test.ts      encode-chain parity tests (roundtrip through decode.mjs)
   jwt.test.ts         JWT verification tests (import the module from static/decode/)
@@ -464,6 +492,7 @@ static/
   tour.mjs            tour content + step logic (imported by the browser and the tests)
   sanitize.mjs        masking logic (imported by the browser and the tests)
   diff.mjs            line-pair diff for the sanitizer's Diff view (browser and tests)
+  logview.mjs         masked-log reading aids: numbering, levels, search (browser and tests)
   suggest.mjs         sensitive-field suggestions (browser and tests)
   app.js              sanitizer UI logic (imports ./sanitize.mjs)
   sanitize/

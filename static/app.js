@@ -2,6 +2,7 @@
 // Imports the SAME masking module the server uses, so results are identical and
 // the payload never has to leave the page.
 import { parseFields, runSanitize, runSanitizeLog } from "./sanitize.mjs";
+import { buildRows, filterRows, linesAligned, presentLevels, rowHtml } from "./logview.mjs";
 import { changedCount, pairLineDiff } from "./diff.mjs";
 import { suggestSensitiveFields } from "./suggest.mjs";
 import { sendHandoff, takeHandoff } from "./handoff.mjs";
@@ -36,6 +37,14 @@ const els = {
   logfile: /** @type {HTMLInputElement} */ ($("logfile")),
   logfileName: $("logfile-name"),
   sendDecode: $("send-decode"),
+  outputBox: $("output-box"),
+  logSearch: /** @type {HTMLInputElement} */ ($("log-search")),
+  logSearchCount: $("log-search-count"),
+  logPrev: $("log-prev"),
+  logNext: $("log-next"),
+  logLevels: $("log-levels"),
+  logChanged: /** @type {HTMLInputElement} */ ($("log-changed")),
+  logWrap: /** @type {HTMLInputElement} */ ($("log-wrap")),
 };
 
 /** "json" or "log". */
@@ -91,21 +100,164 @@ let lastOutput = "";
 
 /* --------------------------- rendering helpers --------------------------- */
 
+const showToast = makeToast(els.toast);
+
+/* ------------------------------- log view ------------------------------- */
+
+/** Levels the reader has switched off. Empty means every level shows. */
+const levelsOff = new Set();
+/** Position of the highlighted search hit, and how many there are. */
+let hitIndex = 0;
+let hitCount = 0;
+
 /**
- * Highlight a masked log: escape everything, then colour the masked values
- * (quoted strings that start with one or more "*") so the redactions stand out
- * against the untouched log text.
+ * Rows rendered at once. A log can run to hundreds of thousands of lines, and
+ * each row is several DOM nodes; past this the view is truncated and the stats
+ * row says so, rather than locking up the tab.
  */
-function highlightLog(text) {
-  // Highlight any run of 2+ asterisks plus any revealed tail (quoted or bare),
-  // so redactions stand out against the untouched log text.
-  return escapeHtml(text).replace(
-    /\*{2,}[\w.@:+/-]*/g,
-    (match) => `<span class="j-masked">${match}</span>`,
-  );
+const MAX_RENDER_ROWS = 4000;
+
+/** The levels the chip row is currently built for, so it can be reused. */
+let chipLevels = "";
+
+/**
+ * Level filter chips for the levels the current log actually uses. Toggling one
+ * recomputes, which lands back here — so the chips are only rebuilt when the
+ * set of levels itself changes. Re-creating them every time would drop keyboard
+ * focus the moment a chip was activated.
+ */
+function renderLevelChips(present) {
+  // One level is not a filter — nothing to narrow down to.
+  els.logLevels.hidden = present.length < 2;
+
+  if (present.join() === chipLevels) {
+    for (const chip of els.logLevels.children) {
+      const on = !levelsOff.has(chip.textContent ?? "");
+      chip.classList.toggle("is-off", !on);
+      chip.setAttribute("aria-pressed", String(on));
+    }
+    return;
+  }
+
+  chipLevels = present.join();
+  els.logLevels.innerHTML = "";
+  for (const level of present) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = `chip chip-level level-${level.toLowerCase()}`;
+    chip.textContent = level;
+    const on = !levelsOff.has(level);
+    chip.classList.toggle("is-off", !on);
+    chip.setAttribute("aria-pressed", String(on));
+    chip.addEventListener("click", () => {
+      if (levelsOff.has(level)) levelsOff.delete(level);
+      else levelsOff.add(level);
+      compute();
+    });
+    els.logLevels.appendChild(chip);
+  }
 }
 
-const showToast = makeToast(els.toast);
+/** One line of the log view: a number gutter plus the line itself. */
+function rowMarkup(row, diff) {
+  const num = `<span class="log-n" aria-hidden="true">${row.n}</span>`;
+  const text = `<span class="log-t">${rowHtml(row.text, row.hits)}</span>`;
+  if (!(diff && row.changed)) return `<span class="log-row">${num}${text}</span>`;
+  return `<span class="log-row is-del">${num}<span class="log-t">- ${
+    escapeHtml(row.before)
+  }</span></span>` +
+    `<span class="log-row is-add">${num}<span class="log-t">+ ${
+      rowHtml(row.text, row.hits)
+    }</span></span>`;
+}
+
+/** Move the highlighted search hit and scroll it into view within the output. */
+function markCurrentHit(scroll) {
+  els.output.querySelector(".is-current")?.classList.remove("is-current");
+  els.logSearchCount.textContent = els.logSearch.value === ""
+    ? ""
+    : hitCount === 0
+    ? "no matches"
+    : `${hitIndex + 1} of ${hitCount}`;
+  if (hitCount === 0) return;
+  const hit = els.output.querySelector(`[data-hit="${hitIndex}"]`);
+  if (!hit) return; // beyond the render cap
+  hit.classList.add("is-current");
+  // "nearest" scrolls the <pre> minimally instead of jumping the whole page.
+  if (scroll) hit.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+
+function stepHit(delta) {
+  if (hitCount === 0) return;
+  hitIndex = (hitIndex + delta + hitCount) % hitCount;
+  markCurrentHit(true);
+}
+
+/**
+ * Render the masked log with its reading aids applied. Purely presentational:
+ * `lastOutput` (what Copy and Download use) is the whole masked log either way.
+ * @returns {string} the stats fragment describing what was filtered out
+ */
+function renderLogView(beforeText, afterText) {
+  const rows = buildRows(beforeText, afterText);
+  const present = presentLevels(rows);
+  renderLevelChips(present);
+
+  // Both change-flag features read line N against line N. If masking did not
+  // preserve the line count, that pairing is meaningless — turn them off and
+  // say so rather than flag half the log as changed.
+  const aligned = linesAligned(beforeText, afterText);
+  els.logChanged.disabled = !aligned;
+  els.diff.disabled = !aligned;
+
+  const enabled = present.filter((level) => !levelsOff.has(level));
+  const filtering = enabled.length !== present.length;
+  // An empty list means "no filter" to filterRows, so every-level-off is
+  // handled here rather than silently showing everything.
+  const view = filtering && enabled.length === 0
+    ? { rows: [], shown: 0, total: rows.length, matches: 0 }
+    : filterRows(rows, {
+      levels: filtering ? enabled : null,
+      onlyChanged: aligned && els.logChanged.checked,
+      query: els.logSearch.value,
+    });
+
+  hitCount = view.matches;
+  if (hitIndex >= hitCount) hitIndex = 0;
+
+  const capped = view.rows.slice(0, MAX_RENDER_ROWS);
+  // Size the gutter from the widest number on screen; a per-row max-content
+  // track would give every row its own width and stagger the numbers.
+  const widest = capped.length ? String(capped[capped.length - 1].n).length : 1;
+  els.outputBox.style.setProperty("--log-gutter", `${widest}ch`);
+  const diff = aligned && els.diff.checked;
+  els.output.innerHTML = capped.length === 0
+    ? `<span class="j-null">// no lines match the current filters</span>`
+    : capped.map((row) => rowMarkup(row, diff)).join("");
+  markCurrentHit(false);
+
+  const changed = rows.filter((row) => row.changed).length;
+  return (view.shown !== view.total
+    ? `<span><b>${view.shown}</b> of <b>${view.total}</b> lines shown</span>`
+    : "") +
+    (diff ? `<span><b>${changed}</b> line${changed === 1 ? "" : "s"} changed</span>` : "") +
+    (aligned
+      ? ""
+      : `<span class="warn">masking re-flowed this log, so Diff and Only changed are off</span>`) +
+    (view.shown > MAX_RENDER_ROWS
+      ? `<span class="warn">view truncated to the first ${MAX_RENDER_ROWS} lines</span>`
+      : "");
+}
+
+/** Blank the log view's own state — used when the log input is emptied. */
+function resetLogView() {
+  hitIndex = 0;
+  hitCount = 0;
+  els.logLevels.hidden = true;
+  els.logLevels.innerHTML = "";
+  chipLevels = "";
+  els.logSearchCount.textContent = "";
+}
 
 function renderChips(fields, matchedLower) {
   els.chips.innerHTML = "";
@@ -175,6 +327,11 @@ function renderSuggestions(suggestions) {
 /* ------------------------------ core cycle ------------------------------ */
 
 function compute() {
+  // Only the log path disables these (see renderLogView), so clear the flags
+  // before every run rather than leaving a stale one behind on a mode switch.
+  els.diff.disabled = false;
+  els.logChanged.disabled = false;
+
   if (mode === "log") {
     computeLog();
     return;
@@ -247,6 +404,7 @@ function computeLog() {
     els.output.innerHTML = `<span class="j-null">// attach or paste a log to begin</span>`;
     els.stats.innerHTML = "";
     lastOutput = "";
+    resetLogView();
     return;
   }
 
@@ -262,15 +420,16 @@ function computeLog() {
   const total = maskedValues + patternHits;
   els.inputStatus.textContent = total ? `${total} masked` : "nothing to mask";
   els.inputStatus.className = total ? "status ok" : "status";
+
+  // The view renders first: its stats depend on what the filters left visible.
+  const viewStats = renderLogView(text, result.text);
   els.stats.innerHTML =
     `<span>Masked <b>${maskedValues}</b> value${maskedValues === 1 ? "" : "s"}</span>` +
     (blocks ? `<span><b>${blocks}</b> block${blocks === 1 ? "" : "s"}</span>` : "") +
     (patternHits
       ? `<span><b>${patternHits}</b> ID${patternHits === 1 ? "" : "s"} redacted</span>`
-      : "");
-
-  if (els.diff.checked) renderDiff(text, result.text);
-  else els.output.innerHTML = highlightLog(result.text);
+      : "") +
+    viewStats;
 }
 
 /** Switch between JSON and Log-file modes. */
@@ -414,6 +573,25 @@ els.maskAll.addEventListener("change", () => {
 });
 els.redact.addEventListener("change", compute);
 
+// Log view. Every one of these is view-only — Copy and Download stay whole.
+els.logSearch.addEventListener("input", () => {
+  hitIndex = 0;
+  compute();
+  markCurrentHit(true);
+});
+els.logSearch.addEventListener("keydown", (e) => {
+  const key = /** @type {KeyboardEvent} */ (e);
+  if (key.key !== "Enter") return;
+  key.preventDefault();
+  stepHit(key.shiftKey ? -1 : 1);
+});
+els.logPrev.addEventListener("click", () => stepHit(-1));
+els.logNext.addEventListener("click", () => stepHit(1));
+els.logChanged.addEventListener("change", compute);
+els.logWrap.addEventListener("change", () => {
+  els.outputBox.classList.toggle("is-wrap", els.logWrap.checked);
+});
+
 // Attaching a file via the picker reads it client-side and switches to Log mode.
 els.logfile.addEventListener("change", async () => {
   const file = els.logfile.files && els.logfile.files[0];
@@ -471,6 +649,38 @@ registerCommands([
     },
   },
   { icon: "✨", title: "Load example", hint: "action", run: loadExample },
+  {
+    icon: "🔎",
+    title: "Find in the masked log",
+    hint: "log",
+    keywords: ["search", "find", "log", "highlight"],
+    run: () => {
+      if (mode !== "log") setMode("log");
+      els.logSearch.focus();
+      els.logSearch.select();
+    },
+  },
+  {
+    icon: "🎚️",
+    title: "Toggle only-changed lines",
+    hint: "log",
+    keywords: ["filter", "changed", "masked", "log"],
+    run: () => {
+      if (mode !== "log") setMode("log");
+      els.logChanged.checked = !els.logChanged.checked;
+      compute();
+    },
+  },
+  {
+    icon: "↩️",
+    title: "Toggle line wrap",
+    hint: "log",
+    keywords: ["wrap", "soft", "lines", "log"],
+    run: () => {
+      els.logWrap.checked = !els.logWrap.checked;
+      els.outputBox.classList.toggle("is-wrap", els.logWrap.checked);
+    },
+  },
   {
     icon: TOOL_ICONS.decode,
     title: "Send result to Decode Anything",
