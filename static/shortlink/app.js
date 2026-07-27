@@ -812,14 +812,13 @@ function renderFrequent(links, filtering, collapsed) {
   chevron.setAttribute("aria-hidden", "true");
   chevron.textContent = isCollapsed ? "▸" : "▾";
   const label = document.createElement("span");
+  label.className = "sl-frequent-title";
   label.textContent = "★ Frequently used";
-  head.append(chevron, label);
-  if (top.length > 0) {
-    const count = document.createElement("span");
-    count.className = "sl-count";
-    count.textContent = String(top.length);
-    head.appendChild(count);
-  }
+  head.appendChild(label);
+  // The chevron goes last, at the panel's right edge — this is a panel heading,
+  // not a directory row, and the other tools' foldable headings read that way.
+  // The group rows keep theirs on the left, where it marks the tree.
+  head.appendChild(chevron);
   head.addEventListener("click", () => {
     const next = loadCollapsed();
     if (next.has(FREQUENT_COLLAPSE_KEY)) next.delete(FREQUENT_COLLAPSE_KEY);

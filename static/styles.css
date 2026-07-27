@@ -3650,6 +3650,16 @@ button.out:focus-visible::after {
 .sl-group.sl-frequent-head {
   color: var(--warn);
 }
+/* The title takes the row, so the chevron sits at the panel's right edge — and
+   it takes the heading's own colour rather than the directory rows' faint grey,
+   so the row reads as one label. */
+.sl-frequent-head .sl-frequent-title {
+  flex: 1;
+  min-width: 0;
+}
+.sl-frequent-head .sl-chevron {
+  color: inherit;
+}
 /* Frequently used panel: compact speed-dial rows tuned for the narrow column —
    the whole row is a link, a host-hued dot and the name identify it, and the
    full name + URL live in the row's tooltip (no room for the URL inline). */
