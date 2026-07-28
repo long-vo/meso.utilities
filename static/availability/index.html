@@ -90,6 +90,10 @@
           <input id="file-input" type="file" accept=".xlsx,.csv,.json,application/json" hidden />
           <p id="import-status" class="hint" aria-live="polite">Nothing imported yet.</p>
           <p id="import-updated" class="hint" hidden></p>
+          <!-- Only while nothing is imported: a made-up roster to try the tool
+               with. It goes through the same adopt path as a real workbook. -->
+          <button id="demo-load" class="btn btn-ghost btn-small" type="button"
+            title="Load a made-up roster to explore the tool — a real workbook replaces it any time">Try with sample data</button>
           <!-- Inside this field, not beside it: pasting a quarter is another way
                to fill the workbook, so folding the field takes it along. -->
           <details id="csv-details" class="field">
@@ -138,6 +142,11 @@
             <button id="nav-today" class="btn btn-small" type="button">Today</button>
             <button id="nav-next" class="btn btn-ghost btn-small" type="button" aria-label="Next period">Next ›</button>
           </div>
+          <!-- Hue alone fails colour-blind readers (WCAG 1.4.1) — this overlays
+               a per-kind pattern on the day colours. Persisted with the model. -->
+          <label class="pattern-row"><input id="pattern-toggle" type="checkbox" />
+            Patterns on day colours
+            <span class="hint-inline">for colour-blind readers</span></label>
         </div>
       </div>
 
@@ -207,7 +216,7 @@
           title="Copy a link carrying what the current filter shows. The data travels in the URL fragment (never sent to any server) — but anyone with the link can read these names and absences.">Share link</button>
         <button id="import-json" class="btn btn-ghost btn-small" type="button">Import data</button>
         <input id="json-input" type="file" accept=".json,application/json" hidden />
-        <button id="clear-data" class="btn btn-ghost btn-small" type="button">Clear</button>
+        <button id="clear-data" class="btn btn-ghost btn-small btn-danger" type="button">Clear</button>
       </div>
     </section>
     <!-- Re-fold the fields the reader folded last time, before first paint. The
@@ -238,7 +247,7 @@
             aria-label="Report on this day" title="Report on any day — the heatmap's day headers and the week index below pick one too" />
           <button id="day-reset" class="btn btn-ghost btn-small needs-model" type="button" hidden
             title="Back to today">Today</button>
-          <span id="strip-status" class="status"></span>
+          <span id="strip-status" class="status" aria-live="polite"></span>
           <button id="copy-strip" class="btn btn-small needs-model" type="button"
             title="Copy a plain-text summary for standup or Slack">📋 Copy summary</button>
         </div>
@@ -250,9 +259,17 @@
       <div class="panel-head">
         <h2>Heatmap</h2>
         <div class="result-tools">
-          <span id="sel-label" class="status"></span>
-          <button id="send-leave" class="btn btn-small" type="button" hidden
-            title="Open Leave Request with the picked person and dates filled in"><span
+          <!-- Announced: a keyboard or SR user picking a run otherwise hears
+               nothing change. -->
+          <span id="sel-label" class="status" aria-live="polite"></span>
+          <button id="sel-clear" class="btn btn-ghost btn-small" type="button" hidden
+            title="Clear the picked days (Esc does too)">✕ Clear pick</button>
+          <!-- Present (but disabled) as soon as there is a model: a button that
+               only exists once you've discovered the selection is a button
+               nobody discovers the selection from — and its appearing used to
+               shift the whole panel head mid-drag. -->
+          <button id="send-leave" class="btn btn-small needs-model" type="button" disabled
+            title="Click a cell or drag along a row to pick days first"><span
               class="crumb-icon card--green" aria-hidden="true"><svg width="14" height="14"
                 viewBox="0 0 16 16"><circle class="i1" cx="8" cy="13" r="1.6" /><path class="is1"
                   d="M8 13C7 8 9.5 4.5 13.5 4M8 13c1-5-1.5-8.5-5-9.5M8 13c0-6 3-6.5 2.5-11"
@@ -260,11 +277,20 @@
           <span id="range-label" class="status"></span>
         </div>
       </div>
+      <!-- The one place the selection flow is spelled out on screen — the
+           legend's keyboard hint repeats it for grid users. -->
+      <p class="hint hm-hint needs-model">Click a cell — or drag along a row — to pick days for a
+        leave request; Shift extends the run, Esc clears it. Click a name for that person's whole
+        year.</p>
       <div id="heatmap-wrap" class="hm-wrap">
         <div id="heatmap" class="hm" role="grid" aria-label="Availability heatmap"
           aria-rowcount="0" aria-colcount="0"></div>
       </div>
-      <h3 class="cap-title needs-model">Team capacity <span class="hint-inline">available person-days per week, over the week's maximum</span></h3>
+      <div class="cap-head needs-model">
+        <h3 class="cap-title">Team capacity <span class="hint-inline">available person-days per week, over the week's maximum</span></h3>
+        <button id="copy-capacity" class="btn btn-ghost btn-small" type="button"
+          title="Copy the table as plain text for standup or Slack">📋 Copy table</button>
+      </div>
       <p id="cap-warn" class="cap-warn needs-model" role="status" hidden></p>
       <div id="capacity" class="cap-wrap needs-model"></div>
       <h3 id="bal-title" class="cap-title" hidden>Leave balances <span class="hint-inline">the
@@ -292,7 +318,8 @@
           <div id="legend" class="legend"></div>
           <p class="hint">Tab into the grid, then move with the arrow keys (Page&nbsp;Up/Down by ten
             rows, Ctrl&nbsp;+&nbsp;Home/End to the corners). Press Enter on a day header — or click
-            it — to report on that day.</p>
+            it — to report on that day. On a person's row, Enter picks days for a leave request,
+            Shift&nbsp;+&nbsp;Enter extends the run and Escape clears it.</p>
         </div>
       </section>
 
@@ -388,6 +415,21 @@
       <ul id="year-ranges" class="year-ranges"></ul>
       <div class="btn-row modal-actions">
         <button value="close" class="btn btn-ghost btn-small" type="submit">Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- The house confirm, replacing native confirm() for the two destructive
+       actions (workbook replace, Clear): confirm() blocks the renderer, takes
+       no styling, and — as the share banner learned — can only ever be
+       dismissed by a human hand. -->
+  <dialog id="confirm-dialog" class="modal" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-text" class="hint"></p>
+      <div class="btn-row modal-actions">
+        <button id="confirm-ok" value="ok" class="btn btn-small" type="submit"></button>
+        <button value="cancel" class="btn btn-ghost btn-small" type="submit">Cancel</button>
       </div>
     </form>
   </dialog>

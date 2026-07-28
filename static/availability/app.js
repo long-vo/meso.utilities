@@ -11,6 +11,9 @@ import {
   applyLocationHolidays,
   balanceTotals,
   capacityGrid,
+  capacityText,
+  capacityTint,
+  capacityTotals,
   clampAnchor,
   codeInfo,
   dayCounts,
@@ -56,6 +59,7 @@ import {
 // vocabulary); importing it keeps the dialog's marks byte-identical to the ones
 // Leave's own "save to grid" queues.
 import { availabilityUpdate } from "../leave/leave.mjs";
+import { DEMO_CH_TEAM, demoModel } from "./demo.mjs";
 import { drainUpdates, INBOX_KEY, sendHandoff } from "../handoff.mjs";
 import { registerCommands, TOOL_ICONS } from "../palette.js";
 import { parseHidden, serializeHidden } from "../sidebar.mjs";
@@ -67,6 +71,8 @@ const els = {
   fileInput: /** @type {HTMLInputElement} */ ($("file-input")),
   importStatus: $("import-status"),
   importUpdated: $("import-updated"),
+  demoLoad: $("demo-load"),
+  patternToggle: /** @type {HTMLInputElement} */ ($("pattern-toggle")),
   csvText: /** @type {HTMLTextAreaElement} */ ($("csv-text")),
   csvQuarter: /** @type {HTMLSelectElement} */ ($("csv-quarter")),
   csvImport: $("csv-import"),
@@ -111,6 +117,7 @@ const els = {
   stripToggle: $("strip-toggle"),
   rangeLabel: $("range-label"),
   selLabel: $("sel-label"),
+  selClear: $("sel-clear"),
   sendLeave: /** @type {HTMLButtonElement} */ ($("send-leave")),
   leaveDialog: /** @type {HTMLDialogElement} */ ($("leave-dialog")),
   leaveDialogDays: $("leave-dialog-days"),
@@ -127,7 +134,9 @@ const els = {
   yearMonths: $("year-months"),
   yearRanges: $("year-ranges"),
   heatmap: $("heatmap"),
+  heatmapWrap: $("heatmap-wrap"),
   capacity: $("capacity"),
+  copyCapacity: $("copy-capacity"),
   capWarn: $("cap-warn"),
   balTitle: $("bal-title"),
   balances: $("balances"),
@@ -137,6 +146,10 @@ const els = {
   shareOfferText: $("share-offer-text"),
   shareOfferLoad: $("share-offer-load"),
   shareOfferDiscard: $("share-offer-discard"),
+  confirmDialog: /** @type {HTMLDialogElement} */ ($("confirm-dialog")),
+  confirmTitle: $("confirm-title"),
+  confirmText: $("confirm-text"),
+  confirmOk: $("confirm-ok"),
 };
 const toast = makeToast($("toast"));
 
@@ -194,6 +207,7 @@ function el(tag, className, text) {
  *   focus: { row: number, col: number } | null,
  *   sel: { name: string, from: string, to: string, anchor?: string, code?: string } | null,
  *   lowThreshold: number,
+ *   patterns: boolean,
  * }}
  */
 const state = {
@@ -220,6 +234,9 @@ const state = {
   // counts as thin is a team's own call, so it is a control, not a constant;
   // 0 turns the flagging off.
   lowThreshold: 60,
+  // Per-kind patterns over the day hues, for colour-blind readers. Persisted:
+  // whoever needs them needs them every visit.
+  patterns: false,
 };
 
 /**
@@ -315,13 +332,18 @@ function paintSelection() {
   }
   selSummary = leavableDays(picked);
   const blocked = selSummary.reason;
-  // The pick still paints when it can't be requested — seeing what you grabbed
-  // is how you know what to fix, which a vanishing button never says.
-  els.sendLeave.hidden = sel === null;
-  els.sendLeave.disabled = blocked !== null;
-  els.sendLeave.title = blocked === null
+  // The button stays on screen whatever the pick — a control that only appears
+  // once the selection has been discovered is a control nobody discovers the
+  // selection from. Disabled states carry the reason in their title, and the
+  // pick still paints when it can't be requested: seeing what you grabbed is
+  // how you know what to fix, which a vanishing button never says.
+  els.sendLeave.disabled = sel === null || blocked !== null;
+  els.sendLeave.title = sel === null
+    ? "Click a cell or drag along a row to pick days first"
+    : blocked === null
     ? "Open Leave Request with the picked person and dates filled in"
     : `Nothing to request — the pick is ${blocked} only`;
+  els.selClear.hidden = sel === null;
   // Days the workbook never covered are still real dates to request, so they
   // are a note rather than a refusal — but nothing can be written to them, and
   // saying so in the label beats letting the dialog's tick do nothing.
@@ -482,6 +504,45 @@ function markOnGrid(update) {
     location.href = "../leave/";
   });
 
+/* ------------------------------ house confirm ------------------------------ */
+
+/** The pending confirm's resolver, if one is open. One dialog, one question. */
+/** @type {((ok: boolean) => void) | null} */
+let confirmResolve = null;
+
+// Resolved on submit rather than on close, like the leave dialog above: submit
+// fires synchronously and names its button, while close is fired from a queued
+// task that at least one embedded Chromium drops entirely.
+/** @type {HTMLFormElement} */ (els.confirmDialog.querySelector("form"))
+  .addEventListener("submit", (event) => {
+    const ok = /** @type {HTMLButtonElement | null} */ (event.submitter)?.value === "ok";
+    confirmResolve?.(ok);
+    confirmResolve = null;
+  });
+// Escape closes without submitting; the question was declined, not abandoned.
+els.confirmDialog.addEventListener("cancel", () => {
+  confirmResolve?.(false);
+  confirmResolve = null;
+});
+
+/**
+ * The house replacement for native `confirm()`, which blocks the renderer,
+ * takes no styling and cannot mark its destructive button as such.
+ *
+ * @param {{ title: string, text: string, action: string, danger?: boolean }} opts
+ * @returns {Promise<boolean>}
+ */
+function confirmDialog(opts) {
+  els.confirmTitle.textContent = opts.title;
+  els.confirmText.textContent = opts.text;
+  els.confirmOk.textContent = opts.action;
+  els.confirmOk.classList.toggle("btn-danger", opts.danger === true);
+  els.confirmDialog.showModal();
+  return new Promise((resolve) => {
+    confirmResolve = resolve;
+  });
+}
+
 /** Hand the tab stop and DOM focus to `state.focus`, taking both off `from`. */
 function moveGridFocus(from) {
   const previous = gridCell(from.row, from.col);
@@ -592,6 +653,7 @@ function loadState() {
     if (Number.isInteger(saved.lowThreshold) && saved.lowThreshold >= 0) {
       state.lowThreshold = Math.min(100, saved.lowThreshold);
     }
+    if (saved.patterns === true) state.patterns = true;
     // The anchor is not persisted, so a reload starts it at today — clamp it the
     // same way an import does, or a stored other-year workbook reopens on an
     // empty month.
@@ -603,7 +665,11 @@ function loadState() {
   }
 }
 
-function saveState() {
+let saveTimer = 0;
+
+/** Write `state` to localStorage now — the debounced {@link saveState} lands here. */
+function saveStateNow() {
+  saveTimer = 0;
   try {
     localStorage.setItem(
       STORE_KEY,
@@ -614,6 +680,7 @@ function saveState() {
         teams: state.teams,
         members: state.members,
         lowThreshold: state.lowThreshold,
+        patterns: state.patterns,
         history: state.history,
         updatedAt: state.updatedAt,
         view: { mode: state.view.mode },
@@ -623,6 +690,24 @@ function saveState() {
   } catch {
     toast("Could not save to this browser's storage");
   }
+}
+
+/**
+ * Schedule a save. Rendering ends here, and a run of chip clicks or month
+ * steps would otherwise serialise the whole model — people × days — on every
+ * one of them. Trailing debounce; the `pagehide` listener in the boot section
+ * flushes it, so navigating to Leave (or closing the tab) can't lose the write.
+ */
+function saveState() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveStateNow, 250);
+}
+
+/** Flush a pending save immediately — the page may be going away. */
+function flushSave() {
+  if (saveTimer === 0) return;
+  clearTimeout(saveTimer);
+  saveStateNow();
 }
 
 /** The model as rendered: location tags applied, CH holidays overlaid. */
@@ -703,6 +788,9 @@ function renderAll() {
 
 function renderImportStatus() {
   els.year.value = String(state.year);
+  // The sample-data offer belongs to the empty state only: once anything real
+  // (or the sample itself) is loaded, the drop zone is the way to change data.
+  els.demoLoad.hidden = state.model !== null;
   if (state.model === null) {
     els.importStatus.textContent = "Nothing imported yet.";
     els.importUpdated.hidden = true;
@@ -1072,6 +1160,37 @@ function renderStrip(model) {
   }
 }
 
+/** The last period + picked day the grid auto-scrolled for. A re-render that
+ *  changes neither (a filter keystroke, a chip toggle) must not yank a
+ *  manually scrolled grid back to today. */
+let scrolledTo = "";
+
+/**
+ * Bring the reported-on day's column — or failing that today's — into the
+ * wrapper's view when the period or pick changes. Without this, "Today" on a
+ * quarter can land the right answer three screens off to the right, and
+ * nothing on screen says so.
+ */
+function scrollDayIntoView() {
+  const key = `${state.view.mode}|${state.view.anchor}|${state.pickedDay ?? ""}`;
+  if (key === scrolledTo) return;
+  scrolledTo = key;
+  const target = /** @type {HTMLElement | null} */ (
+    els.heatmap.querySelector(".hm-head.is-picked") ??
+      els.heatmap.querySelector(".hm-head.is-today")
+  );
+  if (target === null) return;
+  const wrap = els.heatmapWrap;
+  // The sticky name column covers the wrapper's left edge, so "visible" starts
+  // past it, not at zero.
+  const nameW = els.heatmap.querySelector(".hm-corner")?.getBoundingClientRect().width ?? 0;
+  const left = target.offsetLeft;
+  const inView = left >= wrap.scrollLeft + nameW &&
+    left + target.offsetWidth <= wrap.scrollLeft + wrap.clientWidth;
+  if (inView) return;
+  wrap.scrollLeft = Math.max(0, left - nameW - (wrap.clientWidth - nameW - target.offsetWidth) / 2);
+}
+
 function renderHeatmap(model) {
   // Re-rendering replaces every cell, so a keyboard user mid-navigation would
   // lose focus to <body>; only steal it back if they had it to begin with.
@@ -1212,6 +1331,7 @@ function renderHeatmap(model) {
   // repainting onto them (a month step or a filter change re-renders).
   paintSelection();
   if (hadFocus) gridCell(state.focus.row, state.focus.col)?.focus();
+  scrollDayIntoView();
   els.rangeLabel.textContent = `${dates[0]} → ${dates[dates.length - 1]} · ${
     peopleCount(people.length)
   }`;
@@ -1303,13 +1423,67 @@ function renderCapacity(model) {
       if (lowKeys.has(`${row.team.toLowerCase()}|${week.from}`)) {
         td.classList.add("is-low");
         td.title += ` · below the ${state.lowThreshold}% mark`;
+      } else {
+        // Below-full weeks warm up as they approach the threshold, so the
+        // table has a shape before anything crosses the hard line. The flagged
+        // cells keep their own stronger tint — no double paint.
+        const tint = capacityTint(cell.available / cell.possible, threshold);
+        if (tint > 0) {
+          td.classList.add("has-tint");
+          td.style.setProperty("--cap-tint", `${tint}%`);
+        }
       }
       tr.appendChild(td);
     });
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
+
+  // The "Everyone" sum — one team alone would only repeat its own row.
+  if (grid.length > 1) {
+    const totals = capacityTotals(grid, weeks.length);
+    const tfoot = el("tfoot");
+    const totalRow = el("tr");
+    totalRow.append(el("td", "cap-team", "Everyone"), el("td", "", String(totals.members)));
+    weeks.forEach((_week, index) => {
+      const sum = totals.cells[index];
+      if (sum === null) {
+        const td = el("td", "cap-nodata", "–");
+        td.title = "No data imported for this week";
+        totalRow.appendChild(td);
+        return;
+      }
+      const td = el("td");
+      td.append(
+        el("span", "cap-have", trimNumber(sum.available)),
+        el("span", "cap-of", `/${trimNumber(sum.possible)}`),
+      );
+      td.title = `${trimNumber(sum.available)} of ${
+        trimNumber(sum.possible)
+      } person-days available across every visible team`;
+      totalRow.appendChild(td);
+    });
+    tfoot.appendChild(totalRow);
+    table.appendChild(tfoot);
+  }
   els.capacity.appendChild(table);
+}
+
+/** The capacity table as text on the clipboard — the standup artefact. */
+async function copyCapacity() {
+  const model = displayModel();
+  if (model === null) {
+    toast("Import the workbook first");
+    return;
+  }
+  const weeks = weekSlices(visibleRange());
+  const grid = capacityGrid({ ...model, people: visiblePeople(model) }, weeks);
+  try {
+    await navigator.clipboard.writeText(capacityText(grid, weeks));
+    toast("Capacity table copied");
+  } catch {
+    toast("Could not copy — clipboard unavailable");
+  }
 }
 
 /**
@@ -1693,12 +1867,16 @@ function routeFile(file) {
 
 async function importWorkbookFile(file) {
   const loaded = state.model === null ? 0 : state.model.people.length;
-  if (
-    loaded > 0 && !confirm(
-      `Replace the ${loaded} people already loaded with ${file.name}?\n\n` +
-        "A workbook covers the whole year, so it replaces rather than merges.",
-    )
-  ) return;
+  if (loaded > 0) {
+    const ok = await confirmDialog({
+      title: "Replace the imported data?",
+      text: `${file.name} replaces the ${peopleCount(loaded)} already loaded — ` +
+        "a workbook covers the whole year, so it replaces rather than merges.",
+      action: "Replace",
+      danger: true,
+    });
+    if (!ok) return;
+  }
   els.importStatus.textContent = `Parsing ${file.name}…`;
   try {
     const sheets = await readWorkbook(await file.arrayBuffer());
@@ -2020,11 +2198,61 @@ function onDragMove(event) {
 function onDragEnd() {
   document.removeEventListener("pointermove", onDragMove);
 }
+
+/** True while a long-press drag owns the touch. The non-passive `touchmove`
+ *  handler below suppresses scrolling only then — ordinary panning over the
+ *  grid stays the browser's (see the `touch-action` rule in the stylesheet). */
+let touchDragging = false;
+/** How long a touch must hold still before it becomes a drag, in ms. */
+const TOUCH_DRAG_MS = 350;
+els.heatmap.addEventListener("touchmove", (event) => {
+  if (touchDragging) event.preventDefault();
+}, { passive: false });
+
+/**
+ * A touch on a cell: a plain tap picks the one day, holding still for a beat
+ * starts a drag along the row — and moving early is a pan, which the browser
+ * keeps. Mouse users get the immediate drag below; a finger can't be asked to
+ * tell "drag to select" from "drag to scroll" without the hold.
+ */
+function onTouchDown(cell, event) {
+  const startX = event.clientX;
+  const startY = event.clientY;
+  const timer = setTimeout(() => {
+    touchDragging = true;
+    selectCell(cell, false);
+    document.addEventListener("pointermove", onDragMove);
+  }, TOUCH_DRAG_MS);
+  const settle = () => {
+    clearTimeout(timer);
+    document.removeEventListener("pointermove", watchMove);
+    document.removeEventListener("pointerup", onUp);
+    document.removeEventListener("pointercancel", settle);
+    touchDragging = false;
+    onDragEnd();
+  };
+  const watchMove = (e) => {
+    // Moving before the hold completes means a pan — stand down and let it be.
+    if (!touchDragging && Math.hypot(e.clientX - startX, e.clientY - startY) > 8) settle();
+  };
+  const onUp = () => {
+    if (!touchDragging) selectCell(cell, false); // a plain tap picks one day
+    settle();
+  };
+  document.addEventListener("pointermove", watchMove);
+  document.addEventListener("pointerup", onUp);
+  document.addEventListener("pointercancel", settle);
+}
+
 els.heatmap.addEventListener("pointerdown", (event) => {
   const cell = /** @type {HTMLElement | null} */ (
     /** @type {HTMLElement} */ (event.target).closest?.(".hm-cell") ?? null
   );
   if (cell === null || event.button !== 0) return;
+  if (event.pointerType === "touch") {
+    onTouchDown(cell, event); // no preventDefault — panning stays native
+    return;
+  }
   event.preventDefault(); // a drag across cells would otherwise select their text
   selectCell(cell, event.shiftKey);
   // preventDefault took the click's focus with it; the grid's tab stop follows
@@ -2036,6 +2264,49 @@ els.heatmap.addEventListener("pointerdown", (event) => {
   document.addEventListener("pointerup", onDragEnd, { once: true });
 });
 els.sendLeave.addEventListener("click", sendToLeave);
+els.selClear.addEventListener("click", () => setSelection(null));
+els.copyCapacity.addEventListener("click", copyCapacity);
+els.demoLoad.addEventListener("click", () => {
+  const year = new Date().getFullYear();
+  adoptModel(demoModel(year), year, true);
+  // The CH team's tags drive the location badge and the Zürich holiday
+  // overlay — the same path a real import's manual tagging takes.
+  for (const person of state.model?.people ?? []) {
+    if (person.team === DEMO_CH_TEAM) state.tags[person.name] = "CH";
+  }
+  toast(
+    `Loaded ${peopleCount(state.model?.people.length ?? 0)} of sample data — ` +
+      "drop a real workbook any time",
+  );
+  renderAll();
+});
+
+/** Overlay per-kind patterns on the day hues — hue alone fails colour-blind
+ *  readers. One class on <body>; the stylesheet does the rest. */
+function applyPatterns() {
+  document.body.classList.toggle("av-patterns", state.patterns);
+  els.patternToggle.checked = state.patterns;
+}
+els.patternToggle.addEventListener("change", () => {
+  state.patterns = els.patternToggle.checked;
+  applyPatterns();
+  saveState();
+});
+
+// Touch has no hover, and this page explains itself through tooltips — so on
+// coarse pointers a tap surfaces the same text in the toast. Delegated once;
+// mouse users keep their tooltips without hearing everything twice.
+if (matchMedia("(pointer: coarse)").matches) {
+  document.addEventListener("click", (event) => {
+    const holder = /** @type {HTMLElement | null} */ (
+      /** @type {HTMLElement} */ (event.target).closest?.(
+        ".hm-cell[title], .hm-head[title], .cap-table td[title], .cap-table th[title], " +
+          ".cap-warn-badge[title]",
+      ) ?? null
+    );
+    if (holder !== null && holder.title !== "") toast(holder.title);
+  });
+}
 els.historyClear.addEventListener("click", () => {
   if (state.history.length === 0) return;
   // The days themselves stay: this forgets the log, not the leave. Nothing on
@@ -2102,13 +2373,19 @@ els.navToday.addEventListener("click", () => {
   renderAll();
 });
 
+// Debounced: each keystroke otherwise rebuilds the full grid — ~6,600 elements
+// in quarter view — plus two tables, several times per word.
+let nameFilterTimer = 0;
 els.nameFilter.addEventListener("input", () => {
-  state.nameFilter = els.nameFilter.value;
-  els.exportView.hidden = !filterActive();
-  const model = displayModel();
-  renderHeatmap(model);
-  renderCapacity(model);
-  renderBalances(model);
+  clearTimeout(nameFilterTimer);
+  nameFilterTimer = setTimeout(() => {
+    state.nameFilter = els.nameFilter.value;
+    els.exportView.hidden = !filterActive();
+    const model = displayModel();
+    renderHeatmap(model);
+    renderCapacity(model);
+    renderBalances(model);
+  }, 150);
 });
 
 els.bulkVn.addEventListener("click", () => bulkTag("VN"));
@@ -2133,8 +2410,27 @@ els.jsonInput.addEventListener("change", () => {
   if (file) importJsonFile(file);
   els.jsonInput.value = "";
 });
-els.clearData.addEventListener("click", () => {
-  if (!confirm("Forget the imported workbook, tags and filters?")) return;
+els.clearData.addEventListener("click", async () => {
+  const ok = await confirmDialog({
+    title: "Clear this browser's data?",
+    text: "Forgets the imported workbook, location tags, filters and recorded changes. " +
+      "Nothing outside this browser is touched.",
+    action: "Clear",
+    danger: true,
+  });
+  if (!ok) return;
+  // Everything cleared is held for the toast's Undo: the model may exist
+  // nowhere else (a merged CSV, days written by Leave), and one misplaced
+  // click must not be the end of it.
+  const kept = {
+    model: state.model,
+    tags: state.tags,
+    teams: state.teams,
+    members: state.members,
+    nameFilter: state.nameFilter,
+    history: state.history,
+    updatedAt: state.updatedAt,
+  };
   state.model = null;
   state.tags = {};
   state.teams = [];
@@ -2152,6 +2448,15 @@ els.clearData.addEventListener("click", () => {
     /* nothing to clean */
   }
   renderAll();
+  toast("Cleared — nothing outside this browser was touched", {
+    label: "Undo",
+    onAction: () => {
+      Object.assign(state, kept);
+      els.nameFilter.value = kept.nameFilter;
+      renderAll();
+      toast("Put everything back");
+    },
+  });
 });
 
 async function copySummary() {
@@ -2178,6 +2483,13 @@ registerCommands([
     run: () => els.fileInput.click(),
   },
   { icon: "📋", title: "Copy who's-out summary", hint: "action", run: copySummary },
+  {
+    icon: "📋",
+    title: "Copy capacity table",
+    hint: "action",
+    keywords: ["capacity", "team", "week", "standup"],
+    run: copyCapacity,
+  },
   {
     icon: TOOL_ICONS.availability,
     title: "Person year summary…",
@@ -2346,6 +2658,7 @@ for (const button of document.querySelectorAll("#controls .field-collapse")) {
 loadState();
 els.lowThreshold.value = String(state.lowThreshold);
 els.lowThresholdOut.textContent = state.lowThreshold === 0 ? "off" : `${state.lowThreshold}%`;
+applyPatterns();
 renderLegend();
 setViewMode(state.view.mode); // also triggers the first renderAll()
 applyQueuedUpdates();
@@ -2358,6 +2671,9 @@ addEventListener("storage", (event) => {
 addEventListener("pageshow", (event) => {
   if (event.persisted) applyQueuedUpdates();
 });
+// Saves are debounced (see saveState); leaving for Leave — or closing the tab —
+// must not race the timer.
+addEventListener("pagehide", flushSave);
 consumeShareFragment(); // async — re-renders if a #share= link is accepted
 // Clicking a share link while already on this page changes only the hash
 // (same-document navigation, no reload) — handle that arrival too.

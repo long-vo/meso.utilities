@@ -1606,6 +1606,83 @@ export function lowCoverage(grid, weeks, threshold) {
   return low;
 }
 
+/**
+ * Column-wise sums of a {@link capacityGrid} — the "Everyone" row under the
+ * capacity table. A week no team has data for sums to null rather than to 0/0,
+ * for the same reason the cells themselves do: missing data is not a team (or
+ * a company) with no capacity, and the two must never render alike.
+ *
+ * @param {ReturnType<typeof capacityGrid>} grid
+ * @param {number} weekCount how many week columns the table shows
+ * @returns {{ members: number,
+ *   cells: Array<{ available: number, possible: number } | null> }}
+ */
+export function capacityTotals(grid, weekCount) {
+  /** @type {Array<{ available: number, possible: number } | null>} */
+  const cells = Array.from({ length: weekCount }, () => null);
+  let members = 0;
+  for (const row of grid) {
+    members += row.members;
+    for (let index = 0; index < weekCount; index++) {
+      const cell = row.cells[index];
+      if (cell === null || cell === undefined) continue;
+      const sum = cells[index] ?? { available: 0, possible: 0 };
+      sum.available += cell.available;
+      sum.possible += cell.possible;
+      cells[index] = sum;
+    }
+  }
+  return { members, cells };
+}
+
+/**
+ * How warm a capacity cell's background should be, as a whole percent for
+ * `color-mix`: 0 at full capacity, growing as the week thins, capped at 12
+ * before the hard `is-low` flag (whose own stronger tint outranks it) takes
+ * over at `threshold`. The scale is relative to the threshold on purpose — the
+ * tint's job is to show a week *approaching* the line the user drew, wherever
+ * they drew it.
+ *
+ * @param {number} ratio available over possible, 0..1
+ * @param {number} threshold the is-low fraction (0.6 = 60%); 0 = flag off
+ * @returns {number} 0..12
+ */
+export function capacityTint(ratio, threshold) {
+  if (!Number.isFinite(ratio) || ratio >= 1) return 0;
+  const span = Math.max(0.05, 1 - threshold);
+  return Math.round(Math.min(1, Math.max(0, (1 - ratio) / span)) * 12);
+}
+
+/**
+ * The capacity table as plain text for standup or Slack: one line per week,
+ * each team's available/maximum beside it, with an "all" sum when there is
+ * more than one team. Weeks a team has no data for are skipped on that line
+ * rather than printed as zeros — same rule as the table's own "–" cells.
+ *
+ * @param {ReturnType<typeof capacityGrid>} grid
+ * @param {ReturnType<typeof weekSlices>} weeks
+ * @returns {string}
+ */
+export function capacityText(grid, weeks) {
+  const lines = ["Team capacity — available person-days over the week's maximum"];
+  const totals = capacityTotals(grid, weeks.length);
+  weeks.forEach((week, index) => {
+    const parts = [];
+    for (const row of grid) {
+      const cell = row.cells[index];
+      if (cell === null || cell === undefined) continue;
+      const team = row.team === "" ? "(no team)" : row.team;
+      parts.push(`${team} ${trimNumber(cell.available)}/${trimNumber(cell.possible)}`);
+    }
+    const sum = totals.cells[index];
+    if (grid.length > 1 && sum !== null) {
+      parts.push(`all ${trimNumber(sum.available)}/${trimNumber(sum.possible)}`);
+    }
+    lines.push(`${shortDay(week.from)}: ${parts.length === 0 ? "no data" : parts.join(" · ")}`);
+  });
+  return lines.join("\n");
+}
+
 // --- CH overlay ------------------------------------------------------------------
 
 /**

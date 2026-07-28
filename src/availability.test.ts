@@ -17,6 +17,9 @@ import {
   BALANCE_FIELDS,
   balanceTotals,
   capacityGrid,
+  capacityText,
+  capacityTint,
+  capacityTotals,
   clampAnchor,
   codeInfo,
   CODES,
@@ -2473,4 +2476,49 @@ Deno.test("consistency: the history keeps what it says it keeps", () => {
     historyText({ ...entryFor(0), to: "2026-03-13", days: 5 }),
     "Long Vo · 09.03–13.03 · Annual leave (5 days)",
   );
+});
+
+Deno.test("capacityTotals: sums teams column-wise, keeps missing weeks null", () => {
+  const grid = [
+    { team: "Core", members: 2, cells: [{ available: 8, possible: 10 }, null] },
+    { team: "Data", members: 3, cells: [{ available: 12, possible: 15 }, null] },
+  ];
+  const totals = capacityTotals(grid, 2);
+  assertEquals(totals.members, 5);
+  assertEquals(totals.cells, [{ available: 20, possible: 25 }, null]);
+  // A grid row shorter than the week count (a team absent from late weeks)
+  // must read as missing, not as zero.
+  const ragged = capacityTotals([{ team: "Core", members: 2, cells: [] }], 2);
+  assertEquals(ragged.cells, [null, null]);
+});
+
+Deno.test("capacityTint: 0 at full capacity, capped at 12 at the threshold", () => {
+  assertEquals(capacityTint(1, 0.6), 0, "full week carries no tint");
+  assertEquals(capacityTint(1.2, 0.6), 0, "over-full clamps to none");
+  assertEquals(capacityTint(0.8, 0.6), 6, "halfway to the threshold is half the tint");
+  assertEquals(capacityTint(0.6, 0.6), 12, "at the threshold the cap holds");
+  assertEquals(capacityTint(0.1, 0.6), 12, "below it too");
+  assertEquals(capacityTint(0.9, 0), 1, "flag off: scale runs to zero capacity instead");
+  assertEquals(capacityTint(NaN, 0.6), 0, "a 0/0 week must not paint");
+});
+
+Deno.test("capacityText: one line per week, teams beside an 'all' sum", () => {
+  const weeks = [
+    { monday: "2026-07-06", from: "2026-07-06", to: "2026-07-12", days: 7 },
+    { monday: "2026-07-13", from: "2026-07-13", to: "2026-07-19", days: 7 },
+  ];
+  const grid = [
+    { team: "", members: 2, cells: [{ available: 8, possible: 10 }, null] },
+    { team: "Data", members: 3, cells: [{ available: 12.5, possible: 15 }, null] },
+  ];
+  const lines = capacityText(grid, weeks).split("\n");
+  assertEquals(lines.length, 3, "a title line plus one per week");
+  assertEquals(
+    lines[1],
+    `${shortDay("2026-07-06")}: (no team) 8/10 · Data 12.5/15 · all 20.5/25`,
+  );
+  assertEquals(lines[2], `${shortDay("2026-07-13")}: no data`);
+  // A single team gets no "all" line — it would only repeat the row.
+  const solo = capacityText([grid[1]], weeks).split("\n");
+  assertEquals(solo[1], `${shortDay("2026-07-06")}: Data 12.5/15`);
 });

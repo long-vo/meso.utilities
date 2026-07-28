@@ -4394,12 +4394,15 @@ button.out:focus-visible::after {
     top: 86px;
   }
 }
-/* Stacked (single-column) layout keeps the legend panel last. */
+/* Stacked (single-column) layout: "Who's out" — the daily-use panel — comes
+   first, ahead of the wall of controls; the legend stays last. Visual order
+   only: the DOM keeps controls first, so the skip link and tab order still
+   start at the imports. */
 @media (max-width: 1080px) {
   .page-availability .layout {
     grid-template-areas:
-      "controls"
       "editor"
+      "controls"
       "result"
       "legend";
   }
@@ -4659,6 +4662,30 @@ button.out:focus-visible::after {
 }
 .page-availability .nav-row {
   margin-top: 8px;
+}
+/* The patterns toggle under the view controls. */
+.page-availability .pattern-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.page-availability .pattern-row input {
+  margin: 0;
+  flex: none;
+}
+/* The one destructive button in the data row — and the confirm dialog's Yes
+   when the question is destructive. */
+.page-availability .btn-danger {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+}
+.page-availability .btn-danger:hover {
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  border-color: var(--warn);
 }
 /* The period in view, wearing the heatmap's month-header type so the sidebar
    and the grid read as one label. */
@@ -5182,13 +5209,13 @@ button.out:focus-visible::after {
   font-size: 10px;
   font-weight: 600;
 }
+/* 9.5px and no opacity stack: the old 8.5px at 0.75 opacity on --text-dim was
+   three legibility penalties on one glyph. */
 .page-availability .hm-head .hm-dow {
-  font-size: 8.5px;
-  opacity: 0.75;
+  font-size: 9.5px;
 }
 .page-availability .hm-head.is-weekend {
   color: var(--text-faint);
-  opacity: 0.75;
 }
 .page-availability .hm-head.is-today {
   color: var(--accent);
@@ -5232,7 +5259,7 @@ button.out:focus-visible::after {
 }
 .page-availability .hm-loc {
   flex: none;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--accent);
   border: 1px solid var(--accent);
@@ -5298,6 +5325,93 @@ button.out:focus-visible::after {
 }
 .page-availability .hm-cell.is-blank {
   background-image: radial-gradient(circle at 50% 50%, var(--av-grid) 1px, transparent 1.5px);
+}
+
+/* ---- Optional per-kind patterns (View → "Patterns on day colours") ----
+   Hue is the grid's only channel for day kinds, which fails colour-blind
+   readers (WCAG 1.4.1); `av-patterns` on <body> overlays a distinct texture
+   per kind. The overlays live on ::before — ::after is the hover crosshair's —
+   and the half-day insets keep a morning's texture off the free afternoon.
+   Same distinctions at a glance: dense 45° = leave, dense -45° = core,
+   crosshatch = sick, dots = planned, horizontal = remote, vertical = onsite,
+   grid = social, sparse 45° = holiday. Working/weekend/blank keep their own
+   existing looks. The ink is plain black at low alpha: every hue is a mid
+   tone on both themes, so one ink reads on all of them. */
+.page-availability.av-patterns .hm-cell.k-remote::before,
+.page-availability.av-patterns .hm-cell.k-onsite::before,
+.page-availability.av-patterns .hm-cell.k-leave::before,
+.page-availability.av-patterns .hm-cell.k-planned::before,
+.page-availability.av-patterns .hm-cell.k-core::before,
+.page-availability.av-patterns .hm-cell.k-sick::before,
+.page-availability.av-patterns .hm-cell.k-social::before,
+.page-availability.av-patterns .hm-cell.k-holiday::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.page-availability.av-patterns .hm-cell.half-am::before {
+  inset: 0 50% 0 0;
+}
+.page-availability.av-patterns .hm-cell.half-pm::before {
+  inset: 0 0 0 50%;
+}
+.page-availability.av-patterns .hm-cell.k-leave::before,
+.page-availability.av-patterns .dot-leave {
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(0, 0, 0, 0.35) 0 1px,
+    transparent 1px 4px
+  );
+}
+.page-availability.av-patterns .hm-cell.k-core::before,
+.page-availability.av-patterns .dot-core {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(0, 0, 0, 0.35) 0 1px,
+    transparent 1px 4px
+  );
+}
+.page-availability.av-patterns .hm-cell.k-sick::before,
+.page-availability.av-patterns .dot-sick {
+  background-image:
+    repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.3) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.3) 0 1px, transparent 1px 4px);
+}
+.page-availability.av-patterns .hm-cell.k-planned::before,
+.page-availability.av-patterns .dot-planned {
+  background-image: radial-gradient(rgba(0, 0, 0, 0.4) 1px, transparent 1.4px);
+  background-size: 4px 4px;
+}
+.page-availability.av-patterns .hm-cell.k-remote::before,
+.page-availability.av-patterns .dot-remote {
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.35) 0 1px,
+    transparent 1px 4px
+  );
+}
+.page-availability.av-patterns .hm-cell.k-onsite::before,
+.page-availability.av-patterns .dot-onsite {
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.35) 0 1px,
+    transparent 1px 4px
+  );
+}
+.page-availability.av-patterns .hm-cell.k-social::before,
+.page-availability.av-patterns .dot-social {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.3) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.3) 0 1px, transparent 1px 5px);
+}
+.page-availability.av-patterns .hm-cell.k-holiday::before,
+.page-availability.av-patterns .dot-holiday {
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(0, 0, 0, 0.35) 0 1px,
+    transparent 1px 7px
+  );
 }
 .page-availability .hm-cell.is-today {
   box-shadow: inset 0 0 0 1.5px var(--accent);
@@ -5380,6 +5494,9 @@ button.out:focus-visible::after {
 .page-availability .hm-head {
   scroll-margin-top: 58px;
   scroll-margin-left: calc(var(--hm-name-w) + 12px);
+  /* A finger over the grid pans it; app.js turns a *held* touch into a
+     drag-selection and suppresses the pan only then (see onTouchDown). */
+  touch-action: pan-x pan-y;
 }
 
 /* Crosshair on hover. Reading across ~6,400 cells otherwise means tracking a
@@ -5431,8 +5548,23 @@ button.out:focus-visible::after {
 .page-availability .hm-empty {
   padding: 22px;
 }
+/* The selection how-to above the grid — a .hint, just pulled off the grid. */
+.page-availability .hm-hint {
+  margin: 0 0 8px;
+}
 
 /* Capacity table. */
+/* Heading + its copy button on one line; the h3 keeps its metrics, the
+   wrapper takes over its margins. */
+.page-availability .cap-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 8px;
+}
+.page-availability .cap-head .cap-title {
+  margin: 0;
+}
 .page-availability .cap-title {
   margin: 18px 0 8px;
   font-size: 13.5px;
@@ -5524,6 +5656,21 @@ button.out:focus-visible::after {
   font-weight: 700;
 }
 .page-availability .bal-table tfoot td {
+  border-top: 1px solid var(--border-strong);
+  border-bottom: none;
+  font-weight: 700;
+}
+
+/* Below full but above the threshold: a tint that warms as the week thins
+   (`--cap-tint` from capacityTint), so the table has a shape before anything
+   crosses the hard line. */
+.page-availability .cap-table td.has-tint {
+  background: color-mix(in srgb, var(--warn) var(--cap-tint, 0%), transparent);
+}
+/* The "Everyone" sum row. Shared with the balance table's totals, which set
+   the same footer treatment — one rule now covers both (.bal-table also
+   carries .cap-table). */
+.page-availability .cap-table tfoot td {
   border-top: 1px solid var(--border-strong);
   border-bottom: none;
   font-weight: 700;
