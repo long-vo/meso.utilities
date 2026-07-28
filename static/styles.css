@@ -4330,7 +4330,7 @@ button.out:focus-visible::after {
    drop its column so no empty track remains. Explicit rows keep the short
    strip panel from being inflated by the tall sticky sidebar. */
 /* The rail is a column of panels, not a panel: the legend, and under it the
-   recorded changes when there are any. */
+   recorded changes. */
 .page-availability .legend-rail {
   grid-area: legend;
   display: grid;
@@ -4831,12 +4831,39 @@ button.out:focus-visible::after {
 /* Changes another tool recorded here. Two lines per entry: what happened, then
    who asked and when — the second is the part you only read when the first
    surprises you, so it stays quiet. */
+
+/* The body stacks four unlike things — a hint, the log, a second hint, and a
+   button that undoes the lot. One gap spaces them, which is why everything
+   inside drops its own margins: stacked margins don't collapse in a grid, and
+   an empty list would otherwise leave a gap with nothing on either side. */
+.page-availability #history-body {
+  display: grid;
+  gap: 12px;
+}
+.page-availability #history-body > .hint {
+  margin: 0;
+}
+/* Outside the body, so it misses that gap — matched by hand to keep one rhythm
+   down the panel. */
+.page-availability #history-warn {
+  margin-bottom: 12px;
+}
+/* Grid items stretch; the button is the one thing that should stay its own
+   width rather than span the panel. */
+.page-availability #history-clear {
+  justify-self: start;
+}
 .page-availability .history-list {
-  margin: 0 0 8px;
+  margin: 0;
   padding: 0;
   list-style: none;
   display: grid;
-  gap: 8px;
+  gap: 10px;
+}
+/* Empty log: a zero-height grid item still claims a gap on either side of
+   itself, which shows up as a hole under the empty-state hint. */
+.page-availability .history-list:empty {
+  display: none;
 }
 .page-availability .history-list li {
   display: flex;
@@ -4962,25 +4989,39 @@ button.out:focus-visible::after {
 .page-availability .controls .field-collapse[aria-expanded="false"] {
   margin-bottom: 0;
 }
-/* The Legend's head holds nothing but its title, so its chevron sits at the
-   panel's right edge like the controls fields' headings. The "Who's out" head
-   keeps its chevron beside the title — that edge is the day picker's. */
-.page-availability .panel-head:has(#legend-toggle) h2 {
+/* The Legend and Recorded-changes heads hold nothing but their title, so their
+   chevrons sit at the panel's right edge like the controls fields' headings —
+   and they stack in one rail, where two different chevron positions would read
+   as a mistake. The "Who's out" head keeps its chevron beside the title — that
+   edge is the day picker's. */
+.page-availability .panel-head:has(#legend-toggle) h2,
+.page-availability .panel-head:has(#history-toggle) h2 {
   flex: 1;
 }
-.page-availability #legend-toggle {
+.page-availability #legend-toggle,
+.page-availability #history-toggle {
   display: flex;
   width: 100%;
 }
-.page-availability #legend-toggle .caret {
+.page-availability #legend-toggle .caret,
+.page-availability #history-toggle .caret {
   margin-left: auto;
 }
 .page-availability .strip[hidden] {
   display: none;
 }
 /* Collapsed, the head is the whole panel — its bottom margin would read as
-   padding that belongs to nothing. */
+   padding that belongs to nothing. Recorded changes is the one panel whose next
+   sibling isn't its body: the stale-record warning sits outside the fold, so
+   the generic rule reads a hidden warning as a folded panel and has to be told
+   to look one further. */
 .page-availability .panel-head:has(+ [hidden]) {
+  margin-bottom: 0;
+}
+.page-availability .panel-head:has(+ #history-warn) {
+  margin-bottom: 12px;
+}
+.page-availability .panel-head:has(+ #history-warn[hidden] + #history-body[hidden]) {
   margin-bottom: 0;
 }
 

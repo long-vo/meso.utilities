@@ -94,9 +94,12 @@ const els = {
   warningsDetails: $("warnings-details"),
   warningsSummary: $("warnings-summary"),
   warningsList: $("warnings-list"),
-  historyDetails: $("history-details"),
   historySummary: $("history-summary"),
+  historyToggle: $("history-toggle"),
+  historyBody: $("history-body"),
   historyWarn: $("history-warn"),
+  historyEmpty: $("history-empty"),
+  historyHint: $("history-hint"),
   historyList: $("history-list"),
   historyClear: $("history-clear"),
   legend: $("legend"),
@@ -929,8 +932,15 @@ function renderWarnings() {
  * the tool that asked and when it was applied.
  */
 function renderHistory() {
-  els.historyDetails.hidden = state.history.length === 0;
-  els.historySummary.textContent = `Recorded changes (${state.history.length})`;
+  const empty = state.history.length === 0;
+  // The panel itself stays; only its contents swap. A count of zero reads as a
+  // number to act on, so the empty heading drops it.
+  els.historySummary.textContent = empty
+    ? "Recorded changes"
+    : `Recorded changes (${state.history.length})`;
+  els.historyEmpty.hidden = !empty;
+  els.historyHint.hidden = empty;
+  els.historyClear.hidden = empty;
   els.historyList.textContent = "";
   let stale = 0;
   state.history.forEach((entry, index) => {
@@ -2648,6 +2658,7 @@ function setupCollapse(button, body, key) {
 
 setupCollapse(els.stripToggle, els.strip, `${STORE_KEY}-strip-collapsed`);
 setupCollapse(els.legendToggle, els.legendBody, `${STORE_KEY}-legend-collapsed`);
+setupCollapse(els.historyToggle, els.historyBody, `${STORE_KEY}-history-collapsed`);
 // Every field in the controls sidebar folds the same way, keyed off the body it
 // controls — the inline script at the end of that section restores these before
 // first paint and derives the key identically.

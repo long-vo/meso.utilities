@@ -324,15 +324,30 @@
       </section>
 
       <!-- Days written onto the grid by another tool, newest first. It sits
-           beside the grid it explains rather than in the import sidebar. -->
-      <section id="history-details" class="panel" aria-labelledby="history-summary" hidden>
+           beside the grid it explains rather than in the import sidebar. The
+           panel stays up while the log is empty — it is the answer to "why did
+           my row change?", and a reader only comes looking for it once the grid
+           has already surprised them, which is too late for it to appear. -->
+      <section id="history-details" class="panel" aria-labelledby="history-summary">
         <div class="panel-head">
-          <h2 id="history-summary">Recorded changes</h2>
+          <h2><button id="history-toggle" class="panel-collapse" type="button"
+              aria-controls="history-body"
+              aria-expanded="true"><span id="history-summary">Recorded changes</span><span
+                class="caret" aria-hidden="true">▾</span></button></h2>
         </div>
+        <!-- Outside the folded body on purpose: a record the grid no longer
+             backs up is the one thing worth surfacing while the log is put
+             away. -->
         <p id="history-warn" class="cap-warn" role="status" hidden></p>
-        <ul id="history-list" class="history-list"></ul>
-        <button id="history-clear" class="btn btn-ghost btn-small" type="button"
-          title="Forget the recorded changes — the days themselves stay as they are">Clear history</button>
+        <div id="history-body">
+          <p id="history-empty" class="hint" hidden>Nothing recorded yet. Days this tool writes onto
+            the grid — a Leave request sent from here, or a day reported on the grid — are logged
+            here, newest first.</p>
+          <ul id="history-list" class="history-list"></ul>
+          <p id="history-hint" class="hint" hidden>× removes one record and puts its days back.</p>
+          <button id="history-clear" class="btn btn-ghost btn-small" type="button"
+            title="Forget the recorded changes — the days themselves stay as they are">Clear history</button>
+        </div>
       </section>
     </div>
   </main>
