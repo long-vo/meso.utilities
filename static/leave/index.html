@@ -173,7 +173,11 @@
         title="Copy to clipboard">—</button>
       <div class="out-label">Body</div>
       <textarea class="out-area" id="email-body" spellcheck="false"
-        aria-label="HR email body"></textarea>
+        aria-label="HR email body" aria-describedby="body-stale"></textarea>
+      <!-- Shown when a body-feeding field changes after the body was hand-edited:
+           the kept text may describe the old request (app.js owns the flag). -->
+      <p id="body-stale" class="body-stale" hidden>⚠️ The form changed after your edits — this body
+        may describe the old request. Check it, or reset it below.</p>
       <button type="button" id="body-reset" class="body-reset" hidden>↺ Reset to generated
         text</button>
       <details class="mail-help">

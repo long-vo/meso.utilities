@@ -18,6 +18,7 @@ import {
   summarizePeriod,
   templateSummary,
   TYPES,
+  upsertTemplate,
 } from "./leave.mjs";
 import { queueUpdate, takeHandoff } from "../handoff.mjs";
 import { registerCommands, TOOL_ICONS } from "../palette.js";
@@ -50,6 +51,7 @@ const els = {
   emailSubject: $("email-subject"),
   emailBody: /** @type {HTMLTextAreaElement} */ ($("email-body")),
   bodyReset: $("body-reset"),
+  bodyStale: $("body-stale"),
   openMail: $("open-mail"),
   openOutlook: $("open-outlook"),
   copySubject: $("copy-subject"),
@@ -77,6 +79,22 @@ let current = null;
 
 /** True once the user edits the body, so form changes stop overwriting their text. */
 let bodyDirty = false;
+
+/** True when a body-feeding field changed *after* the body was hand-edited: the
+ *  kept text may describe the old request, and only the user can tell — so say
+ *  so next to the body instead of letting the "Ready" status vouch for it. */
+let bodyStale = false;
+
+/** Today's ISO date from local parts — toISOString() is UTC, which is
+ *  yesterday's date during the early morning in timezones ahead of UTC
+ *  (e.g. before 7am in UTC+7). Feeds the default start date and the
+ *  "in the past" warning (the pure module stays date-free). */
+const now = new Date();
+const TODAY_ISO = [
+  now.getFullYear(),
+  String(now.getMonth() + 1).padStart(2, "0"),
+  String(now.getDate()).padStart(2, "0"),
+].join("-");
 
 /** Session-only step progress: the open/add actions set these, any form change
  *  clears them (an edited form describes a new request, not the one sent). */
@@ -201,7 +219,7 @@ function render() {
     els.eventSubject.textContent = "—";
     els.eventRecipients.textContent = "—";
     if (!bodyDirty) els.emailBody.value = "";
-    els.bodyReset.hidden = !bodyDirty;
+    paintBodyState();
     els.emailCcBlock.hidden = true;
     els.dateSummary.hidden = true;
     setActionsEnabled(false, needsEmail);
@@ -214,6 +232,7 @@ function render() {
     input.startDate,
     input.endDate ?? "",
     /** @type {"full" | "morning" | "afternoon"} */ (els.duration.value),
+    TODAY_ISO,
   );
   els.dateSummary.hidden = !summary;
   if (summary) {
@@ -225,7 +244,7 @@ function render() {
 
   els.emailSubject.textContent = result.email.subject;
   if (!bodyDirty) els.emailBody.value = result.email.body;
-  els.bodyReset.hidden = !bodyDirty;
+  paintBodyState();
   els.emailCcBlock.hidden = result.email.cc === "";
   els.emailCc.textContent = result.email.cc;
 
@@ -256,6 +275,13 @@ function render() {
 function paintSteps() {
   els.emailDone.hidden = !stepsDone.email;
   els.eventDone.hidden = !stepsDone.event;
+}
+
+/** Show the reset link while the body is hand-edited, and the stale warning
+ *  once the form has moved on from under those edits. */
+function paintBodyState() {
+  els.bodyReset.hidden = !bodyDirty;
+  els.bodyStale.hidden = !bodyStale;
 }
 
 /**
@@ -332,15 +358,19 @@ function openOutlookWeb() {
   globalThis.open(url, "_blank", "noopener");
 }
 
-/** Mark the body as user-edited so re-renders keep it; reveal the reset link. */
+/** Mark the body as user-edited so re-renders keep it; reveal the reset link.
+ *  An edit also clears the stale flag — the user typed with the current form
+ *  on screen, so the text is theirs to vouch for again. */
 function onBodyEdited() {
   bodyDirty = true;
-  els.bodyReset.hidden = false;
+  bodyStale = false;
+  paintBodyState();
 }
 
 /** Discard edits and let the body track the generated text again. */
 function resetBody() {
   bodyDirty = false;
+  bodyStale = false;
   render();
 }
 
@@ -472,6 +502,7 @@ function applyTemplate(tpl) {
   els.start.value = "";
   els.end.value = "";
   bodyDirty = false;
+  bodyStale = false;
   stepsDone.email = stepsDone.event = false;
   saveName();
   render();
@@ -518,10 +549,31 @@ function saveTemplateFromForm(event) {
     els.tplTitle.focus();
     return;
   }
-  storeTemplates([...loadTemplates(), { id: newId(), title, ...currentTemplateFields() }]);
+  const { templates, replaced } = upsertTemplate(loadTemplates(), {
+    id: newId(),
+    title,
+    ...currentTemplateFields(),
+  });
+  storeTemplates(templates);
   renderTemplates();
   closeSaveForm();
-  showToast("Template saved");
+  if (replaced === null) {
+    showToast("Template saved");
+    return;
+  }
+  // Re-saving a name updates the preset in place — but a *forgotten* duplicate
+  // name must not silently lose the old one, so the toast offers an Undo.
+  showToast(`Updated "${replaced.title}"`, {
+    label: "Undo",
+    onAction: () => {
+      const restored = loadTemplates();
+      const index = restored.findIndex((tpl) => tpl.id === replaced.id);
+      if (index === -1) restored.push(replaced);
+      else restored[index] = replaced;
+      storeTemplates(restored);
+      renderTemplates();
+    },
+  });
 }
 
 /* --------------------------- saved recipients ---------------------------- */
@@ -741,10 +793,20 @@ function formChanged() {
   render();
 }
 
-for (const el of [els.name, els.reason, els.lead, els.recipients, els.start, els.end]) {
-  el.addEventListener("input", formChanged);
+/** Same, for the fields the generated body is built from: a hand-edited body no
+ *  longer tracks them, so it may now describe the old request — flag it. The
+ *  CC/recipients fields feed the links and the event, never the body, so they
+ *  stay on plain formChanged. */
+function bodyFieldChanged() {
+  if (bodyDirty) bodyStale = true;
+  formChanged();
 }
-for (const el of [els.type, els.duration]) el.addEventListener("change", formChanged);
+
+for (const el of [els.name, els.reason, els.start, els.end]) {
+  el.addEventListener("input", bodyFieldChanged);
+}
+for (const el of [els.lead, els.recipients]) el.addEventListener("input", formChanged);
+for (const el of [els.type, els.duration]) el.addEventListener("change", bodyFieldChanged);
 els.name.addEventListener("input", saveName);
 
 attachRecipientAutocomplete(els.lead);
@@ -853,15 +915,8 @@ try {
 // Default the start date to the next working day (today, when today is one) so the
 // tool shows live output as soon as a name is present — without opening on a
 // weekend warning nobody asked for. (Browser-only convenience; the pure module
-// stays date-free.) Built from local date parts — toISOString() is UTC, which is
-// yesterday's date during the early morning in timezones ahead of UTC (e.g. before
-// 7am in UTC+7).
-const today = new Date();
-els.start.value = nextWorkingDay([
-  today.getFullYear(),
-  String(today.getMonth() + 1).padStart(2, "0"),
-  String(today.getDate()).padStart(2, "0"),
-].join("-"));
+// stays date-free — see TODAY_ISO.)
+els.start.value = nextWorkingDay(TODAY_ISO);
 
 /**
  * Take the days picked in Team Availability's grid: name, dates and the leave
@@ -881,6 +936,8 @@ function receiveHandoff() {
   els.duration.value = fields.duration;
   els.start.value = fields.startDate;
   els.end.value = fields.endDate;
+  // The handoff rewrote the body-feeding fields like any other form edit would.
+  if (bodyDirty) bodyStale = true;
   render();
   showToast(`Dates received from ${handoff.from || "another tool"}`);
   return true;

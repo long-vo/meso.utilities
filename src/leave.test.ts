@@ -23,6 +23,7 @@ import {
   removeRecipient,
   summarizePeriod,
   templateSummary,
+  upsertTemplate,
 } from "../static/leave/leave.mjs";
 
 function assertEquals(actual: unknown, expected: unknown, msg?: string): void {
@@ -592,6 +593,61 @@ Deno.test("summarizePeriod: weekend endpoints warn", () => {
     text: "2 days — 2 weekend days",
     warning: "Starts on a Saturday. Ends on a Sunday.",
   });
+});
+
+Deno.test("summarizePeriod: a start before `today` warns about the past", () => {
+  // 2024-01-01 was a Monday; "today" is Wed 2024-06-05.
+  assertEquals(summarizePeriod("2024-01-01", "", "full", "2024-06-05"), {
+    text: "1 day — Monday",
+    warning: "Falls in the past.",
+  });
+  // Half days warn the same way.
+  assertEquals(summarizePeriod("2024-01-01", "", "morning", "2024-06-05"), {
+    text: "Half day — Monday",
+    warning: "Falls in the past.",
+  });
+  // A range reads "Starts", matching the weekend-warning voice.
+  assertEquals(summarizePeriod("2024-01-01", "2024-01-05", "full", "2024-06-05"), {
+    text: "5 days — all weekdays",
+    warning: "Starts in the past.",
+  });
+  // Past + weekend warnings stack, past first.
+  assertEquals(
+    summarizePeriod("2024-01-06", "2024-01-07", "full", "2024-06-05")?.warning,
+    "Starts in the past. Starts on a Saturday. Ends on a Sunday.",
+  );
+});
+
+Deno.test("summarizePeriod: today itself and future dates never warn about the past", () => {
+  // Same-day (or retroactive-by-hours) sick leave is a normal request.
+  assertEquals(summarizePeriod("2024-06-05", "", "full", "2024-06-05")?.warning, "");
+  assertEquals(summarizePeriod("2024-06-06", "", "full", "2024-06-05")?.warning, "");
+  // No/blank/garbage `today` disables the check (the module stays date-free).
+  assertEquals(summarizePeriod("2024-01-01", "", "full")?.warning, "");
+  assertEquals(summarizePeriod("2024-01-01", "", "full", "")?.warning, "");
+  assertEquals(summarizePeriod("2024-01-01", "", "full", "not-a-date")?.warning, "");
+});
+
+Deno.test("upsertTemplate: a new title appends, a matching one is overwritten in place", () => {
+  const wfh = { id: "1", title: "WFH Friday", type: "wfh" };
+  const sick = { id: "2", title: "Sick", type: "sick" };
+
+  // New title → appended at the end; nothing replaced.
+  assertEquals(upsertTemplate([wfh], sick), { templates: [wfh, sick], replaced: null });
+  assertEquals(upsertTemplate([], wfh), { templates: [wfh], replaced: null });
+
+  // Matching title (case-insensitive, trimmed) → overwritten in place, keeping
+  // the old id and position; the replaced entry comes back for an Undo.
+  const resaved = { id: "9", title: "sick", type: "annual" };
+  assertEquals(upsertTemplate([wfh, sick], resaved), {
+    templates: [wfh, { id: "2", title: "sick", type: "annual" }],
+    replaced: sick,
+  });
+
+  // The inputs are not mutated.
+  const list = [wfh];
+  upsertTemplate(list, { id: "9", title: "WFH Friday", type: "remote" });
+  assertEquals(list, [{ id: "1", title: "WFH Friday", type: "wfh" }]);
 });
 
 Deno.test("nextWorkingDay: weekdays pass through, weekends roll to Monday", () => {

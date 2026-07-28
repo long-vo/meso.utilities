@@ -3484,6 +3484,13 @@ button.out:focus-visible::after {
 .body-reset:hover {
   text-decoration: underline;
 }
+/* Shown when the form changed after the body was hand-edited: the kept text may
+   describe the old request (see bodyStale in leave/app.js). */
+.body-stale {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--warn);
+}
 .leave-note {
   margin: 12px 0 0;
   font-size: 12px;

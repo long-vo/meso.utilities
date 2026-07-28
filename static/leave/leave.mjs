@@ -346,6 +346,28 @@ export function templateSummary(fields) {
   return reason === "" ? summary : `${summary} · ${reason}`;
 }
 
+/**
+ * Save a template into the list: a new title is appended, a matching title
+ * (case-insensitive, trimmed) is overwritten in place — re-saving a tweaked
+ * preset under the same name means "update it", not "stack a duplicate". The
+ * overwritten entry keeps its id and position; it is returned so the caller
+ * can offer an Undo (a forgotten duplicate name must not silently lose the
+ * old preset). Pure — the UI owns the localStorage read/write.
+ * @template {{ id?: string, title?: string }} T
+ * @param {T[]} list Existing templates.
+ * @param {T} template The template to save.
+ * @returns {{ templates: T[], replaced: T | null }}
+ */
+export function upsertTemplate(list, template) {
+  const key = String(template?.title ?? "").trim().toLowerCase();
+  const templates = [...(list ?? [])];
+  const index = templates.findIndex((tpl) => String(tpl?.title ?? "").trim().toLowerCase() === key);
+  if (index === -1) return { templates: [...templates, template], replaced: null };
+  const replaced = templates[index];
+  templates[index] = { ...template, id: replaced.id ?? template.id };
+  return { templates, replaced };
+}
+
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 /**
@@ -473,16 +495,20 @@ export function parseLeaveHandoff(text) {
 
 /**
  * Day count and weekend feedback for the picked period, shown under the date
- * fields. Catches the two expensive mistakes: an off-by-one range and a request
- * that falls on a weekend. Follows formatPeriod's semantics: half days and an
- * end date not after the start are a single day.
+ * fields. Catches the three expensive mistakes: an off-by-one range, a request
+ * that falls on a weekend, and a start in the past (usually a typo'd year that
+ * would otherwise produce a plausible-looking request). Follows formatPeriod's
+ * semantics: half days and an end date not after the start are a single day.
  * @param {string} startDate ISO date.
  * @param {string} endDate ISO date; ignored for half days.
  * @param {"full"|"morning"|"afternoon"} duration
+ * @param {string} [today] ISO date; when given, a start before it warns about
+ *   the past. Blank or unparsable disables the check — the module stays
+ *   date-free, so the caller supplies its own "today".
  * @returns {{ text: string, warning: string } | null} null when startDate is
  *   missing or unparsable.
  */
-export function summarizePeriod(startDate, endDate, duration) {
+export function summarizePeriod(startDate, endDate, duration, today = "") {
   const start = String(startDate ?? "").trim();
   const startDow = dayOfWeek(start);
   if (startDow === null) return null;
@@ -491,11 +517,18 @@ export function summarizePeriod(startDate, endDate, duration) {
   const end = String(endDate ?? "").trim();
   const endDow = half ? null : dayOfWeek(end);
   const isWeekend = (/** @type {number} */ dow) => dow === 0 || dow === 6;
+  // ISO dates compare lexicographically. `today` itself is fine — same-day
+  // (or retroactive-by-hours) sick leave is a normal request.
+  const todayIso = String(today ?? "").trim();
+  const past = dayOfWeek(todayIso) !== null && start < todayIso;
 
   if (endDow === null || end <= start) {
+    const warnings = [];
+    if (past) warnings.push("Falls in the past.");
+    if (isWeekend(startDow)) warnings.push(`Falls on a ${DAY_NAMES[startDow]}.`);
     return {
       text: `${half ? "Half day" : "1 day"} — ${DAY_NAMES[startDow]}`,
-      warning: isWeekend(startDow) ? `Falls on a ${DAY_NAMES[startDow]}.` : "",
+      warning: warnings.join(" "),
     };
   }
 
@@ -514,6 +547,7 @@ export function summarizePeriod(startDate, endDate, duration) {
       `${days - weekdays} weekend day${days - weekdays === 1 ? "" : "s"}`;
 
   const warnings = [];
+  if (past) warnings.push("Starts in the past.");
   if (isWeekend(startDow)) warnings.push(`Starts on a ${DAY_NAMES[startDow]}.`);
   if (isWeekend(endDow)) warnings.push(`Ends on a ${DAY_NAMES[endDow]}.`);
 
