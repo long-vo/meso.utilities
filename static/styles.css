@@ -2797,7 +2797,8 @@ html.js body.page-hub .cards.is-ready {
   .room-label,
   .story-panel > label,
   .pick-label,
-  .sl-group-top .sl-group-label {
+  .sl-group-top .sl-group-label,
+  .sl-group-top .sl-chevron {
     background-image: linear-gradient(92deg, var(--accent) 10%, var(--accent-2) 90%);
     -webkit-background-clip: text;
     background-clip: text;
@@ -3661,8 +3662,8 @@ button.out:focus-visible::after {
   color: inherit;
 }
 /* Frequently used panel: compact speed-dial rows tuned for the narrow column —
-   the whole row is a link, a host-hued dot and the name identify it, and the
-   full name + URL live in the row's tooltip (no room for the URL inline). */
+   the whole row is a link identified by its name, and the full name + URL
+   live in the row's tooltip (no room for the URL inline). */
 .sl-fav-list {
   display: flex;
   flex-direction: column;
@@ -3681,9 +3682,6 @@ button.out:focus-visible::after {
 }
 .sl-fav:hover {
   border-color: var(--border-strong);
-}
-.sl-fav .sl-dot {
-  background: hsl(var(--fav-hue, 0) 55% 55%);
 }
 .sl-fav-name {
   min-width: 0;
@@ -3724,8 +3722,40 @@ button.out:focus-visible::after {
 .sl-group-top {
   font-size: 14px;
 }
+/* Sub-group labels wear their group's deterministic hue (--group-hue hashes
+   the group path in app.js) — the identity the removed hue dots used to
+   carry. Saturation/lightness are per-theme variables so the 12px/600 label
+   holds ≥4.5:1 on both surfaces; hover nudges lightness the way plain labels
+   step up to --text. */
+.sl-group {
+  --group-label-s: 45%;
+  --group-label-l: 68%;
+}
+:root[data-theme="light"] .sl-group {
+  --group-label-s: 55%;
+  --group-label-l: 30%;
+}
+.sl-group:not(.sl-group-top) .sl-group-label {
+  color: hsl(var(--group-hue) var(--group-label-s) var(--group-label-l));
+}
+.sl-group:not(.sl-group-top):hover {
+  --group-label-l: 78%;
+}
+:root[data-theme="light"] .sl-group:not(.sl-group-top):hover {
+  --group-label-l: 26%;
+}
 .sl-chevron {
   color: var(--text-faint);
+}
+/* Chevrons wear their own label's colour: accent for top-level groups (the
+   glyph joins the gradient-clip list above where supported — this solid is
+   the fallback), the group hue for sub-groups. The frequent head's chevron
+   keeps its inherit rule below; it has no --group-hue to wear. */
+.sl-group-top .sl-chevron {
+  color: var(--accent);
+}
+.sl-group:not(.sl-group-top):not(.sl-frequent-head) .sl-chevron {
+  color: hsl(var(--group-hue) var(--group-label-s) var(--group-label-l));
 }
 .sl-rows {
   display: flex;
@@ -3844,10 +3874,9 @@ button.out:focus-visible::after {
 .sl-picker-actions {
   margin-top: 12px;
 }
-/* Grid ("speed dial") view: colored monogram tiles. Hues are deterministic —
-   --tile-hue hashes the target hostname, --group-hue the group name — so the
-   same site/group keeps its color on every visit. Ungrouped elements set no
-   --group-hue and fall back to the neutral gray. */
+/* Grid ("speed dial") view: compact row-tiles. Hues are deterministic —
+   --tile-hue hashes the target hostname — so the same site keeps its color
+   on every visit. */
 .sl-view {
   display: flex;
   border: 1px solid var(--border-strong);
@@ -3868,19 +3897,9 @@ button.out:focus-visible::after {
   color: var(--bg);
   font-weight: 600;
 }
-.sl-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--text-faint);
-}
-.sl-dot.is-hued {
-  background: hsl(var(--group-hue) 55% 55%);
-}
 .sl-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 10px;
   padding-left: 12px;
 }
@@ -3894,29 +3913,27 @@ button.out:focus-visible::after {
 }
 .sl-tile {
   position: relative;
-  aspect-ratio: 1;
-  /* Speed-dial tile: a quiet neutral surface — the hue lives in the icon well
-     and only reaches the border on hover, so a wall of tiles stays calm. */
+  /* Compact row-tile: a quiet neutral surface — the hue lives in the icon well
+     and only reaches the border on hover, so a wall of tiles stays calm. No
+     hover lift: rows this short in a dense grid read jumpy when they move. */
   background: var(--bg-inset);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  overflow: hidden;
-  transition: border-color 0.18s, background 0.18s, transform 0.18s;
+  border-radius: 12px;
+  /* No overflow: hidden — the action toolbar floats above the tile's top
+     edge and must not be clipped. Nothing else reaches the corners. */
+  transition: border-color 0.18s, background 0.18s;
+  --tile-bg-hover: color-mix(in srgb, hsl(var(--tile-hue) 60% 45%) 6%, var(--bg-inset));
 }
-.sl-tile:hover {
+.sl-tile:hover,
+.sl-tile:focus-within {
   border-color: color-mix(in srgb, hsl(var(--tile-hue) 60% 55%) 50%, var(--border));
-  background: color-mix(in srgb, hsl(var(--tile-hue) 60% 45%) 6%, var(--bg-inset));
-  transform: translateY(-2px);
+  background: var(--tile-bg-hover);
 }
 .sl-tile-main {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 7px;
-  height: 100%;
-  padding: 12px 10px;
-  text-align: center;
+  gap: 10px;
+  padding: 9px 11px;
   color: inherit;
   text-decoration: none;
 }
@@ -3926,20 +3943,19 @@ button.out:focus-visible::after {
 .sl-tile-ico {
   display: grid;
   place-items: center;
-  width: 46px;
-  height: 46px;
-  border-radius: 13px;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  /* Hue-tinted well behind the monogram fallback; a loaded favicon carries
+     its own identity, so the tint drops once one shows (further down). */
   background: color-mix(in srgb, hsl(var(--tile-hue) 60% 50%) 16%, var(--bg-inset));
-  transition: transform 0.18s;
-}
-.sl-tile:hover .sl-tile-ico {
-  transform: scale(1.1);
 }
 .sl-tile-ico > * {
   grid-area: 1 / 1;
 }
 .sl-tile-mono {
-  font-size: 19px;
+  font-size: 15px;
   font-weight: 600;
   color: hsl(var(--tile-hue) 70% 72%);
 }
@@ -3948,8 +3964,13 @@ button.out:focus-visible::after {
 }
 .sl-tile-favicon {
   display: none;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
+}
+/* A loaded favicon carries its own identity — drop the hue-tinted well behind
+   it; the tint remains only under monogram fallbacks. */
+.sl-tile-ico.has-favicon {
+  background: transparent;
 }
 .sl-tile-ico.has-favicon .sl-tile-favicon {
   display: block;
@@ -3957,46 +3978,65 @@ button.out:focus-visible::after {
 .sl-tile-ico.has-favicon .sl-tile-mono {
   display: none;
 }
+/* Name over host, both on one line each — min-width: 0 lets the flex child
+   shrink so the ellipses actually engage; the tooltip carries both in full. */
+.sl-tile-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
 .sl-tile-name {
-  /* Long (imported) names would stretch tiles into uneven rectangles — clamp
-     to 2 lines; the tooltip carries the full name. The two-line height is
-     always reserved (even for one-line names) so the centered column above
-     never shifts: the icon well sits at the same spot on every tile. */
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
   overflow: hidden;
-  height: calc(2 * 1.35em);
-  font-size: 12.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.35;
   color: var(--text);
-  overflow-wrap: anywhere;
 }
+.sl-tile-host {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-faint);
+}
+/* The actions float above the tile's top-right corner, so even a long name
+   stays fully readable while they're shown. The padding-bottom is the visual
+   gap to the tile — as part of the toolbar's own box it keeps the pointer
+   inside the tile's hover area on the way up, so the toolbar can't vanish
+   mid-travel. Hidden it must not eat clicks — hence pointer-events. */
 .sl-tile-actions {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  bottom: 100%;
+  right: 6px;
+  z-index: 1;
   display: flex;
   gap: 4px;
+  padding-bottom: 4px;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.15s;
 }
 .sl-tile:hover .sl-tile-actions,
 .sl-tile:focus-within .sl-tile-actions {
   opacity: 1;
+  pointer-events: auto;
 }
 .sl-tile-actions button {
   border: 1px solid var(--border-strong);
   border-radius: 7px;
-  background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
-  backdrop-filter: blur(4px);
+  background: var(--bg-elev);
   color: var(--text-dim);
   font-size: 11px;
   line-height: 1;
   padding: 3px 6px;
   cursor: pointer;
+  /* Floating over whatever sits above the tile, the buttons need a little
+     lift to read as a toolbar rather than stray glyphs on that content. */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
 }
 .sl-tile-actions button:hover {
   color: var(--text);
@@ -4030,6 +4070,13 @@ button.out:focus-visible::after {
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 .sl-group-row.sl-drop-into .sl-group {
+  color: var(--accent);
+}
+/* The hued sub-group label and chevron must also yield to the drop
+   highlight. The `:root[data-theme]` prefix (always present — the markup
+   defaults to dark) only exists to outrank the theme-scoped rules above. */
+:root[data-theme] .sl-group-row.sl-drop-into .sl-group-label,
+:root[data-theme] .sl-group-row.sl-drop-into .sl-chevron {
   color: var(--accent);
 }
 /* Group header row: the whole row toggles collapse; on hover/focus it lifts to

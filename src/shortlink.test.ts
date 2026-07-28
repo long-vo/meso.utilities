@@ -13,6 +13,9 @@ import {
   decodeShare,
   displayHost,
   encodeShare,
+  FAVICON_FAIL_TTL,
+  FAVICON_OK_TTL,
+  faviconStatus,
   faviconUrl,
   filterLinks,
   findDuplicateTarget,
@@ -24,6 +27,7 @@ import {
   moveToGroup,
   normalizeGroup,
   parseBookmarksHtml,
+  parseFaviconCache,
   parseHash,
   parseImport,
   removeLink,
@@ -38,6 +42,7 @@ import {
   updateLink,
   validateName,
   validateUrl,
+  withFaviconOutcome,
 } from "../static/shortlink/shortlink.mjs";
 
 function assertEquals(actual: unknown, expected: unknown, msg?: string): void {
@@ -764,4 +769,57 @@ Deno.test("buildShortlinkUrl: replaces any existing hash and encodes the name", 
     buildShortlinkUrl("https://x.example/shortlink/index.html", "a"),
     "https://x.example/shortlink/#a",
   );
+});
+
+/* ------------------------------ favicon cache ----------------------------- */
+
+Deno.test("parseFaviconCache: bad JSON, non-objects and malformed entries are dropped", () => {
+  assertEquals(parseFaviconCache(null, 0), {});
+  assertEquals(parseFaviconCache("not json", 0), {});
+  assertEquals(parseFaviconCache("[1,2]", 0), {});
+  assertEquals(
+    parseFaviconCache(
+      JSON.stringify({
+        good: { ok: true, t: 0 },
+        noT: { ok: true },
+        wrongTypes: { ok: "yes", t: "0" },
+        notObject: 7,
+      }),
+      1000,
+    ),
+    { good: { ok: true, t: 0 } },
+  );
+});
+
+Deno.test("parseFaviconCache: expiry honours each outcome's own TTL", () => {
+  const json = JSON.stringify({
+    ok: { ok: true, t: 0 },
+    fail: { ok: false, t: 0 },
+  });
+  // Inside both TTLs, both survive; past the fail TTL only the success does.
+  assertEquals(Object.keys(parseFaviconCache(json, FAVICON_FAIL_TTL - 1)).length, 2);
+  assertEquals(parseFaviconCache(json, FAVICON_FAIL_TTL), { ok: { ok: true, t: 0 } });
+  assertEquals(parseFaviconCache(json, FAVICON_OK_TTL), {});
+});
+
+Deno.test("faviconStatus: fresh outcomes report ok/fail, anything else unknown", () => {
+  const cache = {
+    up: { ok: true, t: 1000 },
+    down: { ok: false, t: 1000 },
+  };
+  assertEquals(faviconStatus(cache, "up", 2000), "ok");
+  assertEquals(faviconStatus(cache, "down", 2000), "fail");
+  assertEquals(faviconStatus(cache, "missing", 2000), "unknown");
+  // A stale entry (kept in memory past its TTL) reads as unknown, not as its
+  // old outcome — the img path then retries it.
+  assertEquals(faviconStatus(cache, "down", 1000 + FAVICON_FAIL_TTL), "unknown");
+  assertEquals(faviconStatus(cache, "up", 1000 + FAVICON_OK_TTL), "unknown");
+});
+
+Deno.test("withFaviconOutcome: records without mutating and overwrites stale entries", () => {
+  const before = { a: { ok: false, t: 0 } };
+  const after = withFaviconOutcome(before, "b", true, 5);
+  assertEquals(after, { a: { ok: false, t: 0 }, b: { ok: true, t: 5 } });
+  assertEquals(before, { a: { ok: false, t: 0 } }, "input must not be mutated");
+  assertEquals(withFaviconOutcome(after, "a", true, 9).a, { ok: true, t: 9 });
 });

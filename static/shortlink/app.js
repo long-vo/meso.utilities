@@ -9,6 +9,7 @@ import {
   decodeShare,
   displayHost,
   encodeShare,
+  faviconStatus,
   faviconUrl,
   filterLinks,
   findDuplicateTarget,
@@ -20,6 +21,7 @@ import {
   moveToGroup,
   normalizeGroup,
   parseBookmarksHtml,
+  parseFaviconCache,
   parseHash,
   parseImport,
   removeLink,
@@ -34,6 +36,7 @@ import {
   updateLink,
   validateName,
   validateUrl,
+  withFaviconOutcome,
 } from "./shortlink.mjs";
 import { registerCommands } from "../palette.js";
 import { makeToast } from "../ui.mjs";
@@ -90,6 +93,8 @@ const FILTER_KEY = "meso-shortlinks-filter";
 const GROUPS_KEY = "meso-shortlinks-groups";
 /** localStorage key for per-link redirect counts (the "Frequently used" strip). */
 const HITS_KEY = "meso-shortlinks-hits";
+/** localStorage key for favicon load outcomes (see the cache in shortlink.mjs). */
+const FAVICON_KEY = "meso-shortlinks-favicons";
 /** Sentinel in the collapsed set for the "Frequently used" strip — the control
  *  character keeps it from ever colliding with a real group path. */
 const FREQUENT_COLLAPSE_KEY = "\u0000frequently-used";
@@ -111,6 +116,26 @@ function saveLinks(links) {
   } catch {
     showToast("Couldn't save — this browser's storage is unavailable.");
   }
+}
+
+// The favicon-outcome cache is read once (pruning expired entries) and kept in
+// memory; each recorded outcome writes through to localStorage so the next
+// visit starts warm.
+let faviconCache = (() => {
+  try {
+    return parseFaviconCache(localStorage.getItem(FAVICON_KEY), Date.now());
+  } catch {
+    return {};
+  }
+})();
+
+/** @param {string} iconUrl @param {boolean} ok */
+function recordFaviconOutcome(iconUrl, ok) {
+  if (iconUrl.startsWith("data:")) return;
+  faviconCache = withFaviconOutcome(faviconCache, iconUrl, ok, Date.now());
+  try {
+    localStorage.setItem(FAVICON_KEY, JSON.stringify(faviconCache));
+  } catch { /* cache only — losing it is fine */ }
 }
 
 function loadCollapsed() {
@@ -581,16 +606,10 @@ function renderDirectory() {
     chevron.setAttribute("aria-hidden", "true");
     chevron.textContent = isCollapsed ? "▸" : "▾";
     head.appendChild(chevron);
-    // Top-level ("main") groups carry no hue dot — only nested sub-groups do.
-    if (view === "grid" && depth !== 0) {
-      const dot = document.createElement("span");
-      dot.className = "sl-dot";
-      dot.setAttribute("aria-hidden", "true");
-      if (path !== "") {
-        dot.classList.add("is-hued");
-        dot.style.setProperty("--group-hue", String(hueForText(path)));
-      }
-      head.appendChild(dot);
+    // Sub-groups tint their label with the group's deterministic hue — the
+    // identity the removed hue dots used to carry, worn by the name itself.
+    if (depth !== 0 && path !== "") {
+      head.style.setProperty("--group-hue", String(hueForText(path)));
     }
     const labelEl = document.createElement("span");
     labelEl.className = "sl-group-label";
@@ -696,8 +715,18 @@ function renderTile(name, url, group, canDrag = true) {
   mono.className = "sl-tile-mono";
   mono.textContent = name.charAt(0).toUpperCase();
   well.appendChild(mono);
+  // The outcome cache decides how to treat the icon: a known-good favicon
+  // shows at once (no monogram flash — the bytes come from the HTTP cache), a
+  // known-dead one isn't retried, and only unknowns wait for a load event.
   const icon = faviconUrl(url);
-  if (icon) {
+  // data: icons (OKD's embedded one) can't fail and touch no network — always
+  // trusted, never cached (their whole URI would become a localStorage key).
+  const status = !icon
+    ? "fail"
+    : icon.startsWith("data:")
+    ? "ok"
+    : faviconStatus(faviconCache, icon, Date.now());
+  if (icon && status !== "fail") {
     // Never `loading="lazy"`: the image is display:none until it loads, and a
     // lazy image with no layout box is never fetched — the swap would deadlock.
     const img = document.createElement("img");
@@ -705,15 +734,33 @@ function renderTile(name, url, group, canDrag = true) {
     img.alt = "";
     img.decoding = "async";
     img.draggable = false;
-    img.addEventListener("load", () => well.classList.add("has-favicon"));
-    img.addEventListener("error", () => img.remove());
+    if (status === "ok") well.classList.add("has-favicon");
+    img.addEventListener("load", () => {
+      well.classList.add("has-favicon");
+      recordFaviconOutcome(icon, true);
+    });
+    img.addEventListener("error", () => {
+      // A trusted icon can still fail (evicted from the HTTP cache while the
+      // host is down) — fall back to the monogram rather than an empty well.
+      well.classList.remove("has-favicon");
+      img.remove();
+      recordFaviconOutcome(icon, false);
+    });
     img.src = icon;
     well.appendChild(img);
   }
+  // Compact row-tile: the name and the target's host stack beside the icon
+  // well. The host disambiguates same-named imports; both clamp to one line.
+  const text = document.createElement("span");
+  text.className = "sl-tile-text";
   const nameEl = document.createElement("span");
   nameEl.className = "sl-tile-name";
   nameEl.textContent = name;
-  main.append(well, nameEl);
+  const hostEl = document.createElement("span");
+  hostEl.className = "sl-tile-host";
+  hostEl.textContent = displayHost(url);
+  text.append(nameEl, hostEl);
+  main.append(well, text);
 
   const actions = document.createElement("div");
   actions.className = "sl-tile-actions";
@@ -846,9 +893,8 @@ function renderFrequent(links, filtering, collapsed) {
 
 /**
  * A compact speed-dial row for the Frequently used column: the whole row is a
- * link that opens the target. A host-hued dot and the name identify it; the
- * full name and URL live in the tooltip, since the narrow column has no room
- * for the URL inline.
+ * link that opens the target, identified by its name; the full name and URL
+ * live in the tooltip, since the narrow column has no room for the URL inline.
  */
 function renderFavRow(name, url) {
   const row = document.createElement("a");
@@ -857,14 +903,10 @@ function renderFavRow(name, url) {
   row.target = "_blank";
   row.rel = "noopener";
   row.title = `${name}\n${url}`;
-  const dot = document.createElement("span");
-  dot.className = "sl-dot";
-  dot.setAttribute("aria-hidden", "true");
-  dot.style.setProperty("--fav-hue", String(hueForText(displayHost(url))));
   const nameEl = document.createElement("code");
   nameEl.className = "sl-fav-name";
   nameEl.textContent = name;
-  row.append(dot, nameEl);
+  row.append(nameEl);
   return row;
 }
 

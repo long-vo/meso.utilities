@@ -769,6 +769,74 @@ export function faviconUrl(url) {
   }
 }
 
+/* ----------------------------- favicon cache ----------------------------- */
+// The favicon bytes themselves can't be cached by the tool (cross-origin image
+// data is unreadable without CORS, and there is no backend to proxy it) — the
+// browser's HTTP cache holds those. What we persist is each icon URL's load
+// *outcome*, so re-renders show a known-good favicon at once instead of
+// flashing the monogram, and known-dead hosts aren't retried on every render.
+
+/** How long a successful favicon load is trusted before re-verifying. */
+export const FAVICON_OK_TTL = 7 * 24 * 60 * 60 * 1000;
+/** How long a failed load suppresses retries — shorter, so a host that was
+ *  down (or newly gained an icon) recovers within a day. */
+export const FAVICON_FAIL_TTL = 24 * 60 * 60 * 1000;
+
+/**
+ * Parse the persisted favicon-outcome cache, dropping malformed and expired
+ * entries (each outcome carries its own TTL). Never throws — bad JSON is an
+ * empty cache.
+ * @param {string | null} json
+ * @param {number} now
+ * @returns {Record<string, { ok: boolean, t: number }>}
+ */
+export function parseFaviconCache(json, now) {
+  /** @type {Record<string, { ok: boolean, t: number }>} */
+  const cache = {};
+  let data;
+  try {
+    data = JSON.parse(json ?? "{}");
+  } catch {
+    return cache;
+  }
+  if (data === null || typeof data !== "object" || Array.isArray(data)) return cache;
+  for (const [url, entry] of Object.entries(data)) {
+    if (entry === null || typeof entry !== "object") continue;
+    const { ok, t } = /** @type {{ ok?: unknown, t?: unknown }} */ (entry);
+    if (typeof ok !== "boolean" || typeof t !== "number") continue;
+    if (now - t < (ok ? FAVICON_OK_TTL : FAVICON_FAIL_TTL)) cache[url] = { ok, t };
+  }
+  return cache;
+}
+
+/**
+ * A cached load outcome for an icon URL: "ok", "fail", or "unknown" when the
+ * cache holds nothing fresh for it.
+ * @param {Record<string, { ok: boolean, t: number }>} cache
+ * @param {string} url
+ * @param {number} now
+ * @returns {"ok" | "fail" | "unknown"}
+ */
+export function faviconStatus(cache, url, now) {
+  const entry = cache[url];
+  if (!entry) return "unknown";
+  if (now - entry.t >= (entry.ok ? FAVICON_OK_TTL : FAVICON_FAIL_TTL)) return "unknown";
+  return entry.ok ? "ok" : "fail";
+}
+
+/**
+ * The cache with an outcome recorded for an icon URL (a fresh object — the
+ * input is not mutated).
+ * @param {Record<string, { ok: boolean, t: number }>} cache
+ * @param {string} url
+ * @param {boolean} ok
+ * @param {number} now
+ * @returns {Record<string, { ok: boolean, t: number }>}
+ */
+export function withFaviconOutcome(cache, url, ok, now) {
+  return { ...cache, [url]: { ok, t: now } };
+}
+
 /**
  * The shareable shortlink URL for a name on the tool page: any existing hash
  * is replaced, an `index.html` suffix is dropped.
