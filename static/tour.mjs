@@ -207,9 +207,10 @@ export const TOUR_CONTENT = {
       ],
       [
         "List or speed-dial.",
-        "A grid view of favicon tiles with a colour monogram standing in until the icon loads. " +
-        "Icons are fetched from each target's own origin — never a third-party icon service — " +
-        "so nothing else learns what you've saved.",
+        "A grid of compact row-tiles — the name over the target's host, beside its favicon, " +
+        "with a colour monogram standing in when there isn't one. Icons are fetched from each " +
+        "target's own origin — never a third-party icon service — so nothing else learns what " +
+        "you've saved.",
       ],
       [
         "Dynamic links.",
