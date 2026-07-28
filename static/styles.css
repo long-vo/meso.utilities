@@ -1490,6 +1490,12 @@ select:focus {
   font-size: 12px;
   margin: 7px 0 0;
 }
+/* Inline variant for the parenthetical inside a field's <label> — a span that
+   flows with the label text instead of the block .hint is elsewhere. */
+.hint-inline {
+  display: inline;
+  margin: 0;
+}
 .hint code,
 .footer code,
 .panel-head code {

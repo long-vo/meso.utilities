@@ -84,12 +84,15 @@
 
       <div class="field">
         <label for="duration">Duration</label>
-        <select id="duration">
+        <!-- aria-describedby ties the full-day-only hint to the select; aria-live
+             announces it right away, since choosing Core/Social coerces a half-day
+             selection while focus is still on the select. -->
+        <select id="duration" aria-describedby="duration-hint">
           <option value="full">Full day</option>
           <option value="morning">Half day — Morning</option>
           <option value="afternoon">Half day — Afternoon</option>
         </select>
-        <p class="hint" id="duration-hint" hidden></p>
+        <p class="hint" id="duration-hint" aria-live="polite" hidden></p>
       </div>
 
       <div class="field">
@@ -99,26 +102,28 @@
             <span class="date-sub" id="from-sub" aria-hidden="true">From</span>
             <!-- aria-label (kept in sync by app.js) names this input "From date";
                  the "Dates" label above stays the visual group heading. -->
-            <input type="date" id="start" aria-label="From date" />
+            <input type="date" id="start" aria-label="From date" aria-describedby="date-summary" />
           </div>
           <!-- To/end date drives a multi-day range; app.js hides it for a half day. -->
           <div id="end-field">
             <label for="end" class="date-sub">To</label>
-            <input type="date" id="end" />
+            <input type="date" id="end" aria-describedby="date-summary" />
           </div>
         </div>
-        <p class="hint date-summary" id="date-summary" hidden></p>
+        <!-- Describes both date inputs; aria-live announces the day count and the
+             weekend/past warnings as they appear, not only on the next focus. -->
+        <p class="hint date-summary" id="date-summary" aria-live="polite" hidden></p>
       </div>
 
       <!-- Reason and CC feed the HR email only; app.js hides both for Remote/WFH,
            which have no HR email step. -->
       <div class="field" id="reason-field">
-        <label for="reason">Reason <span class="hint" style="display:inline">— optional, HR email only</span></label>
+        <label for="reason">Reason <span class="hint hint-inline">— optional, HR email only</span></label>
         <input type="text" id="reason" placeholder="Family trip" />
       </div>
 
       <div class="field" id="lead-field">
-        <label for="lead">CC email <span class="hint" style="display:inline">— optional, for HR mail</span></label>
+        <label for="lead">CC email <span class="hint hint-inline">— optional, for HR mail</span></label>
         <input type="email" id="lead" multiple placeholder="lead@mesoneer.io, lead2@mesoneer.io"
           spellcheck="false" autocomplete="off" />
         <div class="recipient-row">
@@ -132,7 +137,7 @@
       </div>
 
       <div class="field">
-        <label for="recipients">PO / extra recipients <span class="hint" style="display:inline">— optional, for the event</span></label>
+        <label for="recipients">PO / extra recipients <span class="hint hint-inline">— optional, for the event</span></label>
         <input type="email" id="recipients" multiple placeholder="po@mesoneer.io, po2@mesoneer.io"
           spellcheck="false" autocomplete="off" />
         <div class="recipient-row">
