@@ -59,7 +59,7 @@ const els = {
   copyBody: /** @type {HTMLButtonElement} */ ($("copy-body")),
   emailDone: $("email-done"),
   eventDone: $("event-done"),
-  eventTitle: $("event-title"),
+  eventStepBadge: $("event-step-badge"),
   eventSubject: $("event-subject"),
   eventRecipients: $("event-recipients"),
   addEventOutlook: $("add-event-outlook"),
@@ -192,14 +192,14 @@ function render() {
   els.end.min = els.start.value;
 
   // Remote/WFH aren't leave, so no HR email is expected: hide that step. The Outlook
-  // event is then the only step, so drop its "· step 2" suffix. Reason and CC feed
+  // event is then the only step, so drop its "2" step badge. Reason and CC feed
   // that email and nothing else, so they go with it — leaving them on screen invited
   // people to fill in fields that could not reach anywhere.
   const needsEmail = Boolean(TYPES[els.type.value]?.emailApplicable);
   els.emailCard.hidden = !needsEmail;
   els.reasonField.hidden = !needsEmail;
   els.leadField.hidden = !needsEmail;
-  els.eventTitle.textContent = needsEmail ? "Outlook Event · step 2" : "Outlook Event";
+  els.eventStepBadge.hidden = !needsEmail;
   paintSteps();
 
   const input = readInput();

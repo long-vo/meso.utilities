@@ -615,6 +615,10 @@ body.page-hub a.card:hover {
   border-color: var(--card-art1, var(--accent));
   transform: translateY(-3px);
 }
+/* Press feedback: the lifted card settles back under the pointer. */
+body.page-hub a.card:active {
+  transform: translateY(-1px) scale(0.99);
+}
 body.page-hub .card-head h2 {
   color: var(--card-ink, var(--text));
   font-size: 16.5px;
@@ -701,8 +705,67 @@ body.page-hub .card .card-go {
   color: var(--card-sub, var(--accent));
 }
 
-/* Screen-reader-only copy — the old card descriptions stay for assistive
-   tech (and as the link's title tooltip) after the visual redesign. */
+/* Card descriptions. The visual redesign kept the cards art-forward, so the
+   description shares the illustration's grid cell and fades in over it on
+   hover/focus — a designed replacement for the old native `title` tooltip
+   (instant, styled, and keyboard-reachable). It stays in the layout at
+   opacity 0, so assistive tech always reads it. On touch devices there is no
+   hover, so the description simply shows below the art instead. */
+body.page-hub .card {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  grid-template-columns: 100%;
+}
+body.page-hub .card .card-art,
+body.page-hub .card .card-desc {
+  grid-row: 2;
+  grid-column: 1;
+}
+body.page-hub .card .card-art {
+  transition: opacity 0.18s ease-out;
+}
+.card-desc {
+  align-self: center;
+  margin: 0;
+  padding: 2px 4px;
+  font-size: 13px;
+  line-height: 1.55;
+  text-align: center;
+  color: var(--card-ink, var(--text));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease-out;
+}
+body.page-hub a.card:hover .card-art,
+body.page-hub a.card:focus-visible .card-art {
+  opacity: 0.12;
+}
+body.page-hub a.card:hover .card-desc,
+body.page-hub a.card:focus-visible .card-desc {
+  opacity: 1;
+}
+@media (hover: none) {
+  body.page-hub .card {
+    grid-template-rows: auto 1fr auto auto;
+  }
+  body.page-hub .card .card-desc {
+    grid-row: 3;
+    align-self: start;
+    text-align: left;
+    padding: 0;
+    opacity: 1;
+  }
+  body.page-hub a.card:hover .card-art,
+  body.page-hub a.card:focus-visible .card-art {
+    opacity: 1;
+  }
+  /* "Press Ctrl/⌘ K" means nothing without a keyboard. */
+  .kbd-hint {
+    display: none;
+  }
+}
+
+/* Screen-reader-only copy. */
 .sr-only {
   position: absolute;
   width: 1px;
@@ -3502,21 +3565,70 @@ button.out:focus-visible::after {
   font-size: 12px;
   color: var(--text-faint);
 }
-/* The form's single status/guidance line leads the panel; a touch larger than
-   the shared 12px .status so the next step reads first. */
+/* The form's single status/guidance line leads the panel as a tinted banner —
+   it is the tool's main feedback, so it reads as a state, not a stray line.
+   Same tint recipe as .sl-miss. The ok/bad variants restate their text colour:
+   this selector outranks the shared .status.ok/.bad. :empty covers the instant
+   before the deferred app.js first renders, so no empty box flashes. */
 .page-leave .controls .status {
   display: block;
   font-size: 13px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+  color: var(--text-dim);
+}
+.page-leave .controls .status:empty {
+  display: none;
+}
+.page-leave .controls .status.ok {
+  border-color: color-mix(in srgb, var(--good) 40%, var(--border));
+  background: color-mix(in srgb, var(--good) 9%, var(--bg-inset));
+  color: var(--good);
+}
+.page-leave .controls .status.bad {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+  background: color-mix(in srgb, var(--danger) 9%, var(--bg-inset));
+  color: var(--danger);
 }
 /* Day count under the date fields; tinted when the period touches a weekend. */
 .date-summary.warn {
   color: var(--warn);
 }
-/* "✓ done" badge on a step heading once its open/add action has run. */
+/* "✓ done" badge on a step heading once its open/add action has run. The
+   heading's gradient clip (see the @supports block) makes descendants' text
+   fill transparent, so the badge resets it — without this the ✓ renders in
+   the gradient, never the green. */
 .step-done {
   color: var(--good);
+  -webkit-text-fill-color: currentColor;
   font-size: 12px;
   font-weight: 600;
+}
+/* Numbered step chip leading the two panel headings — makes the email → event
+   order scannable. Same text-fill reset as .step-done, same reason. The heading
+   becomes a centred flex row so the chip, the title and the "✓ done" badge all
+   sit on one middle axis (page-scoped: other pages' panel h2s stay untouched). */
+.page-leave .panel-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  -webkit-text-fill-color: currentColor;
+  background-color: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
 }
 /* Event settings that are prefilled or default correctly — highlighted so they
    read as "no action needed". */
