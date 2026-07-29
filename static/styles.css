@@ -705,67 +705,15 @@ body.page-hub .card .card-go {
   color: var(--card-sub, var(--accent));
 }
 
-/* Card descriptions. The visual redesign kept the cards art-forward, so the
-   description shares the illustration's grid cell and fades in over it on
-   hover/focus — a designed replacement for the old native `title` tooltip
-   (instant, styled, and keyboard-reachable). It stays in the layout at
-   opacity 0, so assistive tech always reads it. On touch devices there is no
-   hover, so the description simply shows below the art instead. */
-body.page-hub .card {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  grid-template-columns: 100%;
-}
-body.page-hub .card .card-art,
-body.page-hub .card .card-desc {
-  grid-row: 2;
-  grid-column: 1;
-}
-body.page-hub .card .card-art {
-  transition: opacity 0.18s ease-out;
-}
-.card-desc {
-  align-self: center;
-  margin: 0;
-  padding: 2px 4px;
-  font-size: 13px;
-  line-height: 1.55;
-  text-align: center;
-  color: var(--card-ink, var(--text));
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.18s ease-out;
-}
-body.page-hub a.card:hover .card-art,
-body.page-hub a.card:focus-visible .card-art {
-  opacity: 0.12;
-}
-body.page-hub a.card:hover .card-desc,
-body.page-hub a.card:focus-visible .card-desc {
-  opacity: 1;
-}
+/* "Press Ctrl/⌘ K" means nothing without a keyboard. */
 @media (hover: none) {
-  body.page-hub .card {
-    grid-template-rows: auto 1fr auto auto;
-  }
-  body.page-hub .card .card-desc {
-    grid-row: 3;
-    align-self: start;
-    text-align: left;
-    padding: 0;
-    opacity: 1;
-  }
-  body.page-hub a.card:hover .card-art,
-  body.page-hub a.card:focus-visible .card-art {
-    opacity: 1;
-  }
-  /* "Press Ctrl/⌘ K" means nothing without a keyboard. */
   .kbd-hint {
     display: none;
   }
 }
 
-/* Screen-reader-only copy. */
+/* Screen-reader-only copy — the cards stay art-forward, so each tool's
+   description is read by assistive tech but never shown. */
 .sr-only {
   position: absolute;
   width: 1px;
@@ -2071,7 +2019,13 @@ html.js body.page-hub .cards.is-ready {
   background: color-mix(in srgb, var(--warn) 12%, var(--bg-elev));
 }
 
-.card--hidden {
+/* The favourites filter hides a card by adding this class. On its own it is a
+   single class, so it only beats `.card { display: flex }` on source order — any
+   page-scoped `display` on a card outranks it and the filter silently hides
+   nothing (that regression has shipped once). The scoped selector keeps it
+   winning; leave it in place. */
+.card--hidden,
+body.page-hub .card.card--hidden {
   display: none;
 }
 
