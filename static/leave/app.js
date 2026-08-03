@@ -14,6 +14,7 @@ import {
   outlookComposeUrl,
   parseEmails,
   parseLeaveHandoff,
+  promptText,
   removeRecipient,
   summarizePeriod,
   templateSummary,
@@ -57,6 +58,7 @@ const els = {
   copySubject: $("copy-subject"),
   saveAvailability: $("save-availability"),
   copyBody: /** @type {HTMLButtonElement} */ ($("copy-body")),
+  copyPrompt: $("copy-prompt"),
   emailDone: $("email-done"),
   eventDone: $("event-done"),
   eventStepBadge: $("event-step-badge"),
@@ -118,17 +120,28 @@ const BOOKMARK_ICON =
  *  - `emailSend` — the mailto/Outlook links carry the Cc, so the CC field must be
  *    well-formed or the address the user typed would vanish without a word.
  *  - `eventCopy` / `eventSend` — same split for the PO/extra recipients field.
+ *  - `prompt` — the prompt spells out both artifacts *and* their recipients for an
+ *    assistant to act on, so it is a send in every way that matters here: both
+ *    address fields must be well-formed, and unlike `emailCopy` it survives
+ *    Remote/WFH, whose prompt is the event alone.
  */
 const ACTION_GROUPS = {
   emailCopy: [els.copySubject, els.copyBody],
   emailSend: [els.openMail, els.openOutlook],
   eventCopy: [els.copyEventSubject],
   eventSend: [els.addEventOutlook, els.copyRecipients],
+  prompt: [els.copyPrompt],
 };
 
 /** Which groups are live right now. The palette commands bypass the disabled
  *  buttons, so they check these flags instead (see `guarded`). */
-const actionsEnabled = { emailCopy: false, emailSend: false, eventCopy: false, eventSend: false };
+const actionsEnabled = {
+  emailCopy: false,
+  emailSend: false,
+  eventCopy: false,
+  eventSend: false,
+  prompt: false,
+};
 
 const EMAIL_ERROR =
   "Enter valid email addresses (comma or semicolon separated), or leave it blank.";
@@ -306,6 +319,7 @@ function setActionsEnabled(formOk, emailApplies) {
   actionsEnabled.emailSend = formOk && emailApplies && leadOk;
   actionsEnabled.eventCopy = formOk;
   actionsEnabled.eventSend = formOk && recipientsOk;
+  actionsEnabled.prompt = formOk && leadOk && recipientsOk;
   for (const [group, buttons] of Object.entries(ACTION_GROUPS)) {
     for (const button of /** @type {HTMLButtonElement[]} */ (buttons)) {
       button.disabled = !actionsEnabled[group];
@@ -356,6 +370,15 @@ function openOutlookWeb() {
     els.emailBody.value,
   );
   globalThis.open(url, "_blank", "noopener");
+}
+
+/** Copy the whole request — HR email (when the type has one) and the calendar
+ *  event — wrapped as a prompt for an AI assistant. The edited body is handed in
+ *  the same way the mail links take it, so what you paste is the text on screen,
+ *  not the generated version it may have replaced. */
+function copyAsPrompt() {
+  if (!current) return;
+  copy(promptText(current, els.emailBody.value), "Prompt");
 }
 
 /** Mark the body as user-edited so re-renders keep it; reveal the reset link.
@@ -835,6 +858,7 @@ els.openMail.addEventListener("click", openMail);
 els.openOutlook.addEventListener("click", openOutlookWeb);
 els.copySubject.addEventListener("click", () => copy(current?.email.subject, "Subject"));
 els.copyBody.addEventListener("click", () => copy(els.emailBody.value, "Body"));
+els.copyPrompt.addEventListener("click", copyAsPrompt);
 els.addEventOutlook.addEventListener("click", addEventToOutlook);
 els.saveAvailability.addEventListener("click", saveToAvailability);
 els.copyEventSubject.addEventListener("click", () => copy(current?.event.subject, "Event subject"));
@@ -881,6 +905,13 @@ registerCommands([
     title: "Copy HR email body",
     hint: "action",
     run: guarded("emailCopy", () => copy(els.emailBody.value, "Body")),
+  },
+  {
+    icon: "📋",
+    title: "Copy the whole request as an AI prompt",
+    hint: "action",
+    keywords: ["claude", "ai", "assistant", "prompt", "email", "event"],
+    run: guarded("prompt", copyAsPrompt),
   },
   {
     icon: "📅",

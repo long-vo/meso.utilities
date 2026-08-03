@@ -50,6 +50,10 @@ export const TYPES = {
 /**
  * @typedef {Object} LeaveResult
  * @property {true} ok
+ * @property {string} period The human-readable day/range both artifacts describe,
+ *   e.g. "2026-07-20 to 2026-07-22" or "2026-07-20 (Morning)". The email subject
+ *   and body embed it; the event carries it only inside its deep link, so it is
+ *   surfaced here for callers that need to state the dates in prose.
  * @property {{ to: string, cc: string, subject: string, body: string,
  *   mailto: string, outlookWebUrl: string, applicable: boolean }} email
  * @property {{ subject: string, recipients: string, outlookWebUrl: string }} event
@@ -133,6 +137,7 @@ export function buildLeaveRequest(input) {
 
   return {
     ok: true,
+    period,
     email: {
       to: HR_EMAIL,
       cc,
@@ -327,6 +332,73 @@ export function outlookComposeUrl(to, cc, subject, body) {
     `body=${encodeURIComponent(body)}`,
   ];
   return `https://outlook.office.com/mail/deeplink/compose?${params.join("&")}`;
+}
+
+/**
+ * What `promptText` asks the assistant to do, keyed by which artifacts the leave
+ * type actually produces. Their own constants because the wording is the one
+ * thing about the prompt anyone is likely to want different, and both are
+ * asserted verbatim by the parity tests. They keep every action behind a
+ * confirmation on purpose: this tool never sends or creates anything itself, and
+ * a prompt that said "send it" would quietly change that.
+ */
+export const PROMPT_INSTRUCTIONS = {
+  both: "Please review this leave request, then ask me before sending the email and " +
+    "creating the calendar event from my Outlook.",
+  eventOnly: "Please review this leave request, then ask me before creating the calendar " +
+    "event in my Outlook.",
+};
+
+/**
+ * The whole request wrapped as a prompt to paste into an AI assistant: the
+ * instruction, then the HR email and the Outlook event as `key: value` blocks,
+ * so an assistant with a mail/calendar connector has everything it needs
+ * without a second round trip.
+ *
+ * Follows the page rather than inventing its own rules. Remote and WFH have no
+ * HR email step (`email.applicable`), so their prompt is the event alone — and
+ * the sections are numbered only when both are present, the same reason the UI
+ * hides its step badge for those types. The event lines mirror the reminder
+ * chips one-for-one, including the two settings no deep link can set, so the
+ * assistant sets what the user would otherwise have to fix by hand.
+ *
+ * `body` exists so the UI can pass the *edited* body, the same way it rebuilds
+ * the mail links from it. The Cc line is dropped when empty rather than emitted
+ * blank, which would read as a deliberately empty Cc instead of no Cc at all.
+ *
+ * @param {LeaveResult} result A successful `buildLeaveRequest` result.
+ * @param {string} [body] The on-screen email body; defaults to the generated one.
+ * @returns {string}
+ */
+export function promptText(result, body) {
+  const withEmail = result.email.applicable;
+  const blocks = [withEmail ? PROMPT_INSTRUCTIONS.both : PROMPT_INSTRUCTIONS.eventOnly];
+
+  if (withEmail) {
+    const ccList = parseEmails(result.email.cc);
+    blocks.push([
+      "--- 1. HR email ---",
+      "",
+      `To: ${result.email.to}`,
+      ...(ccList.length === 0 ? [] : [`Cc: ${ccList.join("; ")}`]),
+      `Subject: ${result.email.subject}`,
+      "",
+      typeof body === "string" ? body : result.email.body,
+    ].join("\n"));
+  }
+
+  blocks.push([
+    `--- ${withEmail ? "2. " : ""}Outlook calendar event ---`,
+    "",
+    `Subject: ${result.event.subject}`,
+    `Invite: ${result.event.recipients}`,
+    `When: ${result.period}`,
+    "All day: yes",
+    "Show as: Free",
+    "Request responses: no",
+  ].join("\n"));
+
+  return blocks.join("\n\n");
 }
 
 /**

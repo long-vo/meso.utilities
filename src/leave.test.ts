@@ -19,6 +19,8 @@ import {
   outlookComposeUrl,
   parseEmails,
   parseLeaveHandoff,
+  PROMPT_INSTRUCTIONS,
+  promptText,
   recipientTokenAt,
   removeRecipient,
   summarizePeriod,
@@ -411,6 +413,97 @@ Deno.test("mailtoUrl / outlookComposeUrl build encoded links from an (edited) bo
   assert(web.includes("to=hr.vn%40mesoneer.io"), web);
   assert(web.includes(`body=${encodeURIComponent(body)}`), web);
   assert(!web.includes("cc="), web);
+});
+
+function built(input: Parameters<typeof buildLeaveRequest>[0]) {
+  const result = buildLeaveRequest(input);
+  if (!result.ok) throw new Error(result.error);
+  return result;
+}
+
+Deno.test("promptText: both artifacts, numbered, with the event's own settings", () => {
+  const result = built({
+    name: "John Doe",
+    type: "annual",
+    duration: "full",
+    startDate: "2026-08-10",
+    endDate: "2026-08-12",
+    reason: "Family trip",
+    teamLead: "lead@mesoneer.io, lead2@mesoneer.io",
+    recipients: "po@mesoneer.io",
+  });
+  assertEquals(
+    promptText(result),
+    `${PROMPT_INSTRUCTIONS.both}\n\n` +
+      "--- 1. HR email ---\n\n" +
+      "To: hr.vn@mesoneer.io\n" +
+      "Cc: lead@mesoneer.io; lead2@mesoneer.io\n" +
+      "Subject: [Leave Request] John Doe - 2026-08-10 to 2026-08-12\n\n" +
+      "Dear HR,\n\nDate off: 2026-08-10 to 2026-08-12\nLeave type: Annual leave\n" +
+      "Reason: Family trip\n\nBest regards,\n\n" +
+      "--- 2. Outlook calendar event ---\n\n" +
+      "Subject: [OFF] - John Doe\n" +
+      "Invite: mesoneer_vn@mesoneer.io; po@mesoneer.io\n" +
+      "When: 2026-08-10 to 2026-08-12\n" +
+      "All day: yes\n" +
+      "Show as: Free\n" +
+      "Request responses: no",
+  );
+});
+
+Deno.test("promptText: Remote/WFH drop the email section and the numbering", () => {
+  for (const type of ["remote", "wfh"] as const) {
+    const result = built({
+      name: "John Doe",
+      type,
+      duration: "morning",
+      startDate: "2026-08-10",
+    });
+    const prompt = promptText(result);
+    assertEquals(
+      prompt,
+      `${PROMPT_INSTRUCTIONS.eventOnly}\n\n` +
+        "--- Outlook calendar event ---\n\n" +
+        `Subject: [Morning - ${type === "remote" ? "Remote" : "WFH"}] - John Doe\n` +
+        "Invite: mesoneer_vn@mesoneer.io\n" +
+        "When: 2026-08-10 (Morning)\n" +
+        "All day: yes\n" +
+        "Show as: Free\n" +
+        "Request responses: no",
+    );
+    assert(!prompt.includes("HR email"), `${type}: no HR email section`);
+    assert(!prompt.includes("hr.vn@mesoneer.io"), `${type}: HR is not addressed`);
+  }
+});
+
+Deno.test("promptText: the edited body replaces the generated one, verbatim", () => {
+  const result = built({
+    name: "John Doe",
+    type: "annual",
+    duration: "full",
+    startDate: "2026-08-10",
+  });
+  // Nothing is escaped or encoded — this is prose for an assistant to read, not a
+  // URL — so "&" and the newlines must survive untouched.
+  const body = "Dear HR,\n\nEdited & tweaked\n\nBest regards,";
+  const prompt = promptText(result, body);
+  assert(prompt.includes(`\n\n${body}\n\n--- 2.`), prompt);
+  assert(!prompt.includes("Leave type: Annual leave"), "generated body is gone");
+  // A non-string body falls back to the generated one rather than printing itself.
+  assert(promptText(result, undefined).includes("Leave type: Annual leave"), "default body");
+});
+
+Deno.test("promptText: no Cc line when there is no Cc", () => {
+  const prompt = promptText(built({
+    name: "John Doe",
+    type: "annual",
+    duration: "full",
+    startDate: "2026-08-10",
+    teamLead: " ; , ",
+  }));
+  // Whitespace-only and separator-only input is no Cc at all, not a blank one.
+  assert(!prompt.includes("Cc:"), prompt);
+  assert(prompt.includes("To: hr.vn@mesoneer.io\nSubject: "), prompt);
 });
 
 Deno.test("templateSummary: type label, duration, and optional reason", () => {

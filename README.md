@@ -151,6 +151,11 @@ Nothing is sent — the buttons hand off to your own mail app and to Outlook on 
   semicolon-separated). **Add to Outlook (web)** prefills the subject, dates, all-day flag and
   attendees; reminder chips flag what a URL can't set — the one manual step is to **uncheck "Request
   Response"**.
+- **Copy as prompt.** Copies the whole request — the HR email and the calendar event, each with its
+  recipients, plus the event settings no deep link can set — behind a short instruction, to paste
+  into an AI assistant. One with a mail/calendar connector can then check it over and, once you
+  confirm, send and create both. Remote and WFH have no HR email, so their prompt is the event
+  alone.
 - **Save to Availability.** Records the request on your row in Team Availability's grid: Annual
   leave writes `p` (`m`/`a` for a half day), Sick `s`/`sm`/`sa`, Core `c`, and Remote/WFH
   `r`/`rm`/`ra`. Nothing is written from here — the change is parked in `localStorage` and applied
