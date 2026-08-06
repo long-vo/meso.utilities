@@ -58,7 +58,88 @@ Deno.test("full-day annual leave: HR email + Outlook event", () => {
   );
   assertEquals(result.email.applicable, true);
   assertEquals(result.event.subject, "[OFF] - John Doe");
+  // No note was given, so the event carries no description at all.
+  assertEquals(result.event.body, "");
   assertEquals(result.event.recipients, "mesoneer_vn@mesoneer.io");
+});
+
+Deno.test("event.body: the note is the whole description, never the reason", () => {
+  // The event is invited to the whole team list, so a reason typed for HR must not
+  // ride along into the description.
+  const result = buildLeaveRequest({
+    name: "Jane Roe",
+    type: "sick",
+    duration: "afternoon",
+    startDate: "2026-07-20",
+    reason: "Dentist appointment",
+    note: "Back on Wednesday",
+  });
+  if (!result.ok) throw new Error(result.error);
+  assertEquals(result.event.body, "Back on Wednesday");
+  assert(!result.event.outlookWebUrl.includes("Dentist"), result.event.outlookWebUrl);
+  // The email body is where the reason belongs.
+  assert(result.email.body.includes("Reason: Dentist appointment"), result.email.body);
+});
+
+Deno.test("event.body: the note reaches the deep link, and stays out of the HR mail", () => {
+  const result = buildLeaveRequest({
+    name: "John Doe",
+    type: "annual",
+    duration: "full",
+    startDate: "2026-07-20",
+    reason: "Family trip",
+    note: "Handover: Anna covers standups",
+  });
+  if (!result.ok) throw new Error(result.error);
+  assertEquals(result.event.body, "Handover: Anna covers standups");
+  assert(
+    result.event.outlookWebUrl.includes(`body=${encodeURIComponent(result.event.body)}`),
+    result.event.outlookWebUrl,
+  );
+  assert(!result.email.body.includes("Handover"), result.email.body);
+});
+
+Deno.test("event.body: a note is trimmed, and multiple lines survive", () => {
+  const result = buildLeaveRequest({
+    name: "John Doe",
+    type: "annual",
+    duration: "full",
+    startDate: "2026-07-20",
+    note: "  Handover: Anna\nReachable on Slack  ",
+  });
+  if (!result.ok) throw new Error(result.error);
+  assertEquals(result.event.body, "Handover: Anna\nReachable on Slack");
+  // Newlines are percent-encoded, which is how Outlook receives a line break.
+  assert(result.event.outlookWebUrl.includes("%0A"), result.event.outlookWebUrl);
+});
+
+Deno.test("event.body: a blank or whitespace note sends no body param at all", () => {
+  for (const note of ["", "   ", "\n"]) {
+    const result = buildLeaveRequest({
+      name: "John Doe",
+      type: "annual",
+      duration: "full",
+      startDate: "2026-07-20",
+      note,
+    });
+    if (!result.ok) throw new Error(result.error);
+    assertEquals(result.event.body, "");
+    // A blank `body=` would be noise; the param is left out entirely.
+    assert(!result.event.outlookWebUrl.includes("body="), result.event.outlookWebUrl);
+  }
+});
+
+Deno.test("event.body: Remote keeps the note even though it has no HR email", () => {
+  const result = buildLeaveRequest({
+    name: "John Doe",
+    type: "remote",
+    duration: "full",
+    startDate: "2026-07-20",
+    note: "Reachable on Slack",
+  });
+  if (!result.ok) throw new Error(result.error);
+  assertEquals(result.email.applicable, false);
+  assertEquals(result.event.body, "Reachable on Slack");
 });
 
 Deno.test("type mapping: bracket, leave-type label and email applicability", () => {
@@ -348,15 +429,19 @@ Deno.test("event.outlookWebUrl: all-day calendar deep link with dates and attend
     duration: "full",
     startDate: "2026-07-20",
     recipients: "po@mesoneer.io",
+    note: "Handover: Anna covers standups",
   });
   if (!result.ok) throw new Error(result.error);
   const url = result.event.outlookWebUrl;
   assert(url.startsWith("https://outlook.office.com/calendar/0/deeplink/compose?"), url);
   assert(url.includes(`subject=${encodeURIComponent(result.event.subject)}`), url);
+  assert(url.includes(`body=${encodeURIComponent(result.event.body)}`), url);
   assert(url.includes("startdt=2026-07-20"), url);
   // Outlook's all-day end is exclusive, so a single day ends at 00:00 the next day.
   assert(url.includes("enddt=2026-07-21"), url);
   assert(url.includes("allday=true"), url);
+  // Nobody on the team list should be asked to reply to a leave notice.
+  assert(url.includes("reqresponse=false"), url);
   // Attendees go in `to` (comma-separated), percent-encoded.
   assert(url.includes(`to=${encodeURIComponent("mesoneer_vn@mesoneer.io,po@mesoneer.io")}`), url);
 });

@@ -39,6 +39,7 @@ const els = {
   dateLabel: $("date-label"),
   dateSummary: $("date-summary"),
   reason: /** @type {HTMLInputElement} */ ($("reason")),
+  note: /** @type {HTMLInputElement} */ ($("note")),
   reasonField: $("reason-field"),
   lead: /** @type {HTMLInputElement} */ ($("lead")),
   leadField: $("lead-field"),
@@ -63,6 +64,7 @@ const els = {
   eventDone: $("event-done"),
   eventStepBadge: $("event-step-badge"),
   eventSubject: $("event-subject"),
+  eventBody: $("event-body"),
   eventRecipients: $("event-recipients"),
   addEventOutlook: $("add-event-outlook"),
   copyEventSubject: $("copy-event-subject"),
@@ -173,6 +175,7 @@ function readInput() {
     startDate: els.start.value,
     endDate: els.end.value,
     reason: els.reason.value,
+    note: els.note.value,
     teamLead: els.lead.value,
     recipients: els.recipients.value,
   });
@@ -230,6 +233,7 @@ function render() {
     els.formStatus.className = "status" + (/before/.test(result.error) ? " bad" : "");
     els.emailSubject.textContent = "—";
     els.eventSubject.textContent = "—";
+    els.eventBody.textContent = "—";
     els.eventRecipients.textContent = "—";
     if (!bodyDirty) els.emailBody.value = "";
     paintBodyState();
@@ -262,6 +266,10 @@ function render() {
   els.emailCc.textContent = result.email.cc;
 
   els.eventSubject.textContent = result.event.subject;
+  // An empty description is the norm (the Note is optional), so it shows the same "—"
+  // placeholder the other previews use — which the copy handler already reads as
+  // "nothing to copy yet" — instead of an empty box.
+  els.eventBody.textContent = result.event.body === "" ? "—" : result.event.body;
   els.eventRecipients.textContent = result.event.recipients;
 
   // A malformed (but optional) email must not reach the mailto/event.
@@ -466,6 +474,7 @@ function currentTemplateFields() {
     type: els.type.value,
     duration: els.duration.value,
     reason: els.reason.value,
+    note: els.note.value,
     teamLead: els.lead.value,
     recipients: els.recipients.value,
   };
@@ -520,6 +529,7 @@ function applyTemplate(tpl) {
   els.type.value = TYPES[tpl.type] ? tpl.type : "annual";
   els.duration.value = tpl.duration ?? "full";
   els.reason.value = tpl.reason ?? "";
+  els.note.value = tpl.note ?? "";
   els.lead.value = tpl.teamLead ?? "";
   els.recipients.value = tpl.recipients ?? "";
   els.start.value = "";
@@ -818,8 +828,8 @@ function formChanged() {
 
 /** Same, for the fields the generated body is built from: a hand-edited body no
  *  longer tracks them, so it may now describe the old request — flag it. The
- *  CC/recipients fields feed the links and the event, never the body, so they
- *  stay on plain formChanged. */
+ *  CC/recipients fields and the event note feed the links and the event, never the
+ *  body, so they stay on plain formChanged. */
 function bodyFieldChanged() {
   if (bodyDirty) bodyStale = true;
   formChanged();
@@ -828,7 +838,9 @@ function bodyFieldChanged() {
 for (const el of [els.name, els.reason, els.start, els.end]) {
   el.addEventListener("input", bodyFieldChanged);
 }
-for (const el of [els.lead, els.recipients]) el.addEventListener("input", formChanged);
+for (const el of [els.note, els.lead, els.recipients]) {
+  el.addEventListener("input", formChanged);
+}
 for (const el of [els.type, els.duration]) el.addEventListener("change", bodyFieldChanged);
 els.name.addEventListener("input", saveName);
 

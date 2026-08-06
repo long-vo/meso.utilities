@@ -148,14 +148,17 @@ Nothing is sent — the buttons hand off to your own mail app and to Outlook on 
 - **Calendar event.** Subject `[OFF] - Name` — the bracket follows the leave type (`OFF`,
   `Sick Leave`, `Core Leave`, `Remote`, `WFH`, prefixed with the half-day time) — sent to
   `mesoneer_vn@mesoneer.io` plus any optional PO/extra recipients (one or more, comma- or
-  semicolon-separated). **Add to Outlook (web)** prefills the subject, dates, all-day flag and
-  attendees; reminder chips flag what a URL can't set — the one manual step is to **uncheck "Request
-  Response"**.
+  semicolon-separated). An optional **Note** becomes the event's **description** — all of it; leave
+  the Note empty and the event has no description. It is never the **Reason**, since everyone
+  invited can read the event, which is why the two are separate fields (the Note stays on screen for
+  Remote/WFH, where Reason is hidden). **Add to Outlook (web)** prefills the subject, the Note,
+  dates, all-day flag, attendees and turns off **Request Response**; reminder chips list what the
+  event will carry, and **Status = Free** — the one thing no URL can set — is worth a glance before
+  you send.
 - **Copy as prompt.** Copies the whole request — the HR email and the calendar event, each with its
-  recipients, plus the event settings no deep link can set — behind a short instruction, to paste
-  into an AI assistant. One with a mail/calendar connector can then check it over and, once you
-  confirm, send and create both. Remote and WFH have no HR email, so their prompt is the event
-  alone.
+  recipients, plus the event settings — behind a short instruction, to paste into an AI assistant.
+  One with a mail/calendar connector can then check it over and, once you confirm, send and create
+  both. Remote and WFH have no HR email, so their prompt is the event alone.
 - **Save to Availability.** Records the request on your row in Team Availability's grid: Annual
   leave writes `p` (`m`/`a` for a half day), Sick `s`/`sm`/`sa`, Core `c`, and Remote/WFH
   `r`/`rm`/`ra`. Nothing is written from here — the change is parked in `localStorage` and applied
@@ -167,11 +170,14 @@ Nothing is sent — the buttons hand off to your own mail app and to Outlook on 
   `localStorage`, shared by both) and offered as autocomplete — pick one to complete the address
   you're typing, ✕ a suggestion to forget it, or **Save recipients** to keep the current addresses
   without sending. They're auto-saved when you Open in mail / Add to Outlook.
-- **Templates.** Save the reusable fields (everything except the dates) as a named preset — one
-  click refills the form for the next request. Templates and your name persist in `localStorage`;
-  the dates always start fresh.
-- **Copying.** Every read-only value (To, Cc, both subjects, the recipients) is itself a button —
-  click it to copy just that value; the toolbar buttons above each card still copy the same things.
+- **Templates.** Save the reusable fields (everything except the dates — including the event
+  **Note**) as a named preset — one click refills the form for the next request. Templates and your
+  name persist in `localStorage`; the dates always start fresh, so an applied preset never replays
+  stale dates — which is also why the Note is a plain form field rather than an editable copy of the
+  event text: there are no dates baked into it to go stale.
+- **Copying.** Every read-only value (To, Cc, both subjects, the recipients, the event description)
+  is itself a button — click it to copy just that value; the toolbar buttons above each card still
+  copy the same things.
 - **Optional addresses.** A malformed address only blocks what it would break: a bad **Cc** disables
   the two email hand-offs (which would otherwise drop it silently) but leaves the copy buttons and
   the whole event step working, and a bad **PO/extra recipient** does the mirror image.

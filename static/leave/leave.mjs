@@ -41,6 +41,10 @@ export const TYPES = {
  * @property {string} startDate ISO date, e.g. "2026-07-20".
  * @property {string} [endDate] ISO date; a full-day period end. Ignored for half days.
  * @property {string} [reason] Optional reason for the HR email.
+ * @property {string} [note] Optional event description — a handover line, cover
+ *   arrangements. It *is* the whole description; blank leaves the event without one.
+ *   Unlike `reason` it is read by everyone on the invite, which is why the two are
+ *   separate fields rather than one shared text.
  * @property {string} [teamLead] Optional team-lead address(es); become the email Cc.
  *   A comma- or semicolon-separated list is accepted.
  * @property {string} [recipients] Optional extra event recipients (e.g. your PO).
@@ -52,11 +56,12 @@ export const TYPES = {
  * @property {true} ok
  * @property {string} period The human-readable day/range both artifacts describe,
  *   e.g. "2026-07-20 to 2026-07-22" or "2026-07-20 (Morning)". The email subject
- *   and body embed it; the event carries it only inside its deep link, so it is
+ *   and body embed it; the event carries it only as its own start/end dates, so it is
  *   surfaced here for callers that need to state the dates in prose.
  * @property {{ to: string, cc: string, subject: string, body: string,
  *   mailto: string, outlookWebUrl: string, applicable: boolean }} email
- * @property {{ subject: string, recipients: string, outlookWebUrl: string }} event
+ * @property {{ subject: string, body: string, recipients: string,
+ *   outlookWebUrl: string }} event
  */
 
 /**
@@ -76,6 +81,7 @@ export function buildLeaveRequest(input) {
   const startDate = String(input?.startDate ?? "").trim();
   const endDate = String(input?.endDate ?? "").trim();
   const reason = String(input?.reason ?? "").trim();
+  const note = String(input?.note ?? "").trim();
   const teamLeads = parseEmails(input?.teamLead);
   const extraRecipients = parseEmails(input?.recipients);
 
@@ -113,12 +119,26 @@ export function buildLeaveRequest(input) {
     ? EVENT_RECIPIENT
     : `${EVENT_RECIPIENT}; ${extraRecipients.join("; ")}`;
 
-  // Outlook-on-the-web calendar deep link — prefills the new-event form (subject,
-  // all-day, dates, attendees). "Show as Free" and "don't request a response" have no
-  // URL parameters, so they stay manual (see the reminder chips). Outlook treats an
-  // all-day event's end as exclusive (00:00 of the day after the last day), so enddt
-  // is the day *after* the last leave day — otherwise a single day is a zero-length
-  // event Outlook won't create and a range drops its final day. Attendees go in `to`.
+  // The event description is the user's `note` and nothing else — no generated preamble.
+  // The subject and the event's own dates already say what the leave is and when, so a
+  // "Leave type / Date off" header only repeated them; an empty note means the event
+  // simply carries no description.
+  //
+  // It is *not* fed by the HR email's `reason`: this event is invited to the whole team
+  // list, so the reason stays in the mail to HR and only the opt-in note is echoed here.
+  // Keeping it a form field (rather than an editable copy of generated text) is also what
+  // lets a saved template replay it verbatim without carrying stale dates.
+  const eventBody = note;
+
+  // Outlook-on-the-web calendar deep link — prefills the new-event form (subject, the
+  // description when there is one, all-day, dates, attendees, and `reqresponse=false` so
+  // nobody on the team list is asked to reply). `body` is plain text: Outlook renders the
+  // `%0A` newlines encodeURIComponent produces, but no markup; it is left out entirely for
+  // an empty note rather than sent blank. "Show as Free" still has no URL parameter,
+  // so it stays manual (see the reminder chips). Outlook treats an all-day event's end as
+  // exclusive (00:00 of the day after the last day), so enddt is the day *after* the last
+  // leave day — otherwise a single day is a zero-length event Outlook won't create and a
+  // range drops its final day. Attendees go in `to`.
   const lastDay = duration === "full" && endDate !== "" && endDate > startDate
     ? endDate
     : startDate;
@@ -129,9 +149,11 @@ export function buildLeaveRequest(input) {
       `path=${encodeURIComponent("/calendar/action/compose")}`,
       "rru=addevent",
       `subject=${encodeURIComponent(eventSubject)}`,
+      ...(eventBody === "" ? [] : [`body=${encodeURIComponent(eventBody)}`]),
       `startdt=${startDate}`,
       `enddt=${eventEnd}`,
       "allday=true",
+      "reqresponse=false",
       `to=${encodeURIComponent(attendees)}`,
     ].join("&");
 
@@ -149,6 +171,7 @@ export function buildLeaveRequest(input) {
     },
     event: {
       subject: eventSubject,
+      body: eventBody,
       recipients: eventRecipients,
       outlookWebUrl: eventOutlookWebUrl,
     },
@@ -359,8 +382,8 @@ export const PROMPT_INSTRUCTIONS = {
  * HR email step (`email.applicable`), so their prompt is the event alone — and
  * the sections are numbered only when both are present, the same reason the UI
  * hides its step badge for those types. The event lines mirror the reminder
- * chips one-for-one, including the two settings no deep link can set, so the
- * assistant sets what the user would otherwise have to fix by hand.
+ * chips one-for-one, including "Show as: Free" — the one setting no deep link can
+ * set — so the assistant sets what the user would otherwise fix by hand.
  *
  * `body` exists so the UI can pass the *edited* body, the same way it rebuilds
  * the mail links from it. The Cc line is dropped when empty rather than emitted

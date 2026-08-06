@@ -128,8 +128,9 @@ export const TOUR_CONTENT = {
       ],
       [
         "The calendar event, prefilled.",
-        "Subject, dates, all-day flag and attendees are set for you; reminder chips flag the one " +
-        'thing a URL can\'t do — unchecking "Request Response".',
+        "Subject, dates, all-day flag, attendees and Request Response are all set for you; the " +
+        "reminder chips list what the event will carry. An optional Note becomes the event's " +
+        "description — never your reason, which the whole invited team list would see.",
       ],
       [
         "Save to Availability closes the loop.",
