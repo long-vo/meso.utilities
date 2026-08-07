@@ -147,7 +147,7 @@ Nothing is sent — the buttons hand off to your own mail app and to Outlook on 
   Outlook your default mail app).
 - **Calendar event.** Subject `[OFF] - Name` — the bracket follows the leave type (`OFF`,
   `Sick Leave`, `Core Leave`, `Remote`, `WFH`, prefixed with the half-day time) — sent to
-  `mesoneer_vn@mesoneer.io` plus any optional PO/extra recipients (one or more, comma- or
+  `mesoneer_vn@mesoneer.io` plus any optional Extra recipients (one or more, comma- or
   semicolon-separated). An optional **Note** becomes the event's **description** — all of it; leave
   the Note empty and the event has no description. It is never the **Reason**, since everyone
   invited can read the event, which is why the two are separate fields (the Note stays on screen for
@@ -166,7 +166,7 @@ Nothing is sent — the buttons hand off to your own mail app and to Outlook on 
   it could not do rather than guessing: weekends inside the range and days outside the imported
   workbook are skipped, and a name the roster doesn't know is named back to you instead of adding a
   row. What lands is logged in Team Availability's **Recorded changes** panel.
-- **Saved recipients.** Addresses used in the Cc and PO/extra fields are remembered (in
+- **Saved recipients.** Addresses used in the Cc and Extra recipients fields are remembered (in
   `localStorage`, shared by both) and offered as autocomplete — pick one to complete the address
   you're typing, ✕ a suggestion to forget it, or **Save recipients** to keep the current addresses
   without sending. They're auto-saved when you Open in mail / Add to Outlook.
@@ -180,7 +180,7 @@ Nothing is sent — the buttons hand off to your own mail app and to Outlook on 
   copy the same things.
 - **Optional addresses.** A malformed address only blocks what it would break: a bad **Cc** disables
   the two email hand-offs (which would otherwise drop it silently) but leaves the copy buttons and
-  the whole event step working, and a bad **PO/extra recipient** does the mirror image.
+  the whole event step working, and a bad **Extra recipient** does the mirror image.
 
 > Everything runs in your browser. Your details are never uploaded — the mail and calendar buttons
 > just hand off to your own apps.

@@ -121,7 +121,7 @@ const BOOKMARK_ICON =
  *    (and the HR step has to apply at all: Remote/WFH have no email).
  *  - `emailSend` — the mailto/Outlook links carry the Cc, so the CC field must be
  *    well-formed or the address the user typed would vanish without a word.
- *  - `eventCopy` / `eventSend` — same split for the PO/extra recipients field.
+ *  - `eventCopy` / `eventSend` — same split for the Extra recipients field.
  *  - `prompt` — the prompt spells out both artifacts *and* their recipients for an
  *    assistant to act on, so it is a send in every way that matters here: both
  *    address fields must be well-formed, and unlike `emailCopy` it survives

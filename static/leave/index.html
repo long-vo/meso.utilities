@@ -115,39 +115,42 @@
         <p class="hint date-summary" id="date-summary" aria-live="polite" hidden></p>
       </div>
 
-      <!-- Reason and CC feed the HR email only; app.js hides both for Remote/WFH,
-           which have no HR email step. -->
+      <!-- The remaining fields are grouped by the artifact they feed: Reason and CC go to
+           the HR email, Note and Extra recipients to the calendar event, which each label
+           names. Keeping the
+           email pair adjacent also matters visually — app.js hides both for Remote/WFH,
+           which have no HR email step, and a contiguous pair leaves no gap mid-form. -->
       <div class="field" id="reason-field">
-        <label for="reason">Reason <span class="hint hint-inline">— optional, HR email only</span></label>
+        <label for="reason">Reason <span class="hint hint-inline">— for HR Email</span></label>
         <input type="text" id="reason" placeholder="Family trip" />
       </div>
 
-      <!-- Unlike Reason, this one feeds the calendar event, which every leave type has —
-           so it stays on screen for Remote/WFH too. The hint spells out who sees it:
-           the reason goes to HR alone, this goes to everyone on the invite. -->
-      <div class="field">
-        <label for="note">Note <span class="hint hint-inline">— optional, on the event</span></label>
-        <input type="text" id="note" placeholder="Handover: Anna covers standups" />
-        <p class="hint">Becomes the event description — everyone invited can read it. Leave it
-          empty and the event has no description.</p>
-      </div>
-
       <div class="field" id="lead-field">
-        <label for="lead">CC email <span class="hint hint-inline">— optional, for HR mail</span></label>
+        <label for="lead">CC email <span class="hint hint-inline">— for HR Email</span></label>
         <input type="email" id="lead" multiple placeholder="lead@mesoneer.io, lead2@mesoneer.io"
           spellcheck="false" autocomplete="off" />
         <div class="recipient-row">
           <p class="hint">Comma/semicolon separated for more than one.</p>
-          <!-- Both fields have a "Save recipients" button; the aria-label keeps the
-               visible text (WCAG 2.5.3) while telling the two apart out of context. -->
+          <!-- Both recipient fields have a "Save recipients" button; the aria-label keeps
+               the visible text (WCAG 2.5.3) while telling the two apart out of context. -->
           <button type="button" id="lead-save" class="btn btn-ghost btn-small"
             aria-label="Save recipients from CC email"><span
               aria-hidden="true">＋</span> Save recipients</button>
         </div>
       </div>
 
+      <!-- Unlike Reason, this one feeds the calendar event, which every leave type has —
+           so it stays on screen for Remote/WFH too. The hint spells out who sees it:
+           the reason goes to HR alone, this goes to everyone on the invite. -->
       <div class="field">
-        <label for="recipients">PO / extra recipients <span class="hint hint-inline">— optional, for the event</span></label>
+        <label for="note">Note <span class="hint hint-inline">— for Event</span></label>
+        <input type="text" id="note" placeholder="Handover: Anna covers standups" />
+        <p class="hint">Becomes the event description — everyone invited can read it. Leave it
+          empty and the event has no description.</p>
+      </div>
+
+      <div class="field">
+        <label for="recipients">Extra recipients <span class="hint hint-inline">— for Event</span></label>
         <input type="email" id="recipients" multiple placeholder="po@mesoneer.io, po2@mesoneer.io"
           spellcheck="false" autocomplete="off" />
         <div class="recipient-row">
