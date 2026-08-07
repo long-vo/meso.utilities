@@ -19,7 +19,7 @@ export const SEEN_KEY = "meso-tour-seen";
  * wants, since the tour then covers something the user has never been told
  * about. A stored value from an older version therefore counts as "not seen".
  */
-export const SEEN_VERSION = "1";
+export const SEEN_VERSION = "2";
 
 /** True when the first-visit nudge should be offered for `stored`. */
 export function shouldNudge(stored) {
@@ -265,6 +265,52 @@ export const TOUR_CONTENT = {
     ],
   },
 
+  loganalysis: {
+    lede:
+      "Drop the log files off a ticket — several at once, from different applications — and read " +
+      "them as one timeline instead of three files side by side. The unit is the record, not the " +
+      "line, so a webhook's whole payload dump stays attached to the line that logged it.",
+    features: [
+      [
+        "One dossier, across every file.",
+        "Records are grouped by the business id they mention. A notification carrying both a " +
+        "case id and a dossier id teaches the link, so records naming only the case join the " +
+        "dossier's group — which is what makes three application logs read as one flow.",
+      ],
+      [
+        "Filter by an id, wherever it hides.",
+        "Ids are matched by value, not by label: the same case id is found in `caseIds [5a3c…]`, " +
+        "in a JSON body, inside a request URL and inside an attachment filename. Every id in the " +
+        "log is offered as a filter, tagged with the names it appears under.",
+      ],
+      [
+        "Regroup without reloading.",
+        "The same records, keyed a different way: by dossier, by request — Ivy's requestId or a " +
+        "Spring traceId — by thread, which is how you see what ran concurrently, by REST call, " +
+        "or flat.",
+      ],
+      [
+        "REST calls carry their outcome.",
+        "A call's invoke row is rewritten to method, URL, status and duration, and grouping " +
+        "by REST call folds its other lines in under it. Filter to non-2xx, or to anything " +
+        "slower than a threshold — and a call that never answered is flagged, since that is " +
+        "the trace a hung integration leaves.",
+      ],
+      [
+        "Brush the timeline, pin the evidence.",
+        "A density strip shows where records — and errors — cluster; drag across it to zoom " +
+        "into the minutes that matter. Pin the rows that tell the story and copy them out as a " +
+        "Markdown ticket comment. Zip and gzip bundles unpack on drop, and a per-file clock " +
+        "shift lines up Ivy's local time with the pods' UTC.",
+      ],
+      [
+        "Nothing leaves the tab.",
+        "Logs are parsed in memory and never stored, not even in localStorage. Masked values are " +
+        "left alone, so a log sanitized first stays sanitized here.",
+      ],
+    ],
+  },
+
   slidedown: {
     lede:
       "Turn what you already wrote into slides. Drop Markdown, HTML, AsciiDoc, PDFs or images — " +
@@ -331,9 +377,9 @@ export const INTRO = {
   id: "intro",
   kind: "intro",
   color: "card--brand",
-  title: "Eight small tools, one page",
+  title: "Nine small tools, one page",
   kicker: "Welcome",
-  tags: ["8 tools", "One page"],
+  tags: ["9 tools", "One page"],
   lede: "Every tool here does one job and does it without a server — your data stays in the tab. " +
     "This tour spends one screen on each. Two minutes, and you can leave any time.",
   features: [

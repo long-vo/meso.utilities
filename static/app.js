@@ -37,6 +37,7 @@ const els = {
   logfile: /** @type {HTMLInputElement} */ ($("logfile")),
   logfileName: $("logfile-name"),
   sendDecode: $("send-decode"),
+  sendLogAnalysis: $("send-loganalysis"),
   outputBox: $("output-box"),
   logSearch: /** @type {HTMLInputElement} */ ($("log-search")),
   logSearchCount: $("log-search-count"),
@@ -626,6 +627,7 @@ els.clear.addEventListener("click", clearAll);
 els.copy.addEventListener("click", copyResult);
 els.download.addEventListener("click", downloadResult);
 els.sendDecode.addEventListener("click", () => sendResultTo("decode"));
+els.sendLogAnalysis.addEventListener("click", () => sendResultTo("loganalysis"));
 // (theme toggle is wired by the shared theme.js module)
 
 registerCommands([

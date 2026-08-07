@@ -137,6 +137,10 @@
             <span class="send-label" aria-hidden="true">Send to</span>
             <button id="send-decode" class="btn btn-small" type="button"
               title="Open the result in Decode Anything"><span class="crumb-icon card--teal" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 16 16"><circle class="is1" cx="7" cy="7" r="4.2" stroke-width="1.8" /><line class="is1" x1="10.2" y1="10.2" x2="14" y2="14" stroke-width="2" stroke-linecap="round" /></svg></span> Decode</button>
+            <!-- Log mode only: a masked log is exactly what Log Analysis reads,
+                 whereas a masked JSON payload is not a log. -->
+            <button id="send-loganalysis" class="btn btn-small only-log" type="button"
+              title="Group and filter the masked log in Log Analysis"><span class="crumb-icon card--violet" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 16 16"><rect class="i1" x="1.5" y="2.5" width="11" height="2" rx="1" /><rect class="i2" x="1.5" y="6.3" width="7" height="2" rx="1" /><rect class="i2" x="1.5" y="10.1" width="4.5" height="2" rx="1" /><circle class="is1" cx="11.2" cy="10.2" r="3" stroke-width="1.6" /><line class="is1" x1="13.4" y1="12.4" x2="15" y2="14" stroke-width="1.8" stroke-linecap="round" /></svg></span> Log Analysis</button>
           </span>
         </div>
       </div>

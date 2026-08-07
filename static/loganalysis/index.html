@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Log Analysis — meso.utilities</title>
+  <meta name="description" content="Merge Axon Ivy and Spring Boot log files into one timeline, group the sequence by dossier, request or thread, and filter by any id — entirely in your browser." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Crect%20x%3D%221.5%22%20y%3D%222.5%22%20width%3D%2211%22%20height%3D%222%22%20rx%3D%221%22%20fill%3D%22%23a457dc%22%2F%3E%3Crect%20x%3D%221.5%22%20y%3D%226.3%22%20width%3D%227%22%20height%3D%222%22%20rx%3D%221%22%20fill%3D%22%23a457dc%22%2F%3E%3Crect%20x%3D%221.5%22%20y%3D%2210.1%22%20width%3D%224.5%22%20height%3D%222%22%20rx%3D%221%22%20fill%3D%22%23a457dc%22%2F%3E%3Ccircle%20cx%3D%2211.2%22%20cy%3D%2210.2%22%20r%3D%223%22%20fill%3D%22none%22%20stroke%3D%22%23a457dc%22%20stroke-width%3D%221.6%22%2F%3E%3Cline%20x1%3D%2213.4%22%20y1%3D%2212.4%22%20x2%3D%2215%22%20y2%3D%2214%22%20stroke%3D%22%23a457dc%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E" />
+  <!-- Apply the saved theme and the sidebar state before first paint so the
+       deferred modules cause no flash. -->
+  <script>
+    try {
+      var t = localStorage.getItem("meso-theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      if (localStorage.getItem("meso-controls-hidden-loganalysis") === "1") document.documentElement.setAttribute("data-controls-collapsed", "");
+    } catch (e) { /* storage unavailable; keep the default dark theme */ }
+  </script>
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body class="page-loganalysis" data-tool="loganalysis">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <nav class="brand" aria-label="Breadcrumb">
+      <a class="brand-link" href="../" title="All utilities">
+        <img class="brand-mark" src="../mesoneer-logo.jpg" alt="" aria-hidden="true" />
+        <span class="brand-name">meso.utilities</span>
+      </a>
+      <span class="crumb-sep" aria-hidden="true">/</span>
+      <span class="crumb-current"><span class="crumb-icon card--violet" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><rect class="i1" x="1.5" y="2.5" width="11" height="2" rx="1" /><rect class="i2" x="1.5" y="6.3" width="7" height="2" rx="1" /><rect class="i2" x="1.5" y="10.1" width="4.5" height="2" rx="1" /><circle class="is1" cx="11.2" cy="10.2" r="3" stroke-width="1.6" /><line class="is1" x1="13.4" y1="12.4" x2="15" y2="14" stroke-width="1.8" stroke-linecap="round" /></svg></span> Log Analysis</span>
+    </nav>
+    <div class="topbar-actions">
+      <span class="pill pill-privacy" title="Your logs never leave this page.">
+        <span aria-hidden="true">🛡️</span> Runs in your browser
+      </span>
+      <button id="palette-open" class="icon-btn palette-hint" type="button"
+        title="Command palette (Ctrl/⌘ K)" aria-label="Open command palette">⌘K</button>
+      <button id="controls-toggle" class="icon-btn" type="button"
+        aria-controls="controls" aria-expanded="true" title="Hide controls"
+        aria-label="Hide controls sidebar">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor"
+          stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
+          <rect x="2.75" y="4.5" width="14.5" height="11" rx="2.25" />
+          <line x1="8" y1="4.5" x2="8" y2="15.5" />
+        </svg>
+      </button>
+      <button id="theme-toggle" class="icon-btn" type="button" aria-label="Toggle colour theme">
+        <span class="theme-icon">🌙</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="layout" id="main" tabindex="-1">
+    <section id="controls" class="panel controls" aria-label="Log sources, grouping and filters">
+      <!-- Every field's own heading folds it (see setupCollapse in app.js). The
+           heading is the button, so it can't be a `<label for>`: a click would
+           toggle *and* activate the control — here that would open the file
+           dialog. The controls carry their own aria-label instead. -->
+      <div class="field">
+        <button class="field-collapse" type="button" aria-controls="sources-body"
+          aria-expanded="true">Log files<span class="caret" aria-hidden="true">▾</span></button>
+        <div id="sources-body">
+          <div id="drop-zone" class="drop-zone" role="button" tabindex="0"
+            aria-label="Add log files to analyse — several at once are merged into one timeline">
+            <strong>Drop log files here</strong>
+            <span class="hint">or click to choose — several at once are merged into one
+              timeline. Zip and gzip bundles unpack on the way in.</span>
+          </div>
+          <input id="file-input" type="file" multiple accept=".log,.txt,.out,.zip,.gz,text/plain"
+            hidden />
+          <div id="source-list" class="source-list" aria-live="polite"></div>
+          <p id="parse-status" class="hint">Nothing loaded yet.</p>
+          <button id="example" class="btn btn-ghost btn-small" type="button"
+            title="Load a small made-up multi-app log to explore the tool">Try with sample
+            log</button>
+          <!-- Inside this field, not beside it: pasting is another way to fill
+               the same list, so folding the field takes it along. -->
+          <details id="paste-details" class="field">
+            <summary>…or paste a log</summary>
+            <textarea id="paste" class="code-area paste-area" spellcheck="false"
+              autocomplete="off" aria-label="Paste log text"
+              placeholder="[2026-05-15 10:11:41.159][INFO ][runtimelog.balboa-bank…][http-nio-8080-exec-9]{…}"></textarea>
+            <div class="btn-row">
+              <button id="paste-add" class="btn btn-small" type="button">Add pasted log</button>
+            </div>
+          </details>
+          <div class="btn-row">
+            <button id="clear" class="btn btn-ghost btn-small" type="button">Clear all</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <button class="field-collapse" type="button" aria-controls="group-body"
+          aria-expanded="true">Group by<span class="caret" aria-hidden="true">▾</span></button>
+        <div id="group-body">
+          <!-- Toggle buttons, not tabs: there is no tabpanel to select, so
+               aria-pressed is the honest state (same as sanitize and decode). -->
+          <div class="mode-switch group-switch" role="group" aria-label="Grouping">
+            <button class="mode-btn is-active" type="button" data-group="correlation"
+              aria-pressed="true" title="One group per dossier, cases folded in">Dossier</button>
+            <button class="mode-btn" type="button" data-group="problem" aria-pressed="false"
+              title="One group per distinct failure — repeats folded together">Problems</button>
+            <button class="mode-btn" type="button" data-group="request" aria-pressed="false"
+              title="One group per requestId">Request</button>
+            <button class="mode-btn" type="button" data-group="thread" aria-pressed="false"
+              title="One group per thread — shows what ran concurrently">Thread</button>
+            <button class="mode-btn" type="button" data-group="rest" aria-pressed="false"
+              title="One group per REST call">REST call</button>
+            <button class="mode-btn" type="button" data-group="none" aria-pressed="false"
+              title="No grouping — one flat merged timeline">Flat</button>
+          </div>
+          <label class="switch">
+            <input id="link-aliases" type="checkbox" checked /> <span>Link cases to dossier</span>
+          </label>
+          <p class="hint">A notification carrying both a case id and a dossier id teaches the
+            link, so records naming only the case join the dossier's group.</p>
+        </div>
+      </div>
+
+      <div class="field">
+        <button class="field-collapse" type="button" aria-controls="find-body"
+          aria-expanded="true">Search<span class="caret" aria-hidden="true">▾</span></button>
+        <div id="find-body">
+          <input id="query" type="search" spellcheck="false" autocomplete="off"
+            placeholder="VERIFICATION_PENDING 5dad36c5" aria-label="Search records" />
+          <p class="hint">Case-insensitive, against the whole record. Every word must match —
+            quote a phrase to keep it whole. <kbd>n</kbd>/<kbd>p</kbd> jump between matches.</p>
+        </div>
+      </div>
+
+      <div class="field">
+        <button class="field-collapse" type="button" aria-controls="ids-body"
+          aria-expanded="true">Identifiers<span class="caret" aria-hidden="true">▾</span></button>
+        <div id="ids-body">
+          <input id="id-find" type="search" spellcheck="false" autocomplete="off"
+            placeholder="Filter this list…" aria-label="Filter the identifier list" />
+          <div id="id-list" class="id-list" role="group" aria-label="Filter by identifier"></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <button class="field-collapse" type="button" aria-controls="level-body"
+          aria-expanded="true">Level<span class="caret" aria-hidden="true">▾</span></button>
+        <div id="level-body">
+          <div id="levels" class="chips" role="group" aria-label="Filter by level"></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <button class="field-collapse" type="button" aria-controls="rest-body"
+          aria-expanded="true">REST calls<span class="caret" aria-hidden="true">▾</span></button>
+        <div id="rest-body">
+          <label class="switch">
+            <input id="rest-only" type="checkbox" /> <span>Only REST calls</span>
+          </label>
+          <label class="switch">
+            <input id="bad-only" type="checkbox" /> <span>Only failed or unanswered</span>
+          </label>
+          <div class="field-inline">
+            <label for="min-ms">Slower than</label>
+            <input id="min-ms" type="number" min="0" step="100" placeholder="0" />
+            <span class="hint">ms</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <button class="field-collapse" type="button" aria-controls="source-body"
+          aria-expanded="false">Application &amp; thread<span class="caret" aria-hidden="true">▸</span></button>
+        <div id="source-body" hidden>
+          <label>Application</label>
+          <div id="apps" class="chips" role="group" aria-label="Filter by application"></div>
+          <label>Logger</label>
+          <div id="categories" class="chips" role="group" aria-label="Filter by logger"></div>
+          <label>File</label>
+          <div id="files" class="chips" role="group" aria-label="Filter by source file"></div>
+          <label for="threads">Thread</label>
+          <select id="threads">
+            <option value="">Any thread</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field btn-row">
+        <button id="reset" class="btn btn-ghost btn-small" type="button">Reset filters</button>
+        <button id="expand-all" class="btn btn-ghost btn-small" type="button">Expand all</button>
+      </div>
+    </section>
+
+    <section class="panel result" aria-label="Grouped timeline">
+      <div class="panel-head">
+        <!-- The switch *is* the heading: it names the view on show, so a visible
+             <h2> beside it would print "Timeline" twice. The heading stays for
+             the document outline and for screen readers. -->
+        <h2 id="view-title" class="sr-only">Timeline</h2>
+        <!-- Two ways to read the same loaded set: the grouped sequence, or the
+             REST calls as a table. A switch rather than a rail — a table this
+             wide wants the main column, which is what the rail is not. -->
+        <div id="view-switch" class="mode-switch view-switch" role="group" aria-label="View">
+          <button class="mode-btn is-active" type="button" data-view="timeline"
+            aria-pressed="true">Timeline</button>
+          <button class="mode-btn" type="button" data-view="rest" aria-pressed="false"
+            title="Every REST call as a sortable table, with per-service latency">REST calls</button>
+        </div>
+        <div class="result-tools">
+          <span id="counts" class="status" aria-live="polite"></span>
+          <!-- Copy and download are one control with two outputs, so they are
+               joined rather than left as two pills, one of which is a lone
+               glyph. A merged timeline runs to tens of thousands of records,
+               which is more than the clipboard is a sensible way to move. -->
+          <span id="pinned-tools" class="btn-pair" hidden>
+            <button id="copy-pinned" class="btn btn-small" type="button"
+              title="Copy the pinned records as a Markdown ticket comment">Copy pinned</button>
+            <button id="download-pinned" class="btn btn-small btn-icon" type="button"
+              title="Download the pinned records as Markdown"
+              aria-label="Download pinned records">⬇</button>
+          </span>
+          <span class="btn-pair">
+            <button id="copy" class="btn btn-small" type="button"
+              title="Copy every record currently shown">Copy shown</button>
+            <button id="download" class="btn btn-small btn-icon" type="button"
+              title="Download every record currently shown"
+              aria-label="Download shown records">⬇</button>
+          </span>
+          <span class="send-group" role="group" aria-label="Send to another tool">
+            <span class="send-label" aria-hidden="true">Send to</span>
+            <button id="send-sanitize" class="btn btn-small" type="button"
+              title="Mask what is shown in Sanitize JSON"><span class="crumb-icon card--purple" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 16 16"><rect class="i1" x="3" y="7" width="10" height="7" rx="2" /><path class="is2" d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" stroke-width="1.8" /></svg></span> Sanitize</button>
+          </span>
+        </div>
+      </div>
+
+      <div id="filter-pills" class="filter-pills" hidden></div>
+      <!-- The brush: record density over the whole loaded set. Click a bar to
+           filter to its slice, drag to pick a range. -->
+      <div id="density" class="log-density" aria-label="Record density over time — click a
+        slice or drag a range to filter" hidden></div>
+      <div id="overview" class="log-overview" hidden></div>
+      <!-- tabindex="-1": removing the last filter pill destroys the element that
+           held focus, and this region is where focus is parked instead. -->
+      <div id="groups" class="log-groups" role="region" aria-label="Grouped records"
+        tabindex="-1">
+        <p class="hint groups-empty">Drop log files anywhere on this page to begin — or paste a
+          log into the sidebar. Everything is parsed in this tab; nothing is uploaded.</p>
+      </div>
+      <div id="rest-view" class="rest-view" role="region" aria-label="REST calls" hidden></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    Parsing, grouping and filtering run client-side · logs stay in this tab and are never stored.
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- Fold state for the authored field bodies, applied pre-paint: unlike the
+       render-filled panels these would flash open while the deferred module
+       loads. Derives the key exactly as app.js does. On the stacked layout the
+       filter fields start folded (same list as NARROW_FOLDED in app.js) — the
+       sidebar sits above the timeline there, and unfolded it pushes the
+       timeline two screens down. A saved choice still wins. -->
+  <script>
+    try {
+      var narrow = matchMedia("(max-width: 1080px)").matches;
+      var foldedByDefault = ["find-body", "ids-body", "level-body", "rest-body"];
+      for (var b of document.querySelectorAll("#controls .field-collapse")) {
+        var id = b.getAttribute("aria-controls");
+        var v = localStorage.getItem("meso-loganalysis-" + id + "-collapsed");
+        var open;
+        if (v === null) {
+          if (!narrow || foldedByDefault.indexOf(id) === -1) continue;
+          open = false;
+        } else {
+          open = v !== "1";
+        }
+        var body = document.getElementById(id);
+        if (body) body.hidden = !open;
+        b.setAttribute("aria-expanded", String(open));
+        var caret = b.querySelector(".caret");
+        if (caret) caret.textContent = open ? "▾" : "▸";
+      }
+    } catch (e) { /* storage unavailable; keep the authored state */ }
+  </script>
+
+  <script type="module" src="../theme.js"></script>
+  <script type="module" src="../resize.js"></script>
+  <script type="module" src="../sidebar.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

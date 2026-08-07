@@ -1,6 +1,10 @@
 /* meso.utilities — shared theme, hub (master page) and tool UIs */
 
 :root {
+  /* Native UI (scrollbars, select popups, date pickers) follows the app theme,
+     not the OS one — without this, dark theme draws white scrollbar tracks
+     inside every scrollable code box and list. */
+  color-scheme: dark;
   --bg: #0e1116;
   --bg-elev: #161b22;
   --bg-inset: #0b0e13;
@@ -29,6 +33,7 @@
 }
 
 :root[data-theme="light"] {
+  color-scheme: light;
   --bg: #f4f6fa;
   --bg-elev: #ffffff;
   --bg-inset: #f0f2f7;
@@ -525,6 +530,19 @@ a.card:hover .card-go {
   --card-mid: #a4d631;
   --card-deep: #3f5c07;
 }
+/* Log Analysis. Sits at ~288°, the widest gap the eight existing hues left: 35°
+   off purple (which is markedly bluer) and 55° off pink. */
+.card--violet {
+  --card-tint: #341a5c;
+  --card-ink: #e3c7f7;
+  --card-sub: #cba0ee;
+  --card-paper: #e3c7f7;
+  --card-art1: #a457dc;
+  --card-art2: #7736b0;
+  --card-art3: #57258a;
+  --card-mid: #cba0ee;
+  --card-deep: #57258a;
+}
 
 :root[data-theme="light"] .card--purple {
   --card-tint: #eeedfe;
@@ -597,6 +615,15 @@ a.card:hover .card-go {
   --card-art2: #a4d631;
   --card-art3: #d3f284;
   --card-deep: #5c8110;
+}
+:root[data-theme="light"] .card--violet {
+  --card-tint: #f4ebfc;
+  --card-ink: #341a5c;
+  --card-sub: #7736b0;
+  --card-paper: #ffffff;
+  --card-art2: #cba0ee;
+  --card-art3: #e3c7f7;
+  --card-deep: #7736b0;
 }
 
 body.page-hub .cards {
@@ -5854,4 +5881,866 @@ button.out:focus-visible::after {
   .page-availability .hm-team {
     display: none;
   }
+}
+
+/* ======================= Log Analysis ======================= */
+/* Scoped to .page-loganalysis throughout. The tool has no editor panel — the
+   sidebar holds the input — so the layout claims `controls` + `result` only, and
+   the result drops the shared `--panel-max` cap: a merged log line is wide, and
+   reading one is the whole point. Both collapsed variants are spelled out at
+   matching-or-higher specificity, because the shared
+   `:root[data-controls-collapsed] .layout` rule would otherwise tie with the
+   page rule and, sitting earlier in the file, lose. */
+@media (min-width: 1081px) {
+  .page-loganalysis .layout {
+    max-width: 1680px;
+    grid-template-columns: var(--controls-w, 340px) minmax(0, 1fr);
+    grid-template-areas: "controls result";
+  }
+  :root[data-controls-collapsed] .page-loganalysis .layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "result";
+  }
+}
+.page-loganalysis .result {
+  max-width: none;
+}
+/* The tool's own tint for app names, id labels and group sublabels. Not
+   `--card-art1`: that property is @property-registered, so `var(--card-art1,
+   fallback)` never falls back — every page gets the registration's dark-tuned
+   initial value, which fails 4.5:1 on light. Same recipe as `--tour-accent`:
+   the card's mid stop on dark, its deep stop on light. */
+.page-loganalysis {
+  --la-accent: #cba0ee;
+}
+:root[data-theme="light"] .page-loganalysis {
+  --la-accent: #7736b0;
+}
+
+/* ---- sidebar: sources ---- */
+.page-loganalysis .drop-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  text-align: center;
+  padding: 18px 14px;
+  margin-top: 10px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-inset);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.page-loganalysis .drop-zone:hover,
+.page-loganalysis .drop-zone:focus-visible,
+.page-loganalysis .drop-zone.is-drag {
+  border-color: var(--accent);
+}
+.page-loganalysis .drop-zone.is-drag {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+/* Every field body is its own formatting context, so a block first child's
+   top margin cannot collapse through it — without this the gap under a
+   heading depends on the first control's display type (a flex drop zone
+   collapses to 10px where an inline-flex switch stacks to 17px), and the
+   headings sit at visibly different heights above their controls. With it,
+   every field reads heading → 7px → body → 10px → first control. */
+.page-loganalysis .field-collapse + div {
+  display: flow-root;
+}
+.page-loganalysis #source-body > label:first-child {
+  margin-top: 10px;
+}
+
+/* One 10px beat between everything stacked in the sources field. Without it
+   the column reads 10/7/0/0/20: the sample button flush under the status
+   line, the paste toggle flush under the button, then a hole before Clear all
+   — that hole being the `.field` margin the nested paste `<details>` inherits
+   for its summary styling, which is panel rhythm, not this stack's. */
+.page-loganalysis #sources-body > * + * {
+  margin-top: 10px;
+}
+.page-loganalysis #paste-details {
+  margin-bottom: 0;
+}
+/* An empty list still occupies a margin slot; hiding it keeps the drop zone →
+   status gap at one beat instead of two. */
+.page-loganalysis .source-list:empty {
+  display: none;
+}
+.page-loganalysis .source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+}
+.page-loganalysis .source-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-inset);
+  font-size: 12px;
+}
+.page-loganalysis .source-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+}
+.page-loganalysis .source-count {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+/* The per-file clock shift. The shared select rule stretches to 100% — this
+   one is a compact annotation on the row, not a form field. The right padding
+   and the background overrides shrink the shared rule's chevron to match:
+   its default 32px reservation belongs to full-width selects, but dropping it
+   entirely runs the text under the arrow still painted at the right edge. */
+.page-loganalysis .source-offset {
+  flex: none;
+  width: auto;
+  padding: 2px 19px 2px 6px;
+  font-size: 11px;
+  border-radius: 6px;
+  background-position: right 5px center;
+  background-size: 9px 6px;
+}
+.page-loganalysis .paste-area {
+  min-height: 120px;
+  margin-top: 8px;
+}
+/* type="search" sits outside the shared input rule on purpose (see the note
+   there), so each page styles its own. */
+.page-loganalysis input[type="search"] {
+  width: 100%;
+  margin-top: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-inset);
+  color: var(--text);
+  font-size: 13px;
+}
+.page-loganalysis .group-switch {
+  flex-wrap: wrap;
+}
+.page-loganalysis .field-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.page-loganalysis .field-inline label {
+  margin: 0;
+}
+.page-loganalysis .field-inline input[type="number"] {
+  width: 92px;
+  margin: 0;
+}
+
+/* ---- sidebar: chips and the identifier list ---- */
+.page-loganalysis .chip {
+  cursor: pointer;
+}
+.page-loganalysis .chip.is-on {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.page-loganalysis .chip-count {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.page-loganalysis .chip.is-on .chip-count {
+  color: inherit;
+}
+/* The error badge on a group header. The shared palette stops at `.chip-warn`,
+   which would dress 3 errors in the same amber as 3 warnings — errors get the
+   danger tint the rows and the overview already use. */
+.page-loganalysis .chip-bad {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 60%, transparent);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  font-weight: 600;
+}
+.page-loganalysis .id-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 10px;
+  /* Long logs index hundreds of ids; the list scrolls rather than pushing every
+     other filter off the sidebar. */
+  max-height: 320px;
+  overflow-y: auto;
+}
+.page-loganalysis .id-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-inset);
+  text-align: left;
+  cursor: pointer;
+}
+.page-loganalysis .id-row:hover {
+  border-color: var(--border-strong);
+}
+.page-loganalysis .id-row.is-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.page-loganalysis .id-value {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.page-loganalysis .id-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+.page-loganalysis .id-label {
+  color: var(--la-accent);
+}
+
+/* ---- active filters ---- */
+/* One removable pill per active filter, next to the counts they explain. The
+   sidebar holds the controls; this row is the timeline's own answer to "why am
+   I seeing 4 of 10 records" — without it the only trace of a filter can sit two
+   screens up in a folded field. */
+.page-loganalysis .filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.page-loganalysis .filter-pills .chip {
+  cursor: pointer;
+}
+.page-loganalysis .filter-pills .chip-x-mark {
+  margin-left: 4px;
+  color: var(--text-faint);
+}
+.page-loganalysis .filter-pills .chip:hover .chip-x-mark {
+  color: inherit;
+}
+
+/* ---- density brush ---- */
+/* One bar per time slice over the whole loaded set; drag across it to filter
+   to a window, click one bar for its slice. Bars are buttons so the keyboard
+   gets the same (coarse) power the drag gives the pointer. */
+.page-loganalysis .log-density {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 36px;
+  margin-bottom: 12px;
+  padding: 3px 3px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-inset);
+  cursor: crosshair;
+  touch-action: none;
+  overflow: hidden;
+}
+.page-loganalysis .density-bar {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  cursor: pointer;
+}
+.page-loganalysis .density-bar:hover {
+  background: var(--accent);
+}
+.page-loganalysis .density-bar.is-warn {
+  background: color-mix(in srgb, var(--warn) 65%, transparent);
+}
+.page-loganalysis .density-bar.is-err {
+  background: var(--danger);
+}
+.page-loganalysis .density-sel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+/* ---- overview strip ---- */
+.page-loganalysis .log-overview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.page-loganalysis .log-stat {
+  display: flex;
+  flex-direction: column;
+  min-width: 74px;
+  padding: 7px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-inset);
+}
+.page-loganalysis .log-stat-n {
+  font-size: 17px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.page-loganalysis .log-stat-l {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+.page-loganalysis .log-stat.is-bad .log-stat-n {
+  color: var(--danger);
+}
+.page-loganalysis .log-stat.is-warn .log-stat-n {
+  color: var(--warn);
+}
+/* The failed/errors/warnings stats are buttons: they toggle the matching filter,
+   so the tile that announces a problem is also the shortcut to it. */
+.page-loganalysis button.log-stat {
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.page-loganalysis button.log-stat:hover {
+  border-color: var(--border-strong);
+}
+.page-loganalysis button.log-stat[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+/* The two trailing notes on the strip: what failed most, and what took longest.
+   Both share the slowest line's shape — a full-width, clipped, monospace aside
+   rather than another tile, because neither is a number you filter by. */
+.page-loganalysis .log-slowest,
+.page-loganalysis .log-worst {
+  flex: 1;
+  min-width: 200px;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-loganalysis .log-worst b {
+  color: var(--danger);
+}
+/* ---- the panel head ----
+   Copy and download are one control with two outputs, so they share a border and
+   a hairline seam instead of standing as two pills — the second of which is a
+   lone glyph that reads as an unrelated third action. */
+.page-loganalysis .btn-pair {
+  display: inline-flex;
+}
+.page-loganalysis .btn-pair .btn:first-child {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+.page-loganalysis .btn-pair .btn + .btn {
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+  /* Pulled over its neighbour's edge so the seam is one line, not two. */
+  margin-left: -1px;
+}
+.page-loganalysis .btn-pair .btn-icon {
+  padding-inline: 9px;
+}
+/* Raising the hovered half above the seam, so the border it shares doesn't cut
+   across the half being pointed at. */
+.page-loganalysis .btn-pair .btn:hover,
+.page-loganalysis .btn-pair .btn:focus-visible {
+  position: relative;
+  z-index: 1;
+}
+
+/* The switch stands in for the heading, at the head's left edge. It borrows
+   `.mode-switch` from the sidebar, whose sizing is built for a full-width column
+   — hence the reset: no bottom margin, no flex-grown segments, and no wrap that
+   would break "REST calls" over two lines and double the head's height. */
+.page-loganalysis .view-switch {
+  flex: none;
+  gap: 2px;
+  margin-bottom: 0;
+  padding: 3px;
+  border-radius: 9px;
+}
+.page-loganalysis .view-switch .mode-btn {
+  flex: none;
+  padding: 4px 11px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+/* Tinted and outlined rather than the shared rule's filled accent: this picks
+   which view to read, and as a solid accent block it was the loudest thing in the
+   head — weight the primary action should carry instead. The treatment is the one
+   the pressed overview tiles already use, so "selected" looks the same wherever
+   this page shows it.
+   A *raised* segment was the other candidate and does not survive both themes:
+   `--bg` sits three lightness steps from `--bg-inset` in the dark palette, so the
+   lift is invisible there and a drop shadow on near-black adds nothing. The
+   outline is an inset shadow, not a border, because the inactive segments carry
+   none and a real border would resize this one. */
+.page-loganalysis .view-switch .mode-btn.is-active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* ---- groups ---- */
+.page-loganalysis .log-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.page-loganalysis .groups-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 28px 8px;
+  text-align: center;
+}
+.page-loganalysis .groups-empty .btn-row {
+  justify-content: center;
+  margin-top: 0;
+}
+.page-loganalysis .log-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-inset);
+  overflow: hidden;
+}
+.page-loganalysis .log-group > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.page-loganalysis .log-group > summary::-webkit-details-marker {
+  display: none;
+}
+/* The group's own disclosure caret, on the left where the nesting starts —
+   unlike a sidebar field, whose chevron is pushed to the panel's right edge. */
+.page-loganalysis .log-group > summary::before {
+  content: "▸";
+  color: var(--text-faint);
+  font-size: 11px;
+  flex: none;
+}
+.page-loganalysis .log-group[open] > summary::before {
+  content: "▾";
+}
+.page-loganalysis .log-group-label {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.page-loganalysis .log-group-sub {
+  font-size: 11px;
+  color: var(--la-accent);
+  white-space: nowrap;
+}
+.page-loganalysis .log-group-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.page-loganalysis .log-group-meta .chip {
+  cursor: default;
+}
+.page-loganalysis .log-group-n,
+.page-loganalysis .log-group-ms,
+.page-loganalysis .log-group-time {
+  font-family: var(--mono);
+}
+
+/* ---- rows ---- */
+.page-loganalysis .log-rows {
+  border-top: 1px solid var(--border);
+  max-height: 62vh;
+  overflow-y: auto;
+}
+.page-loganalysis .log-entry {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+.page-loganalysis .log-entry > summary {
+  display: grid;
+  /* The delta column fits its widest humanized form (`+59 m 59 s`). */
+  grid-template-columns: 86px 80px 46px 108px 150px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  list-style: none;
+}
+.page-loganalysis .log-entry > summary::-webkit-details-marker {
+  display: none;
+}
+.page-loganalysis .log-entry > summary:hover {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.page-loganalysis .log-entry.has-span > summary {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.page-loganalysis .log-entry.is-bad > summary {
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
+}
+/* A pinned record wears a rail, not a background — it must stay readable
+   under the span/error tints it can coincide with. */
+.page-loganalysis .log-entry.is-pinned > summary {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+/* A record pulled in as context: it came from the unfiltered merge and may
+   belong to another dossier entirely, so it reads as quieter than the rows that
+   actually matched. Dimmed rather than hidden behind a disclosure, because the
+   whole point is to be able to skim it in place. */
+.page-loganalysis .log-entry.is-context > summary {
+  opacity: 0.62;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 6px,
+    color-mix(in srgb, var(--text-faint) 7%, transparent) 6px,
+    color-mix(in srgb, var(--text-faint) 7%, transparent) 12px
+  );
+}
+.page-loganalysis .log-entry.is-context > summary:hover {
+  opacity: 1;
+}
+/* A pause worth naming, on its own row between the two records it separates.
+   The rule either side is what makes it read as a break in time rather than
+   another log line. */
+.page-loganalysis .log-gap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 12px 3px 96px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 6%, transparent);
+  border-block: 1px dashed color-mix(in srgb, var(--warn) 32%, transparent);
+}
+.page-loganalysis .log-gap-mark {
+  font-size: 13px;
+  line-height: 1;
+}
+/* Search-term hits, inside row summaries and expanded records. */
+.page-loganalysis mark {
+  background: color-mix(in srgb, var(--warn) 36%, transparent);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+.page-loganalysis .log-time,
+.page-loganalysis .log-delta {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.page-loganalysis .log-level {
+  font-weight: 650;
+  font-size: 10.5px;
+}
+.page-loganalysis .log-level.level-error {
+  color: var(--danger);
+}
+.page-loganalysis .log-level.level-warn {
+  color: var(--warn);
+}
+.page-loganalysis .log-level.level-info {
+  color: var(--accent);
+}
+.page-loganalysis .log-level.level-debug,
+.page-loganalysis .log-level.level-trace,
+.page-loganalysis .log-level.level-none {
+  color: var(--text-faint);
+}
+.page-loganalysis .log-app {
+  color: var(--la-accent);
+}
+.page-loganalysis .log-app,
+.page-loganalysis .log-thread {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-loganalysis .log-thread {
+  color: var(--text-faint);
+}
+.page-loganalysis .log-msg {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- expanded record ---- */
+.page-loganalysis .log-detail {
+  padding: 10px 12px 14px 40px;
+  background: var(--bg);
+}
+.page-loganalysis .log-mdc {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 12px;
+  margin: 0 0 10px;
+  font-size: 11.5px;
+  font-family: var(--mono);
+}
+.page-loganalysis .log-mdc dt {
+  color: var(--text-faint);
+}
+.page-loganalysis .log-mdc dd {
+  margin: 0;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+.page-loganalysis .log-ids {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+/* The shared `.code-out` carries a 340px min-height, which suits a tool whose
+   whole result is one panel. Here it is one record inside a list, and most
+   records are two lines — the reset stops each expansion opening a tall empty
+   box. `overflow: auto` is inherited and load-bearing: a log line is wider than
+   the panel, and it has to scroll inside this box rather than the page. */
+.page-loganalysis .log-detail .code-out {
+  min-height: 0;
+  max-height: 420px;
+  font-size: 11.5px;
+}
+
+/* ---- REST calls view ----
+   The second reading of the same loaded set. A switch in the panel head rather
+   than a rail: seven columns want the main column's width, which is the one
+   thing a narrow side rail cannot give them. */
+.page-loganalysis .rest-view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+/* Both tables scroll inside their own box. A full integration URL is wider than
+   the panel, and the page itself must never scroll sideways. */
+.page-loganalysis .rest-table {
+  display: block;
+  overflow-x: auto;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+.page-loganalysis .rest-table caption {
+  padding-bottom: 6px;
+  text-align: left;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+.page-loganalysis .rest-table th,
+.page-loganalysis .rest-table td {
+  padding: 5px 10px;
+  text-align: left;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+.page-loganalysis .rest-table th {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.page-loganalysis .rest-table tbody tr:hover {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+/* Same tint the timeline gives a failed call, so the two views agree. */
+.page-loganalysis .rest-table tbody tr.is-bad {
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
+}
+.page-loganalysis .rest-n {
+  font-variant-numeric: tabular-nums;
+}
+.page-loganalysis .rest-table .is-bad {
+  color: var(--danger);
+}
+.page-loganalysis .rest-service {
+  color: var(--la-accent);
+}
+.page-loganalysis .rest-url {
+  max-width: 42ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The heading *is* the sort control, so it has to look like the heading it
+   replaced rather than a button parked inside one. */
+.page-loganalysis .rest-sort {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.page-loganalysis .rest-sort:hover {
+  color: var(--text);
+}
+.page-loganalysis .rest-sort.is-on {
+  color: var(--accent);
+}
+
+/* Stacked: the sidebar sits above the timeline, and the row grid drops the
+   columns there is no room for — time, level and message carry the row. */
+@media (max-width: 1080px) {
+  .page-loganalysis .layout {
+    grid-template-areas:
+      "controls"
+      "result";
+  }
+  .page-loganalysis .log-entry > summary {
+    grid-template-columns: 74px 40px minmax(0, 1fr);
+  }
+  /* The row's own left inset is gone at this width, so the gap row loses the
+     indent that lined it up with the message column. */
+  .page-loganalysis .log-gap {
+    padding-left: 12px;
+  }
+  .page-loganalysis .log-delta,
+  .page-loganalysis .log-app,
+  .page-loganalysis .log-thread {
+    display: none;
+  }
+  .page-loganalysis .log-detail {
+    padding-left: 12px;
+  }
+}
+
+/* ---- Log Analysis: fold one field of the controls sidebar ----
+   The heading is the button, so it has to keep looking exactly like the
+   `<label>` it replaced (see `.controls .field > label`). The shared @supports
+   block already gives it the gradient fill — this is only the reset, which is
+   why it clears `background-color` rather than `background`: `background: none`
+   would drop that gradient image and leave transparently-filled text on
+   nothing. Availability spells the same block out for itself; the rule is
+   page-scoped because the two sidebars are the only things that carry it. */
+.page-loganalysis .controls .field-collapse {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--text-dim);
+  margin-bottom: 7px;
+  cursor: pointer;
+}
+.page-loganalysis .controls .field-collapse:hover {
+  color: var(--text);
+}
+/* Pushed to the panel edge rather than sitting against the title: the fields are
+   a stack of rows, and a ragged column of chevrons reads as decoration instead
+   of one control repeated. */
+.page-loganalysis .controls .field-collapse .caret {
+  width: 11px;
+  margin-left: auto;
+  margin-bottom: 3px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-dim);
+  /* The gradient fill is inherited from the heading; the chevron is a control,
+     not part of the title, so it takes its own solid colour back. */
+  -webkit-text-fill-color: var(--text-dim);
+}
+
+/* ---- Log Analysis: the "Application & thread" field ----
+   Four labelled groups stacked in one field — three labels over a block of chips,
+   and Thread over a select. The shared rules leave two problems once they repeat
+   four deep:
+
+   - A label sat 10px above its own chips and **0px** below the previous group's,
+     because `.chips` carries a top margin and no bottom one. Proximity then reads
+     backwards: every heading looks like it belongs to the block above it. So the
+     separation between groups has to be the larger of the two numbers, not the
+     smaller — that is what makes a label bind to the chips it names.
+   - Thread got 7px where the chip groups got 10px: a `<select>` has no top margin
+     to collapse with the label's, so it alone fell back to the bare label margin.
+     Both now come from the same declaration. */
+.page-loganalysis #source-body > label {
+  /* Collapses against `.chips`'s 10px top margin, so this is the gap that wins —
+     for the select, which has none, it is the whole gap. */
+  margin-bottom: 12px;
+}
+.page-loganalysis #source-body > label:not(:first-child) {
+  margin-top: 22px;
+}
+/* Folded, the heading is the whole field — its bottom margin would read as
+   padding under a rule that isn't there. */
+.page-loganalysis .controls .field-collapse[aria-expanded="false"] {
+  margin-bottom: 0;
+}
+/* Five options don't fit one row at sidebar width. A grid rather than a wrapping
+   flex row: `.mode-btn` is `flex: 1`, so wrapping would stretch the last row's
+   two buttons to half the panel each and the row would stop lining up with the
+   one above it. The top margin is the same beat every other field's first
+   control keeps under its heading — without it this one hugs the heading at
+   7px while its neighbours sit at 17px. */
+.page-loganalysis .group-switch {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+.page-loganalysis #rest-body > .switch:first-child {
+  margin-top: 10px;
 }

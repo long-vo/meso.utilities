@@ -10,6 +10,18 @@ everything here runs entirely in your browser and deploys to GitHub Pages.
 - **Decode Anything** (`/decode/`) — auto-detect and unwrap layered encodings (Base64, hex,
   URL-encoding, gzip/zlib, JWTs, PEM, `data:` URLs, escaped JSON) until something readable comes
   out. Runs fully client-side.
+- **Log Analysis** (`/loganalysis/`) — drop the log files off a ticket (zip and gzip bundles unpack
+  on the way in), several at once and from different applications, and read them as one merged
+  timeline. Records (a header plus its whole body, not one line each) are grouped by the business id
+  they mention — dossier, case, request, thread or REST call — with every id in the log offered as a
+  filter. A density strip brushes the timeline down to the minutes that matter, search highlights
+  every hit, and REST calls fold into a single row carrying method, URL, status and duration, with
+  never-answered calls flagged and a sortable table rolling them up per service. Grouping by
+  **problem** folds four hundred ERROR rows into the handful of distinct failures they really are,
+  each naming its root cause and the dossiers it touched; a pause that is out of character for its
+  group is called out where it happened; and **± Context** brings back the neighbouring records a
+  filter hid. Pin the records that tell the story and copy them as a Markdown ticket comment. Runs
+  fully client-side; logs are never stored.
 - **Leave Request** (`/leave/`) — fill one small form and get the two artifacts the team's leave
   process needs: the pre-formatted HR leave-request email (step 1) and the Outlook calendar event
   (step 2), with one-click hand-offs to your mail app and to Outlook. Runs fully client-side.
@@ -124,6 +136,98 @@ WebCrypto). Everything runs in your browser; nothing is uploaded.
 URL-safe), hex, URL percent-encoding, gzip+Base64, JSON escaping — in any order. Each click wraps
 the current result in one more layer, mirroring how the decoder unwraps them, so building a test
 payload is the same motion as reading one.
+
+## How Log Analysis works
+
+The unit is the **record**, not the line. An Axon Ivy log writes a header (timestamp, level, logger,
+thread, MDC) followed by a body that runs until the next header — and the bodies hold the
+interesting things: a `class …NotificationRequest { … }` dump, a JSON payload, a REST envelope.
+Splitting on newlines turns one event into forty orphan lines, so everything works on records that
+keep their body attached. **Spring Boot console logs** (the e-portal pod logs) parse as first-class
+records too, in both shapes: the plain Boot pattern and the e-portal one carrying a
+`[traceId][dossierId][userId]` MDC prefix and the application name. There the message rides on the
+header line and only stack traces continue below; the MDC slots become labelled, filterable ids, so
+a stack trace whose dossier slot is empty still joins the dossier its trace was serving. Files
+parsed together are merged into one timeline by timestamp, each record tagged with the file and
+application it came from. A log in some other format still parses: a leading timestamp opens a
+record, and text with no timestamps at all is shown as-is rather than refused.
+
+**Identifiers are matched by value, not by label.** One case id appears as `caseIds [5a3c…]`, as
+`"ubiIdCaseId":"5a3c…"`, inside the URL `/baloiseid/cases/5a3c…/files.zip` and inside the filename
+`front_5a3c….jpg`. Labelled occurrences teach the tool what an id is _called_; a bare-UUID sweep
+finds it everywhere else; filtering matches the value, so none of those four are missed. Values that
+are a run of `*` are skipped, so a sanitized log grows no mask-shaped filters.
+
+**Cases are linked to their dossier.** A record carrying both `ubiIdCaseId: 8df4…` and
+`extCaseId: 5dad…` teaches that the case belongs to that dossier, so records naming only the case
+join the dossier's group — which is what makes several application logs read as one flow. Only
+records naming exactly one dossier teach a link, and the linking follows a narrow label allow-list:
+`extPersonId` and `documentId` are excluded, because linking on those merges unrelated dossiers into
+one useless group. The **Link cases to dossier** switch turns it off.
+
+**Grouping** is a switch, not a reload: by dossier (the default), by problem (below), by request —
+Ivy's per-app `requestId`, or a Spring `traceId`, which being globally unique joins one request
+across pods — by thread — which shows what ran concurrently — by REST call, or flat. Records
+matching no key collect in a trailing **Unattributed** group rather than disappearing.
+
+**Four hundred ERROR records are rarely four hundred problems.** Grouping by **problem** folds them
+into the handful of distinct failures they actually are. A JVM stack trace is parsed for its type,
+its `Caused by:` chain and the first frame outside the framework packages — so a row reads
+`SigningException: could not sign ← SQLException: connection reset by peer` instead of the opening
+line of sixty stack frames. Clusters key on the **root cause**, because the same connection reset
+under two different wrappers is one problem and the wrapper only names the layer that noticed. The
+message is normalised first — UUIDs, timestamps, long hex and long digit runs become placeholders —
+timidly on purpose: `500` stays a `500`, since a normaliser that merged it with `404` would hide two
+different problems as one with no way to notice. Each cluster carries how often it happened, when it
+started and stopped, and **which dossiers it touched** — the "how far did this spread" answer no
+per-record view can give. A **problems** tile on the overview strip switches to the grouping.
+
+**Where the time went.** Rows show their offset from the group's start, but the fact worth having is
+usually that three of those four minutes passed between two adjacent records. A pause is called out
+— on its own row between the two records it separates, plus a badge on the group header — when it is
+both **5× the group's own median gap and at least a second**. Both conditions carry weight: the
+multiple alone flags every row in a steady-cadence group, and the floor alone flags a 3 ms pause
+between records logged microseconds apart.
+
+**Getting back what a filter hid.** Narrowing to one dossier at ERROR is what makes a merged log
+readable, and it is also what hides the four DEBUG records just before the failure that say why it
+failed. **± Context** on any record pulls its neighbours out of the unfiltered merge and into the
+group's own row list — 5 either side, widening to 10 and 20 — dimmed and tagged, since some of them
+belong to other dossiers. `grep -C` for the timeline, without losing your place.
+
+**REST calls fold.** The four records of a call — `Invoking REST service …`, `>> POST …`,
+`… successful executed in 342 [ms]. Response status was 200`, `<< 200 …` — collapse into one row
+carrying service, method, URL, status and duration (`1 [s]` normalised to 1000 ms). Pairing is per
+file _and_ thread, because the same URL is called concurrently on several threads. An invocation
+with no completion is flagged **no response**, which is the trace a hung integration leaves.
+Filters: non-2xx or unanswered only, and slower than _N_ ms.
+
+A **REST calls** view beside the timeline lists every call as a sortable table, over a per-service
+rollup: calls, failed, unanswered, p50, p95 and slowest. `failed` and `unanswered` stay separate
+counts — a 500 answered and said it broke, a hung call said nothing, and they send you looking in
+different places — and a call with no readable duration is kept out of the percentiles rather than
+folded in as 0 ms, which would report a hung integration as the fastest thing in the log.
+Percentiles are nearest-rank, so every figure names a call you can find in the table under it. Pick
+any call to take its records back to the timeline as a removable filter.
+
+**Reading and reporting.** A density strip above the timeline shows where records — and errors —
+cluster; drag across it (or click one slice) to filter the view to a window, shown as a removable
+pill like every other filter. Search takes several terms (all must match; quote a phrase to keep it
+whole), highlights every hit in rows and expanded records, and `n`/`p` hop between matching records.
+Pin the records that carry the story and **Copy pinned** emits them as a Markdown ticket comment —
+headers with file, timestamp and level, bodies fenced verbatim. Pins key on a file and a line rather
+than a position in the merge, so dropping in the next log off the ticket no longer throws away the
+set you were collecting; only removing the file a pin lives in drops it. Either copy button has a
+download beside it, because a merged timeline runs to more records than the clipboard is a sensible
+way to move. An MDC value the identifier index recognises is a filter chip like any other, so
+`requestId=5511520` in an expanded record is one click from narrowing the view. A record's payloads
+can also be handed straight to Decode Anything. For merges that mix clocks — Ivy logs local time,
+the pods UTC — each file gets a whole-hour clock shift that realigns ordering and deltas while every
+displayed timestamp stays exactly as logged. Zip and gzip bundles unpack on drop, keeping only
+`.log`/`.txt`/`.out` entries.
+
+Logs live in memory for the session only — nothing is written to `localStorage`, and nothing is
+uploaded.
 
 ## How the leave request works
 
@@ -436,9 +540,10 @@ Team Availability's legend) have a second toggle beside it for that rail — **C
 choices are remembered per tool, independently (as is the sidebar's drag-to-resize width).
 
 Tools also chain into each other. The **Send to** buttons next to a tool's result hand the output to
-another tool: decode a payload, send it to Sanitize to mask it; pick someone's days in Team
-Availability's heatmap, send them to Leave Request. The handoff travels through `sessionStorage` in
-your browser (same tab only, consumed on arrival, expires after 5 minutes) — nothing is uploaded.
+another tool: decode a payload, send it to Sanitize to mask it; mask a log file in Sanitize, send it
+to Log Analysis to group and filter it; pick someone's days in Team Availability's heatmap, send
+them to Leave Request. The handoff travels through `sessionStorage` in your browser (same tab only,
+consumed on arrival, expires after 5 minutes) — nothing is uploaded.
 
 ## Run locally
 
@@ -480,6 +585,8 @@ src/
   palette.test.ts     command-palette filtering tests (import the module from static/)
   diff.test.ts        diff-view line-pairing tests (import the module from static/)
   logview.test.ts     log-view numbering/level/search tests (import the module from static/)
+  loganalysis.test.ts log parsing/id-extraction/grouping tests (from static/loganalysis/)
+  problems.test.ts    throwable-parsing and error-clustering tests (from static/loganalysis/)
   suggest.test.ts     sensitive-field suggestion tests (import the module from static/)
   encode.test.ts      encode-chain parity tests (roundtrip through decode.mjs)
   jwt.test.ts         JWT verification tests (import the module from static/decode/)
@@ -517,6 +624,11 @@ static/
     decode.mjs        detection + unwrap pipeline (imported by browser and tests)
     encode.mjs        encode-mode layer stacking (imported by browser and tests)
     jwt.mjs           JWT verification + time claims (imported by browser and tests)
+  loganalysis/
+    index.html        Log Analysis UI
+    app.js            timeline UI logic (imports ./loganalysis.mjs)
+    loganalysis.mjs   record parsing, id index, REST spans, grouping (browser and tests)
+    problems.mjs      throwable parsing, message normalising, error clustering
   leave/
     index.html        Leave Request UI
     app.js            leave UI logic (imports ./leave.mjs)

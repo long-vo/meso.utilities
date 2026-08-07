@@ -69,6 +69,19 @@ export const TOOL_ICONS = {
   transform: '<span class="crumb-icon card--blue">' +
     '<svg width="14" height="14" viewBox="0 0 16 16">' +
     '<text class="i1" x="1.5" y="12" font-size="11" font-weight="700">Aa</text></svg></span>',
+  // Log lines of decreasing length beside a magnifier — the small-size reading
+  // of the hub card's illustration. The bars shorten as they descend so each one
+  // clears the lens: at 14px an overlap reads as a smudge, not two shapes. The
+  // handle is what makes it a magnifier rather than a circle — the tour's recap
+  // grid, nine glyphs in a row, is where a lens without one stops reading.
+  loganalysis: '<span class="crumb-icon card--violet">' +
+    '<svg width="14" height="14" viewBox="0 0 16 16">' +
+    '<rect class="i1" x="1.5" y="2.5" width="11" height="2" rx="1" />' +
+    '<rect class="i2" x="1.5" y="6.3" width="7" height="2" rx="1" />' +
+    '<rect class="i2" x="1.5" y="10.1" width="4.5" height="2" rx="1" />' +
+    '<circle class="is1" cx="11.2" cy="10.2" r="3" stroke-width="1.6" />' +
+    '<line class="is1" x1="13.4" y1="12.4" x2="15" y2="14" stroke-width="1.8" ' +
+    'stroke-linecap="round" /></svg></span>',
   // Two fanned cards — the small-size reading of the hub card's three-card
   // illustration. Poker used to be one of the two things here with no SVG
   // identity (a 🃏), which read as a full-colour emoji wherever the other tools
@@ -101,6 +114,23 @@ const TOOL_LINKS = [
     title: "Decode Anything",
     href: "decode/",
     keywords: ["base64", "jwt", "hex", "gzip", "url"],
+  },
+  {
+    icon: TOOL_ICONS.loganalysis,
+    title: "Log Analysis",
+    href: "loganalysis/",
+    keywords: [
+      "log",
+      "ivy",
+      "trace",
+      "dossier",
+      "correlation",
+      "thread",
+      "request",
+      "rest",
+      "timeline",
+      "sequence",
+    ],
   },
   {
     icon: TOOL_ICONS.leave,
