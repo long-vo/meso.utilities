@@ -5901,6 +5901,30 @@ button.out:focus-visible::after {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: "result";
   }
+  /* The sticky sidebar scrolls its own fields once it outgrows the window, which
+     on this page it does: a stuck element taller than its slot can never show its
+     bottom, and a timeline as tall as its records puts the end of the page — the
+     only place those fields used to surface — thousands of pixels away.
+     Scoped here rather than added to the shared `.controls`, since this is the
+     page whose result column has no height of its own to bound the sticky range.
+     The cap is the window less what sits outside the scroller: the sticky offset
+     above it, the layout's bottom padding below, and the panel's own padding. */
+  .page-loganalysis .controls-scroll {
+    max-height: calc(100vh - 86px - 22px - 36px);
+    /* Spelled out: `overflow-y: auto` alone computes the *x* axis to auto as well,
+       and a sidebar that can scroll sideways is never what the cap meant. */
+    overflow: hidden auto;
+    /* Scrolls, but draws no bar for it: the sidebar is already a stack of controls
+       and a rail down its edge reads as one more. Both spellings are load-bearing —
+       `scrollbar-width` is the standard property, the pseudo-element below is what
+       Blink and WebKit actually honour. With the bar gone the gutter goes too, so
+       the fields keep the full column width. */
+    scrollbar-width: none;
+  }
+  /* Paired with `scrollbar-width` above; neither covers every engine alone. */
+  .page-loganalysis .controls-scroll::-webkit-scrollbar {
+    display: none;
+  }
 }
 .page-loganalysis .result {
   max-width: none;
@@ -6312,6 +6336,9 @@ button.out:focus-visible::after {
 }
 
 /* ---- groups ---- */
+/* No height of its own and nothing to scroll: the timeline is as tall as the
+   groups in it, they are as tall as their records (see `.log-rows` below), and the
+   page is the only thing that scrolls. */
 .page-loganalysis .log-groups {
   display: flex;
   flex-direction: column;
@@ -6330,17 +6357,27 @@ button.out:focus-visible::after {
   justify-content: center;
   margin-top: 0;
 }
-.page-loganalysis .log-group {
+/* The box belongs to the wrapper rather than the `<details>` itself, so that the
+   toggle-all button can sit inside this border while staying outside the fold —
+   see the comment on it in app.js. */
+.page-loganalysis .log-group-wrap {
+  position: relative;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-inset);
   overflow: hidden;
+  /* The toggle's width, spelled out once so the header below can reserve exactly
+     it. Fixed rather than fitted, so swapping ▸ for ▾ cannot shift the readouts. */
+  --la-group-btn: 78px;
 }
 .page-loganalysis .log-group > summary {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 12px;
+  /* The right side clears the toggle that floats over it. Reserved on every group,
+     including the one-record ones that get no toggle: the timestamp ending each
+     header is a column, and a header running on to the edge would break it. */
+  padding: 9px calc(var(--la-group-btn) + 20px) 9px 12px;
   cursor: pointer;
   list-style: none;
 }
@@ -6382,6 +6419,38 @@ button.out:focus-visible::after {
 .page-loganalysis .log-group-meta .chip {
   cursor: default;
 }
+/* The one control in the group header — everything else on this row is a
+   readout. Sized to the 11px meta text rather than borrowing `.btn`, whose
+   12.5px and heavier weight would out-shout the badges it sits beside.
+   It floats over the header's right end because it is a sibling of the `<details>`
+   rather than a child of the `<summary>`, which costs it the row's own vertical
+   centring: `top` is the summary's padding and the box is a badge's 26px, so the
+   two line up exactly. A label long enough to wrap grows the header underneath and
+   the button stays on its first line — the one case where it sits above the badges
+   instead of beside them. */
+.page-loganalysis .log-group-btn {
+  position: absolute;
+  top: 9px;
+  right: 12px;
+  width: var(--la-group-btn);
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.page-loganalysis .log-group-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
 .page-loganalysis .log-group-n,
 .page-loganalysis .log-group-ms,
 .page-loganalysis .log-group-time {
@@ -6389,10 +6458,10 @@ button.out:focus-visible::after {
 }
 
 /* ---- rows ---- */
+/* No cap and nothing to scroll, like the timeline around it: an open group is as
+   tall as its records, and folding it is how you get it out of the way. */
 .page-loganalysis .log-rows {
   border-top: 1px solid var(--border);
-  max-height: 62vh;
-  overflow-y: auto;
 }
 .page-loganalysis .log-entry {
   border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
@@ -6516,11 +6585,72 @@ button.out:focus-visible::after {
   padding: 10px 12px 14px 40px;
   background: var(--bg);
 }
+/* The record's own actions, shown to whoever is pointing at the record and nobody
+   else: four buttons standing under every expansion turned reading the timeline
+   into scrolling past a wall of controls. Same recipe as Shortlink's tile actions
+   — `opacity` rather than `display`, so the row keeps its space and a record does
+   not grow taller under the pointer, and `pointer-events` so an invisible button
+   cannot be clicked by accident.
+   Two things keep that from locking anyone out. `:focus-within` fires the moment
+   Tab lands on the first button, which is what keeps these four reachable without
+   a mouse. And the whole behaviour is asked for by hover-capable pointers only:
+   on a touch screen there is no hover to reveal them with, and `pointer-events:
+   none` means a tap could never land to trigger one either — they would simply be
+   gone. There, they stay where they are. */
+@media (hover: hover) {
+  .page-loganalysis .log-detail .btn-row {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+  }
+  .page-loganalysis .log-entry:hover > .log-detail .btn-row,
+  .page-loganalysis .log-entry:focus-within > .log-detail .btn-row {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+/* Both metadata blocks fold, and start folded — see `foldEl` in app.js for why.
+   The chevron rides the label to the right edge, as it does on the sidebar's own
+   fields, so a record reads as one more stack of foldable rows rather than a
+   second kind of foldable. Quieter type than those headings, though: this label
+   sits inside a record, not above a panel. */
+.page-loganalysis .log-fold {
+  margin-bottom: 10px;
+}
+.page-loganalysis .log-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.page-loganalysis .log-fold > summary:hover {
+  color: var(--text-dim);
+}
+.page-loganalysis .log-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.page-loganalysis .log-fold > summary::after {
+  content: "▸";
+  margin-left: auto;
+  width: 11px;
+  font-size: 12px;
+  line-height: 1;
+}
+.page-loganalysis .log-fold[open] > summary {
+  margin-bottom: 6px;
+}
+.page-loganalysis .log-fold[open] > summary::after {
+  content: "▾";
+}
 .page-loganalysis .log-mdc {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 2px 12px;
-  margin: 0 0 10px;
+  margin: 0;
   font-size: 11.5px;
   font-family: var(--mono);
 }
@@ -6537,16 +6667,26 @@ button.out:focus-visible::after {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  margin-bottom: 10px;
 }
 /* The shared `.code-out` carries a 340px min-height, which suits a tool whose
    whole result is one panel. Here it is one record inside a list, and most
-   records are two lines — the reset stops each expansion opening a tall empty
-   box. `overflow: auto` is inherited and load-bearing: a log line is wider than
-   the panel, and it has to scroll inside this box rather than the page. */
+   records are two lines — the `min-height` reset stops each expansion opening a
+   tall empty box.
+
+   `max-height` goes the other way: expanding a record is a request to read it,
+   and the shared 460px cap answered that by putting a sixty-frame stack trace
+   into a small window with its own scrollbar — nested inside the row list's
+   scroller, and inside the timeline's. An expanded record now renders at its
+   full height and whatever scrolling is needed happens once, in the list around
+   it, rather than three times over.
+
+   `overflow` stays as inherited and is still load-bearing, but now only on the
+   horizontal axis: a log line is wider than the panel and has to scroll inside
+   this box rather than taking the page sideways with it. Vertically there is
+   nothing left to scroll, since the box is as tall as its content. */
 .page-loganalysis .log-detail .code-out {
   min-height: 0;
-  max-height: 420px;
+  max-height: none;
   font-size: 11.5px;
 }
 

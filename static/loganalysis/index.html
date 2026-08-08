@@ -51,139 +51,148 @@
 
   <main class="layout" id="main" tabindex="-1">
     <section id="controls" class="panel controls" aria-label="Log sources, grouping and filters">
-      <!-- Every field's own heading folds it (see setupCollapse in app.js). The
-           heading is the button, so it can't be a `<label for>`: a click would
-           toggle *and* activate the control — here that would open the file
-           dialog. The controls carry their own aria-label instead. -->
-      <div class="field">
-        <button class="field-collapse" type="button" aria-controls="sources-body"
-          aria-expanded="true">Log files<span class="caret" aria-hidden="true">▾</span></button>
-        <div id="sources-body">
-          <div id="drop-zone" class="drop-zone" role="button" tabindex="0"
-            aria-label="Add log files to analyse — several at once are merged into one timeline">
-            <strong>Drop log files here</strong>
-            <span class="hint">or click to choose — several at once are merged into one
-              timeline. Zip and gzip bundles unpack on the way in.</span>
-          </div>
-          <input id="file-input" type="file" multiple accept=".log,.txt,.out,.zip,.gz,text/plain"
-            hidden />
-          <div id="source-list" class="source-list" aria-live="polite"></div>
-          <p id="parse-status" class="hint">Nothing loaded yet.</p>
-          <button id="example" class="btn btn-ghost btn-small" type="button"
-            title="Load a small made-up multi-app log to explore the tool">Try with sample
-            log</button>
-          <!-- Inside this field, not beside it: pasting is another way to fill
-               the same list, so folding the field takes it along. -->
-          <details id="paste-details" class="field">
-            <summary>…or paste a log</summary>
-            <textarea id="paste" class="code-area paste-area" spellcheck="false"
-              autocomplete="off" aria-label="Paste log text"
-              placeholder="[2026-05-15 10:11:41.159][INFO ][runtimelog.balboa-bank…][http-nio-8080-exec-9]{…}"></textarea>
-            <div class="btn-row">
-              <button id="paste-add" class="btn btn-small" type="button">Add pasted log</button>
+      <!-- The fields scroll in here rather than in the panel itself. `.controls`
+           is sticky, and a stuck sidebar taller than the window can never show
+           its bottom — with a timeline as tall as its records, the fields below
+           the fold sat thousands of pixels down the page. The scroller has to be
+           this inner box and not `.controls`: resize.js appends the column-width
+           handle to `#controls`, and inside a scrolling box that handle scrolls
+           out of reach along with the fields. -->
+      <div class="controls-scroll">
+        <!-- Every field's own heading folds it (see setupCollapse in app.js). The
+             heading is the button, so it can't be a `<label for>`: a click would
+             toggle *and* activate the control — here that would open the file
+             dialog. The controls carry their own aria-label instead. -->
+        <div class="field">
+          <button class="field-collapse" type="button" aria-controls="sources-body"
+            aria-expanded="true">Log files<span class="caret" aria-hidden="true">▾</span></button>
+          <div id="sources-body">
+            <div id="drop-zone" class="drop-zone" role="button" tabindex="0"
+              aria-label="Add log files to analyse — several at once are merged into one timeline">
+              <strong>Drop log files here</strong>
+              <span class="hint">or click to choose — several at once are merged into one
+                timeline. Zip and gzip bundles unpack on the way in.</span>
             </div>
-          </details>
-          <div class="btn-row">
-            <button id="clear" class="btn btn-ghost btn-small" type="button">Clear all</button>
+            <input id="file-input" type="file" multiple accept=".log,.txt,.out,.zip,.gz,text/plain"
+              hidden />
+            <div id="source-list" class="source-list" aria-live="polite"></div>
+            <p id="parse-status" class="hint">Nothing loaded yet.</p>
+            <button id="example" class="btn btn-ghost btn-small" type="button"
+              title="Load a small made-up multi-app log to explore the tool">Try with sample
+              log</button>
+            <!-- Inside this field, not beside it: pasting is another way to fill
+                 the same list, so folding the field takes it along. -->
+            <details id="paste-details" class="field">
+              <summary>…or paste a log</summary>
+              <textarea id="paste" class="code-area paste-area" spellcheck="false"
+                autocomplete="off" aria-label="Paste log text"
+                placeholder="[2026-05-15 10:11:41.159][INFO ][runtimelog.balboa-bank…][http-nio-8080-exec-9]{…}"></textarea>
+              <div class="btn-row">
+                <button id="paste-add" class="btn btn-small" type="button">Add pasted log</button>
+              </div>
+            </details>
+            <div class="btn-row">
+              <button id="clear" class="btn btn-ghost btn-small" type="button">Clear all</button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="field">
-        <button class="field-collapse" type="button" aria-controls="group-body"
-          aria-expanded="true">Group by<span class="caret" aria-hidden="true">▾</span></button>
-        <div id="group-body">
-          <!-- Toggle buttons, not tabs: there is no tabpanel to select, so
-               aria-pressed is the honest state (same as sanitize and decode). -->
-          <div class="mode-switch group-switch" role="group" aria-label="Grouping">
-            <button class="mode-btn is-active" type="button" data-group="correlation"
-              aria-pressed="true" title="One group per dossier, cases folded in">Dossier</button>
-            <button class="mode-btn" type="button" data-group="problem" aria-pressed="false"
-              title="One group per distinct failure — repeats folded together">Problems</button>
-            <button class="mode-btn" type="button" data-group="request" aria-pressed="false"
-              title="One group per requestId">Request</button>
-            <button class="mode-btn" type="button" data-group="thread" aria-pressed="false"
-              title="One group per thread — shows what ran concurrently">Thread</button>
-            <button class="mode-btn" type="button" data-group="rest" aria-pressed="false"
-              title="One group per REST call">REST call</button>
-            <button class="mode-btn" type="button" data-group="none" aria-pressed="false"
-              title="No grouping — one flat merged timeline">Flat</button>
-          </div>
-          <label class="switch">
-            <input id="link-aliases" type="checkbox" checked /> <span>Link cases to dossier</span>
-          </label>
-          <p class="hint">A notification carrying both a case id and a dossier id teaches the
-            link, so records naming only the case join the dossier's group.</p>
-        </div>
-      </div>
-
-      <div class="field">
-        <button class="field-collapse" type="button" aria-controls="find-body"
-          aria-expanded="true">Search<span class="caret" aria-hidden="true">▾</span></button>
-        <div id="find-body">
-          <input id="query" type="search" spellcheck="false" autocomplete="off"
-            placeholder="VERIFICATION_PENDING 5dad36c5" aria-label="Search records" />
-          <p class="hint">Case-insensitive, against the whole record. Every word must match —
-            quote a phrase to keep it whole. <kbd>n</kbd>/<kbd>p</kbd> jump between matches.</p>
-        </div>
-      </div>
-
-      <div class="field">
-        <button class="field-collapse" type="button" aria-controls="ids-body"
-          aria-expanded="true">Identifiers<span class="caret" aria-hidden="true">▾</span></button>
-        <div id="ids-body">
-          <input id="id-find" type="search" spellcheck="false" autocomplete="off"
-            placeholder="Filter this list…" aria-label="Filter the identifier list" />
-          <div id="id-list" class="id-list" role="group" aria-label="Filter by identifier"></div>
-        </div>
-      </div>
-
-      <div class="field">
-        <button class="field-collapse" type="button" aria-controls="level-body"
-          aria-expanded="true">Level<span class="caret" aria-hidden="true">▾</span></button>
-        <div id="level-body">
-          <div id="levels" class="chips" role="group" aria-label="Filter by level"></div>
-        </div>
-      </div>
-
-      <div class="field">
-        <button class="field-collapse" type="button" aria-controls="rest-body"
-          aria-expanded="true">REST calls<span class="caret" aria-hidden="true">▾</span></button>
-        <div id="rest-body">
-          <label class="switch">
-            <input id="rest-only" type="checkbox" /> <span>Only REST calls</span>
-          </label>
-          <label class="switch">
-            <input id="bad-only" type="checkbox" /> <span>Only failed or unanswered</span>
-          </label>
-          <div class="field-inline">
-            <label for="min-ms">Slower than</label>
-            <input id="min-ms" type="number" min="0" step="100" placeholder="0" />
-            <span class="hint">ms</span>
+        <div class="field">
+          <button class="field-collapse" type="button" aria-controls="group-body"
+            aria-expanded="true">Group by<span class="caret" aria-hidden="true">▾</span></button>
+          <div id="group-body">
+            <!-- Toggle buttons, not tabs: there is no tabpanel to select, so
+                 aria-pressed is the honest state (same as sanitize and decode). -->
+            <div class="mode-switch group-switch" role="group" aria-label="Grouping">
+              <button class="mode-btn is-active" type="button" data-group="correlation"
+                aria-pressed="true" title="One group per dossier, cases folded in">Dossier</button>
+              <button class="mode-btn" type="button" data-group="problem" aria-pressed="false"
+                title="One group per distinct failure — repeats folded together">Problems</button>
+              <button class="mode-btn" type="button" data-group="request" aria-pressed="false"
+                title="One group per requestId">Request</button>
+              <button class="mode-btn" type="button" data-group="thread" aria-pressed="false"
+                title="One group per thread — shows what ran concurrently">Thread</button>
+              <button class="mode-btn" type="button" data-group="rest" aria-pressed="false"
+                title="One group per REST call">REST call</button>
+              <button class="mode-btn" type="button" data-group="none" aria-pressed="false"
+                title="No grouping — one flat merged timeline">Flat</button>
+            </div>
+            <label class="switch">
+              <input id="link-aliases" type="checkbox" checked /> <span>Link cases to dossier</span>
+            </label>
+            <p class="hint">A notification carrying both a case id and a dossier id teaches the
+              link, so records naming only the case join the dossier's group.</p>
           </div>
         </div>
-      </div>
 
-      <div class="field">
-        <button class="field-collapse" type="button" aria-controls="source-body"
-          aria-expanded="false">Application &amp; thread<span class="caret" aria-hidden="true">▸</span></button>
-        <div id="source-body" hidden>
-          <label>Application</label>
-          <div id="apps" class="chips" role="group" aria-label="Filter by application"></div>
-          <label>Logger</label>
-          <div id="categories" class="chips" role="group" aria-label="Filter by logger"></div>
-          <label>File</label>
-          <div id="files" class="chips" role="group" aria-label="Filter by source file"></div>
-          <label for="threads">Thread</label>
-          <select id="threads">
-            <option value="">Any thread</option>
-          </select>
+        <div class="field">
+          <button class="field-collapse" type="button" aria-controls="find-body"
+            aria-expanded="true">Search<span class="caret" aria-hidden="true">▾</span></button>
+          <div id="find-body">
+            <input id="query" type="search" spellcheck="false" autocomplete="off"
+              placeholder="VERIFICATION_PENDING 5dad36c5" aria-label="Search records" />
+            <p class="hint">Case-insensitive, against the whole record. Every word must match —
+              quote a phrase to keep it whole. <kbd>n</kbd>/<kbd>p</kbd> jump between matches.</p>
+          </div>
         </div>
-      </div>
 
-      <div class="field btn-row">
-        <button id="reset" class="btn btn-ghost btn-small" type="button">Reset filters</button>
-        <button id="expand-all" class="btn btn-ghost btn-small" type="button">Expand all</button>
+        <div class="field">
+          <button class="field-collapse" type="button" aria-controls="ids-body"
+            aria-expanded="true">Identifiers<span class="caret" aria-hidden="true">▾</span></button>
+          <div id="ids-body">
+            <input id="id-find" type="search" spellcheck="false" autocomplete="off"
+              placeholder="Filter this list…" aria-label="Filter the identifier list" />
+            <div id="id-list" class="id-list" role="group" aria-label="Filter by identifier"></div>
+          </div>
+        </div>
+
+        <div class="field">
+          <button class="field-collapse" type="button" aria-controls="level-body"
+            aria-expanded="true">Level<span class="caret" aria-hidden="true">▾</span></button>
+          <div id="level-body">
+            <div id="levels" class="chips" role="group" aria-label="Filter by level"></div>
+          </div>
+        </div>
+
+        <div class="field">
+          <button class="field-collapse" type="button" aria-controls="rest-body"
+            aria-expanded="true">REST calls<span class="caret" aria-hidden="true">▾</span></button>
+          <div id="rest-body">
+            <label class="switch">
+              <input id="rest-only" type="checkbox" /> <span>Only REST calls</span>
+            </label>
+            <label class="switch">
+              <input id="bad-only" type="checkbox" /> <span>Only failed or unanswered</span>
+            </label>
+            <div class="field-inline">
+              <label for="min-ms">Slower than</label>
+              <input id="min-ms" type="number" min="0" step="100" placeholder="0" />
+              <span class="hint">ms</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <button class="field-collapse" type="button" aria-controls="source-body"
+            aria-expanded="false">Application &amp; thread<span class="caret" aria-hidden="true">▸</span></button>
+          <div id="source-body" hidden>
+            <label>Application</label>
+            <div id="apps" class="chips" role="group" aria-label="Filter by application"></div>
+            <label>Logger</label>
+            <div id="categories" class="chips" role="group" aria-label="Filter by logger"></div>
+            <label>File</label>
+            <div id="files" class="chips" role="group" aria-label="Filter by source file"></div>
+            <label for="threads">Thread</label>
+            <select id="threads">
+              <option value="">Any thread</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field btn-row">
+          <button id="reset" class="btn btn-ghost btn-small" type="button">Reset filters</button>
+          <button id="expand-all" class="btn btn-ghost btn-small" type="button">Expand all</button>
+        </div>
       </div>
     </section>
 

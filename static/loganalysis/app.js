@@ -547,6 +547,22 @@ function shortUrl(url) {
   }
 }
 
+/**
+ * How many records the timeline will open without being asked.
+ *
+ * Every group opening is what a reader wants and what a filtered view needs, but
+ * "every" has to stop somewhere: a group's rows are built when it first opens
+ * (that laziness is the reason a large merge is usable at all), so opening an
+ * unfiltered fifty-thousand-record log would build every row in one synchronous
+ * pass and hang the tab. Groups past this budget stay closed, and **Expand all**
+ * — whose label flips to match — opens them deliberately.
+ *
+ * The number only ever bites unfiltered on a big log: filtering is what makes the
+ * shown set small, so the case this protects is the one where nobody has asked
+ * for a specific record yet.
+ */
+const AUTO_OPEN_RECORDS = 3000;
+
 /** True when the loaded window crosses midnight — dates then stop being noise. */
 function multiDay() {
   const { summary } = model;
@@ -603,12 +619,23 @@ function render() {
     ));
     return;
   }
-  // Only the first few groups start open: with grouping off, or one dossier
-  // dominating, opening everything would render the whole log at once.
+  // Every group starts open, on this render and every filtered one after it: a
+  // search that narrows to four matches and then leaves three of five groups
+  // collapsed is a filter hiding its own results.
   const days = multiDay();
-  shownGroups.forEach((group, index) => {
-    els.groups.append(groupEl(group, index < 2 || shownGroups.length === 1, days));
-  });
+  let budget = AUTO_OPEN_RECORDS;
+  let anyClosed = false;
+  for (const group of shownGroups) {
+    // The budget is spent *after* the test, so the first group always opens —
+    // one dominant dossier is the common shape here, and a timeline that opens
+    // nothing at all would be worse than a slow one.
+    const open = budget > 0;
+    budget -= group.records.length;
+    if (!open) anyClosed = true;
+    els.groups.append(groupEl(group, open, days));
+  }
+  // Kept honest: with everything already open the button's job is the reverse.
+  els.expandAll.textContent = anyClosed ? "Expand all" : "Collapse all";
 }
 
 /** The timeline's empty state: a sentence plus the action that ends it. */
@@ -1149,10 +1176,11 @@ function jumpMatch(dir) {
     remaining -= counts[groupIndex];
     groupIndex++;
   }
-  const group = /** @type {HTMLDetailsElement} */ (els.groups.children[groupIndex]);
-  if (!group) return;
-  group.open = true;
-  const summary = group.querySelectorAll(".log-entry > summary")[remaining];
+  const wrap = els.groups.children[groupIndex];
+  if (!wrap) return;
+  const group = /** @type {HTMLDetailsElement | null} */ (wrap.querySelector("details.log-group"));
+  if (group) group.open = true;
+  const summary = wrap.querySelectorAll(".log-entry > summary")[remaining];
   if (summary instanceof HTMLElement) {
     summary.scrollIntoView({ block: "center" });
     summary.focus();
@@ -1188,6 +1216,10 @@ const UNATTRIBUTED_HINTS = {
  * its date.
  */
 function groupEl(group, open, days) {
+  // The wrapper exists for the toggle-all button further down, which has to sit
+  // inside the group's box but outside the fold — see the comment there.
+  const wrap = document.createElement("div");
+  wrap.className = "log-group-wrap";
   const details = document.createElement("details");
   details.className = "log-group";
   details.open = open;
@@ -1229,6 +1261,7 @@ function groupEl(group, open, days) {
   const body = document.createElement("div");
   body.className = "log-rows";
   details.append(body);
+  wrap.append(details);
 
   let filled = false;
   const fill = () => {
@@ -1247,7 +1280,54 @@ function groupEl(group, open, days) {
   details.addEventListener("toggle", () => {
     if (details.open) fill();
   });
-  return details;
+
+  // Open or close the full text of every record in this group — the per-group
+  // counterpart to Expand all, which works on the groups themselves. Offered only
+  // where there is more than one record for it to act on.
+  //
+  // It belongs to the header row but is a sibling of the `<details>`, not a child,
+  // and the stylesheet floats it into place. Inside the `<summary>` it is a control
+  // nested in a control, which Chrome reports and which keyboard and screen-reader
+  // users get inconsistently; anywhere else inside the `<details>` it would vanish
+  // whenever the group is closed, since a closed one renders none of its children —
+  // absolutely positioned ones included.
+  if (group.records.length > 1) {
+    /** The record rows, skipping the gap dividers that sit between them. */
+    const rows = () => /** @type {HTMLDetailsElement[]} */ ([...body.children].filter((el) =>
+      el.classList.contains("log-entry")
+    ));
+    const toggleAll = document.createElement("button");
+    toggleAll.type = "button";
+    toggleAll.className = "log-group-btn";
+    const paint = () => {
+      const closed = rows().some((row) =>
+        !row.open
+      );
+      // The chevron carries the state, as everywhere else here; the accessible
+      // name has to say it in words, since "▸ details" read aloud is a shape.
+      toggleAll.textContent = closed ? "▸ details" : "▾ details";
+      const label = closed
+        ? "Open the full text of every record in this group"
+        : "Close every record in this group";
+      toggleAll.title = label;
+      toggleAll.setAttribute("aria-label", label);
+    };
+    toggleAll.addEventListener("click", () => {
+      // Expanding a closed group's records has to open (and fill) the group
+      // first, or there would be no rows to act on.
+      details.open = true;
+      fill();
+      const closed = rows().some((row) => !row.open);
+      for (const row of rows()) row.open = closed;
+      paint();
+    });
+    // `toggle` does not bubble, but it does still travel the capture phase — so
+    // this one listener keeps the label honest as rows are opened one at a time.
+    body.addEventListener("toggle", paint, true);
+    paint();
+    wrap.append(toggleAll);
+  }
+  return wrap;
 }
 
 /** A pause in the sequence, drawn between the two records it separates. */
@@ -1406,6 +1486,26 @@ function showContext(row, record, span) {
 }
 
 /**
+ * A block inside an expanded record that starts folded.
+ *
+ * Native `<details>` rather than the sidebar's `setupCollapse`: there is one of
+ * these per record, so a fold key per block would be unbounded, and the state is a
+ * glance at one record rather than a preference that should outlive it. Folded to
+ * begin with because expanding a record is a request to read its text — the MDC
+ * table and the identifier chips are lookups you go to on purpose.
+ * @param {string} label
+ * @param {HTMLElement} body
+ */
+function foldEl(label, body) {
+  const fold = document.createElement("details");
+  fold.className = "log-fold";
+  const summary = document.createElement("summary");
+  summary.textContent = label;
+  fold.append(summary, body);
+  return fold;
+}
+
+/**
  * The full record: its MDC as a table, then the raw text with JSON tinted.
  * `row` is the record's `<details>`, so pinning can tint it in place.
  * @param {import("./loganalysis.mjs").LogRecord} record
@@ -1429,15 +1529,15 @@ function detailEl(record, row) {
       else def.textContent = value || "—";
       table.append(term, def);
     }
-    wrap.append(table);
+    wrap.append(foldEl("MDC", table));
   }
 
   if (record.ids.length) {
     const ids = document.createElement("div");
     ids.className = "log-ids";
-    ids.innerHTML = '<span class="hint">Identifiers:</span>';
     for (const value of record.ids) ids.append(idChip(value));
-    wrap.append(ids);
+    // The row's own "Identifiers:" hint is gone — the fold's label says it now.
+    wrap.append(foldEl("Identifiers", ids));
   }
 
   const pre = document.createElement("pre");
