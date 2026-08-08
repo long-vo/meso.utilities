@@ -3596,7 +3596,7 @@ button.out:focus-visible::after {
   align-items: center;
   gap: 6px;
 }
-.step-badge {
+.page-leave .step-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
