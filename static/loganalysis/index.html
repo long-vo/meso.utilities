@@ -189,6 +189,37 @@
           </div>
         </div>
 
+        <!-- The question you were asking, kept by name. No records are stored —
+             see the comment on VIEWS_KEY in app.js — so applying a view puts its
+             filters onto whatever log is loaded at the time. -->
+        <div class="field">
+          <button class="field-collapse" type="button" aria-controls="views-body"
+            aria-expanded="true">Saved views<span class="caret" aria-hidden="true">▾</span></button>
+          <div id="views-body">
+            <div class="field-inline">
+              <input id="view-name" type="text" placeholder="Name this view"
+                aria-label="Name for the saved view" autocomplete="off" />
+              <button id="save-view" class="btn btn-small" type="button">Save</button>
+            </div>
+            <div id="view-list" class="view-list"></div>
+          </div>
+        </div>
+
+        <!-- A display choice rather than a filter: it changes what an expanded
+             record shows, not which records are shown, so Reset filters leaves it
+             alone. -->
+        <div class="field">
+          <button class="field-collapse" type="button" aria-controls="detail-body"
+            aria-expanded="true">Record detail<span class="caret" aria-hidden="true">▾</span></button>
+          <div id="detail-body">
+            <label class="switch">
+              <input id="show-meta" type="checkbox" /> <span>Show MDC and identifiers</span>
+            </label>
+            <p class="hint">Off, an expanded record is its text and nothing else. On, each one
+              also carries its logging context and its ids, both folded until asked for.</p>
+          </div>
+        </div>
+
         <div class="field btn-row">
           <button id="reset" class="btn btn-ghost btn-small" type="button">Reset filters</button>
           <button id="expand-all" class="btn btn-ghost btn-small" type="button">Expand all</button>
@@ -242,8 +273,13 @@
       <div id="filter-pills" class="filter-pills" hidden></div>
       <!-- The brush: record density over the whole loaded set. Click a bar to
            filter to its slice, drag to pick a range. -->
-      <div id="density" class="log-density" aria-label="Record density over time — click a
-        slice or drag a range to filter" hidden></div>
+      <div id="density" class="log-density" role="group" aria-label="Record density over time —
+        click a slice or drag a range to filter. Arrow keys move between slices." hidden></div>
+      <!-- The strip's time axis. Its own element rather than a child of the strip,
+           which is a flex row of bars that clips its overflow; app.js hides and
+           fills it in step with the strip above. aria-hidden because every label
+           it carries is already in a bar's accessible name. -->
+      <div id="density-axis" class="density-axis" aria-hidden="true" hidden></div>
       <div id="overview" class="log-overview" hidden></div>
       <!-- tabindex="-1": removing the last filter pill destroys the element that
            held focus, and this region is where focus is parked instead. -->
@@ -264,14 +300,23 @@
 
   <!-- Fold state for the authored field bodies, applied pre-paint: unlike the
        render-filled panels these would flash open while the deferred module
-       loads. Derives the key exactly as app.js does. On the stacked layout the
-       filter fields start folded (same list as NARROW_FOLDED in app.js) — the
-       sidebar sits above the timeline there, and unfolded it pushes the
-       timeline two screens down. A saved choice still wins. -->
+       loads. Derives the key exactly as app.js does. On the stacked layout every
+       field but the two that start an investigation — the log files and the
+       grouping — starts folded: the sidebar sits above the timeline there, and
+       unfolded it stood 1767px tall, which put the first record of a freshly
+       loaded log two and a half screens below the fold. A saved choice still
+       wins, and app.js scrolls the result into view on the first load besides. -->
   <script>
     try {
       var narrow = matchMedia("(max-width: 1080px)").matches;
-      var foldedByDefault = ["find-body", "ids-body", "level-body", "rest-body"];
+      var foldedByDefault = [
+        "find-body",
+        "ids-body",
+        "level-body",
+        "rest-body",
+        "views-body",
+        "detail-body",
+      ];
       for (var b of document.querySelectorAll("#controls .field-collapse")) {
         var id = b.getAttribute("aria-controls");
         var v = localStorage.getItem("meso-loganalysis-" + id + "-collapsed");

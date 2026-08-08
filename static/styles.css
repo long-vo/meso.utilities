@@ -5933,12 +5933,26 @@ button.out:focus-visible::after {
    `--card-art1`: that property is @property-registered, so `var(--card-art1,
    fallback)` never falls back — every page gets the registration's dark-tuned
    initial value, which fails 4.5:1 on light. Same recipe as `--tour-accent`:
-   the card's mid stop on dark, its deep stop on light. */
+   the card's mid stop on dark, its deep stop on light.
+
+   `--la-meta` is the second tint, and it exists because `--text-faint` is the
+   wrong token for what this page puts in it. Elsewhere that colour carries
+   hints and counts — text you are meant to skip. Here it was carrying the
+   timestamp on every row, which is a log's ordering key and the thing a reader
+   scans, and it measured 4.18:1 on dark and 2.71:1 on light against the row
+   behind it. Both fail AA at 11.5px. This one clears 4.5:1 on the row, the
+   panel and the inset alike, in both themes, while still reading a step below
+   the message beside it. `--text-faint` stays for what it was meant for. */
 .page-loganalysis {
   --la-accent: #cba0ee;
+  --la-meta: #8b95a3;
 }
 :root[data-theme="light"] .page-loganalysis {
   --la-accent: #7736b0;
+  /* Tuned against the *chip*, not the row: a chip's fill is the darkest ground
+     this colour lands on in light theme, and a value that cleared 4.5:1 on the
+     near-white row still measured 3.69:1 on a chip count. */
+  --la-meta: #565f6e;
 }
 
 /* ---- sidebar: sources ---- */
@@ -6018,7 +6032,7 @@ button.out:focus-visible::after {
   font-family: var(--mono);
 }
 .page-loganalysis .source-count {
-  color: var(--text-faint);
+  color: var(--la-meta);
   font-variant-numeric: tabular-nums;
 }
 /* The per-file clock shift. The shared select rule stretches to 100% — this
@@ -6078,7 +6092,7 @@ button.out:focus-visible::after {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .page-loganalysis .chip-count {
-  color: var(--text-faint);
+  color: var(--la-meta);
   font-variant-numeric: tabular-nums;
 }
 .page-loganalysis .chip.is-on .chip-count {
@@ -6133,10 +6147,61 @@ button.out:focus-visible::after {
   justify-content: space-between;
   gap: 8px;
   font-size: 10.5px;
-  color: var(--text-faint);
+  color: var(--la-meta);
 }
 .page-loganalysis .id-label {
   color: var(--la-accent);
+}
+
+/* ---- sidebar: saved views ---- */
+/* The rows reuse `.id-row`, since a saved view is the same kind of thing as an
+   identifier here — a named row you pick off a list. Only the delete beside it is
+   new, and it is a sibling rather than a child: applying and deleting are separate
+   acts, and one button inside another is reachable by neither reliably. */
+.page-loganalysis .view-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 10px;
+}
+.page-loganalysis .view-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+/* Dropping a loaded file and deleting a saved view are the same act on the same
+   kind of row, so they are one control. The file's used to be `.chip-x`, which
+   is not a button style at all — it tints a `<span>` inside Leave's wheel chips
+   — so on a `<button>` every user-agent default showed through: grey fill, 2px
+   outset border, the lot. */
+.page-loganalysis .view-del,
+.page-loganalysis .source-del {
+  flex: none;
+  width: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-inset);
+  color: var(--la-meta);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.page-loganalysis .view-del:hover,
+.page-loganalysis .source-del:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+/* The saved-view row stretches its pair to a common height; the source row is a
+   flex row of centred items, so this one is sized instead. */
+.page-loganalysis .source-del {
+  height: 22px;
+}
+/* Shrinkable, or the name field pushes Save out of the sidebar. */
+.page-loganalysis #view-name {
+  min-width: 0;
+  margin: 0;
 }
 
 /* ---- active filters ---- */
@@ -6164,14 +6229,17 @@ button.out:focus-visible::after {
 /* ---- density brush ---- */
 /* One bar per time slice over the whole loaded set; drag across it to filter
    to a window, click one bar for its slice. Bars are buttons so the keyboard
-   gets the same (coarse) power the drag gives the pointer. */
+   gets the same (coarse) power the drag gives the pointer — but only one of the
+   eighty is ever in the tab order at a time (see the roving tabindex in app.js).
+   Left as eighty tab stops they were more than half of the page's focusable
+   elements, and reaching the timeline by keyboard meant passing through all of
+   them, each one 3×2px. */
 .page-loganalysis .log-density {
   position: relative;
   display: flex;
   align-items: flex-end;
   gap: 1px;
   height: 36px;
-  margin-bottom: 12px;
   padding: 3px 3px 0;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -6179,6 +6247,28 @@ button.out:focus-visible::after {
   cursor: crosshair;
   touch-action: none;
   overflow: hidden;
+}
+/* The axis under the strip. Without it the brush is a shape with no units: you
+   can drag out a window, and the pills will name its edges afterwards, but
+   nothing says what span the strip covers before you touch it. Ends and middle
+   only — a bucket is 1/80th of the window and needs no tick of its own. */
+.page-loganalysis .density-axis {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  margin: 3px 1px 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--la-meta);
+  font-variant-numeric: tabular-nums;
+}
+/* The middle label is centred on the strip's midpoint, not spaced evenly between
+   the other two — those two are anchored to their own outer edges, so even
+   spacing would sit it slightly off centre. */
+.page-loganalysis .density-axis span:nth-child(2) {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
 }
 .page-loganalysis .density-bar {
   flex: 1 1 0;
@@ -6234,7 +6324,7 @@ button.out:focus-visible::after {
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--text-faint);
+  color: var(--la-meta);
 }
 .page-loganalysis .log-stat.is-bad .log-stat-n {
   color: var(--danger);
@@ -6258,12 +6348,15 @@ button.out:focus-visible::after {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 /* The two trailing notes on the strip: what failed most, and what took longest.
-   Both share the slowest line's shape — a full-width, clipped, monospace aside
-   rather than another tile, because neither is a number you filter by. */
+   Neither is a number you filter by, so neither is a tile — but sharing the
+   tiles' row was worse. Squeezed into whatever the tiles left over, both
+   truncated mid-word at every width, and at some widths one wrapped alone onto
+   the next line and read as an orphan. They take a row of their own below the
+   tiles now, one per line, each with the full width to be clipped against —
+   which on the common case means not clipped at all. */
 .page-loganalysis .log-slowest,
 .page-loganalysis .log-worst {
-  flex: 1;
-  min-width: 200px;
+  flex: 1 0 100%;
   font-size: 12px;
   color: var(--text-dim);
   font-family: var(--mono);
@@ -6271,11 +6364,24 @@ button.out:focus-visible::after {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Closer to each other than to the tiles they annotate: two lines of aside, not
+   two more rows of the strip. */
+.page-loganalysis .log-worst + .log-slowest {
+  margin-top: -4px;
+}
 .page-loganalysis .log-worst b {
   color: var(--danger);
 }
 /* ---- the panel head ----
-   Copy and download are one control with two outputs, so they share a border and
+   The counts line and the "Send to" label take `--la-meta` for the same reason
+   the rows do: at 3.74:1 on dark and 3.03:1 on light, "10 of 10 records · 3
+   groups" was the one readout that answers "did my filter do anything", printed
+   in the tone reserved for things you are meant to skip. */
+.page-loganalysis .result-tools .status,
+.page-loganalysis .result-tools .send-label {
+  color: var(--la-meta);
+}
+/* Copy and download are one control with two outputs, so they share a border and
    a hairline seam instead of standing as two pills — the second of which is a
    lone glyph that reads as an unrelated third action. */
 .page-loganalysis .btn-pair {
@@ -6412,7 +6518,7 @@ button.out:focus-visible::after {
   gap: 8px;
   margin-left: auto;
   font-size: 11px;
-  color: var(--text-faint);
+  color: var(--la-meta);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -6468,8 +6574,17 @@ button.out:focus-visible::after {
 }
 .page-loganalysis .log-entry > summary {
   display: grid;
-  /* The delta column fits its widest humanized form (`+59 m 59 s`). */
-  grid-template-columns: 86px 80px 46px 108px 150px minmax(0, 1fr);
+  /* The message is the record; everything left of it is how you found it. The
+     five metadata columns are therefore sized to their content and no wider —
+     the delta to its widest humanized form (`+59 m 59 s`), the app and thread
+     to the widest value this log actually holds, measured once by `sizeColumns`
+     in app.js and handed down as `--la-app-w`/`--la-thread-w`. The fallbacks
+     are what the columns had before any log is loaded. They used to take 470px
+     of a 727px row and leave the message 183px, which is a log viewer showing a
+     quarter of a log line. */
+  grid-template-columns:
+    86px 72px 44px minmax(0, var(--la-app-w, 96px)) minmax(0, var(--la-thread-w, 132px))
+    minmax(0, 1fr);
   align-items: baseline;
   gap: 10px;
   padding: 4px 12px;
@@ -6539,7 +6654,7 @@ button.out:focus-visible::after {
 }
 .page-loganalysis .log-time,
 .page-loganalysis .log-delta {
-  color: var(--text-faint);
+  color: var(--la-meta);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -6556,10 +6671,18 @@ button.out:focus-visible::after {
 .page-loganalysis .log-level.level-info {
   color: var(--accent);
 }
+/* The shared accent is tuned for buttons and links, which are 12.5px and up;
+   on light it measures 4.06:1, and this is the same colour printed at 10.5px on
+   every INFO row in the log. A deeper blue for that one use — same hue, same
+   reading, over the line. Dark needs no such thing: the accent clears 4.5:1
+   there several times over. */
+:root[data-theme="light"] .page-loganalysis .log-level.level-info {
+  color: #2a67e0;
+}
 .page-loganalysis .log-level.level-debug,
 .page-loganalysis .log-level.level-trace,
 .page-loganalysis .log-level.level-none {
-  color: var(--text-faint);
+  color: var(--la-meta);
 }
 .page-loganalysis .log-app {
   color: var(--la-accent);
@@ -6571,7 +6694,7 @@ button.out:focus-visible::after {
   white-space: nowrap;
 }
 .page-loganalysis .log-thread {
-  color: var(--text-faint);
+  color: var(--la-meta);
 }
 .page-loganalysis .log-msg {
   color: var(--text);
@@ -6585,12 +6708,11 @@ button.out:focus-visible::after {
   padding: 10px 12px 14px 40px;
   background: var(--bg);
 }
-/* The record's own actions, shown to whoever is pointing at the record and nobody
-   else: four buttons standing under every expansion turned reading the timeline
-   into scrolling past a wall of controls. Same recipe as Shortlink's tile actions
-   — `opacity` rather than `display`, so the row keeps its space and a record does
-   not grow taller under the pointer, and `pointer-events` so an invisible button
-   cannot be clicked by accident.
+/* The record's own actions, inside the text box they act on, revealed to whoever
+   is pointing at it.
+   `opacity` rather than `display`, so the box reserves their row either way and a
+   record does not grow taller under the pointer; `pointer-events` so an invisible
+   button cannot be clicked by accident.
    Two things keep that from locking anyone out. `:focus-within` fires the moment
    Tab lands on the first button, which is what keeps these four reachable without
    a mouse. And the whole behaviour is asked for by hover-capable pointers only:
@@ -6598,16 +6720,34 @@ button.out:focus-visible::after {
    none` means a tap could never land to trigger one either — they would simply be
    gone. There, they stay where they are. */
 @media (hover: hover) {
-  .page-loganalysis .log-detail .btn-row {
+  .page-loganalysis .log-detail .code-out .btn-row {
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.15s;
   }
-  .page-loganalysis .log-entry:hover > .log-detail .btn-row,
-  .page-loganalysis .log-entry:focus-within > .log-detail .btn-row {
+  .page-loganalysis .log-detail .code-out:hover .btn-row,
+  .page-loganalysis .log-detail .code-out:focus-within .btn-row {
     opacity: 1;
     pointer-events: auto;
   }
+}
+/* Clear of the last line of the record, which they would otherwise sit flush
+   against. Nothing needs saying about the `<pre>`'s monospace or its `pre-wrap`:
+   a `<button>` takes neither, since the user-agent sheet sets its font outright,
+   and a flex row's `gap` is not whitespace to collapse. */
+.page-loganalysis .log-detail .code-out .btn-row {
+  margin-top: 12px;
+}
+/* Neither block is there at all unless the sidebar's Record detail switch asks for
+   it. Two labels on every expansion, in a list read top to bottom, are noise for
+   anyone who came to read the text — so they are off until wanted. The flag rides
+   `<html>` like the other display flags, which is what lets the switch change every
+   record already on the page without rebuilding any of them. */
+.page-loganalysis .log-fold {
+  display: none;
+}
+:root[data-record-meta] .page-loganalysis .log-fold {
+  display: block;
 }
 /* Both metadata blocks fold, and start folded — see `foldEl` in app.js for why.
    The chevron rides the label to the right edge, as it does on the sidebar's own
@@ -6680,14 +6820,27 @@ button.out:focus-visible::after {
    full height and whatever scrolling is needed happens once, in the list around
    it, rather than three times over.
 
-   `overflow` stays as inherited and is still load-bearing, but now only on the
-   horizontal axis: a log line is wider than the panel and has to scroll inside
-   this box rather than taking the page sideways with it. Vertically there is
-   nothing left to scroll, since the box is as tall as its content. */
+   The wrap is the third of those. A merged record is routinely 1700px of text in
+   a 670px box, and left to `white-space: pre` reading one meant dragging a
+   scrollbar sideways and back for every record — inside a list you are already
+   scrolling vertically. Wrapped, the whole record is on screen at once, which is
+   the only reason to have opened it. `anywhere` rather than `break-word` because
+   the thing that overruns is a 300-character Base64 blob or a URL with no space
+   in it to break at, and `break-word` leaves exactly those overflowing.
+   `overflow-x` then has nothing left to scroll, and the horizontal scrollbar it
+   used to draw under every expansion goes with it. */
 .page-loganalysis .log-detail .code-out {
   min-height: 0;
   max-height: none;
   font-size: 11.5px;
+  overflow-x: hidden;
+}
+/* On the `<code>`, not the `<pre>` around it: the shared rule sets
+   `white-space: pre` on the child, which is where the text actually is, and a
+   wrap declared only on the parent loses to it. */
+.page-loganalysis .log-detail .code-out code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* ---- REST calls view ----
@@ -6716,7 +6869,7 @@ button.out:focus-visible::after {
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--text-faint);
+  color: var(--la-meta);
 }
 .page-loganalysis .rest-table th,
 .page-loganalysis .rest-table td {
@@ -6728,7 +6881,7 @@ button.out:focus-visible::after {
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--text-faint);
+  color: var(--la-meta);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -6753,6 +6906,31 @@ button.out:focus-visible::after {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Show is the row's only action and the whole point of the table — picking a
+   call is how you get back to its records — and it was the column the URL pushed
+   into the scroll overflow. At 1200px it sat 41px past the panel's edge, so the
+   one control every row carries had to be scrolled to. Pinned to the right edge
+   it is reachable at any width, and the URL beside it can go on being as long as
+   it likes.
+   The opaque background is what makes it a pin rather than a smear: the cell now
+   sits over the scrolling ones, so it has to hide them rather than blend with
+   them. Which means the row's two tints have to be restated here over `--bg-elev`
+   — mixed into `transparent`, as they are on the row, they would come out
+   see-through in the one cell that cannot afford to be. */
+.page-loganalysis .rest-calls th:last-child,
+.page-loganalysis .rest-calls td:last-child {
+  position: sticky;
+  right: 0;
+  background: var(--bg-elev);
+  /* Reinstates the border the row draws, which the sticky cell paints over. */
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--border) 55%, transparent);
+}
+.page-loganalysis .rest-calls tbody tr.is-bad td:last-child {
+  background: color-mix(in srgb, var(--danger) 9%, var(--bg-elev));
+}
+.page-loganalysis .rest-calls tbody tr:hover td:last-child {
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-elev));
+}
 /* The heading *is* the sort control, so it has to look like the heading it
    replaced rather than a button parked inside one. */
 .page-loganalysis .rest-sort {
@@ -6772,6 +6950,20 @@ button.out:focus-visible::after {
   color: var(--accent);
 }
 
+/* Side by side, but with the sidebar's 340px already spent: the thread is the
+   first metadata column to go. It is the least-read of the five — the only mode
+   that turns on it groups by it, so the header says it anyway — and it is the
+   widest, so dropping it hands the message back ~142px on exactly the widths
+   where the message was shortest. It is still in the expanded record. */
+@media (min-width: 1081px) and (max-width: 1320px) {
+  .page-loganalysis .log-entry > summary {
+    grid-template-columns: 86px 72px 44px minmax(0, var(--la-app-w, 96px)) minmax(0, 1fr);
+  }
+  .page-loganalysis .log-thread {
+    display: none;
+  }
+}
+
 /* Stacked: the sidebar sits above the timeline, and the row grid drops the
    columns there is no room for — time, level and message carry the row. */
 @media (max-width: 1080px) {
@@ -6780,8 +6972,12 @@ button.out:focus-visible::after {
       "controls"
       "result";
   }
+  /* 86px, not 74: `10:07:37.060` measures 83px at this size, and the narrower
+     track let every timestamp on the page run into the level beside it —
+     `10:07:37.060INFO`, with the gap swallowed. The column is sized to its
+     content, as it is on the wide layout. */
   .page-loganalysis .log-entry > summary {
-    grid-template-columns: 74px 40px minmax(0, 1fr);
+    grid-template-columns: 86px 40px minmax(0, 1fr);
   }
   /* The row's own left inset is gone at this width, so the gap row loses the
      indent that lined it up with the message column. */
@@ -6795,6 +6991,27 @@ button.out:focus-visible::after {
   }
   .page-loganalysis .log-detail {
     padding-left: 12px;
+  }
+  /* The group header's two halves stop sharing a row here. The readouts are
+     `nowrap` and the label wraps `anywhere`, so in a fight for 375px the
+     readouts take all of it and a 36-character dossier id is left rendering one
+     character per line, forty lines tall. The label takes the first row, the
+     sublabel and readouts the second, and the readouts wrap among themselves
+     rather than off the edge. */
+  .page-loganalysis .log-group > summary {
+    flex-wrap: wrap;
+  }
+  .page-loganalysis .log-group-label {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .page-loganalysis .log-group-meta {
+    margin-left: 0;
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+  .page-loganalysis .log-group-meta > * {
+    white-space: nowrap;
   }
 }
 

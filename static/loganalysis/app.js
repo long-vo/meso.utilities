@@ -55,6 +55,10 @@ const els = {
   categories: $("categories"),
   files: $("files"),
   /** @type {HTMLSelectElement} */ threads: /** @type {any} */ ($("threads")),
+  /** @type {HTMLInputElement} */ viewName: /** @type {any} */ ($("view-name")),
+  saveView: $("save-view"),
+  viewList: $("view-list"),
+  /** @type {HTMLInputElement} */ showMeta: /** @type {any} */ ($("show-meta")),
   reset: $("reset"),
   expandAll: $("expand-all"),
   counts: $("counts"),
@@ -66,6 +70,7 @@ const els = {
   sendSanitize: $("send-sanitize"),
   filterPills: $("filter-pills"),
   density: $("density"),
+  densityAxis: $("density-axis"),
   overview: $("overview"),
   groups: $("groups"),
   viewSwitch: $("view-switch"),
@@ -151,8 +156,58 @@ let matchAt = -1;
 
 /* ------------------------------ loading ------------------------------ */
 
+/**
+ * Stacked, the sidebar sits above the timeline, so a log that has just been
+ * loaded lands below the fold — 1767px of controls below it, before the fields
+ * were folded. The result is scrolled to on the load that ends an empty page and
+ * on no other: re-parsing after a clock shift or a removed file leaves the reader
+ * where they were.
+ */
+function revealResult(wasEmpty) {
+  if (!wasEmpty || model.records.length === 0) return;
+  if (!matchMedia("(max-width: 1080px)").matches) return;
+  els.groups.closest(".panel")?.scrollIntoView({ block: "start", behavior: "smooth" });
+}
+
+/**
+ * Size the app and thread columns to the widest value the loaded log holds.
+ *
+ * Every row is its own grid, so a `max-content` track would be measured per row
+ * and the columns would stop lining up down the page — which is most of what
+ * makes a merged timeline skimmable. One measurement, handed to every row
+ * through a custom property on the container, keeps the column straight *and*
+ * lets the whole value show: `ivy immediate job pool-thread-3` is 31 characters
+ * against a track that was 132px, so a third of it was ellipsis.
+ *
+ * Measured over the whole loaded set and not the filtered one, for the reason
+ * `facetCounts` and the overview are: a column that resizes as filters are
+ * clicked moves every row on the page under the pointer.
+ *
+ * `ch` is exact here because the row is monospace. The tracks stay
+ * `minmax(0, …)` so a window with no room for the full width still degrades to
+ * the ellipsis rather than pushing the message out of the panel.
+ */
+function sizeColumns() {
+  let app = 0;
+  let thread = 0;
+  for (const record of model.records) {
+    app = Math.max(app, (record.app || record.file).length);
+    thread = Math.max(thread, record.thread.length);
+  }
+  // Nothing loaded leaves the authored widths in place rather than collapsing
+  // both columns to `0ch`.
+  /** @param {string} name @param {number} width */
+  const setWidth = (name, width) => {
+    if (width > 0) els.groups.style.setProperty(name, `${width}ch`);
+    else els.groups.style.removeProperty(name);
+  };
+  setWidth("--la-app-w", app);
+  setWidth("--la-thread-w", thread);
+}
+
 /** Re-parse everything and redraw. Called whenever the source list changes. */
 function reload() {
+  const wasEmpty = model.records.length === 0;
   model = analyse(sources);
   // A file that has just gone away must not keep filtering the view.
   for (const value of [...selected.files]) {
@@ -179,7 +234,9 @@ function reload() {
   renderSources();
   renderFacets();
   renderDensity();
+  sizeColumns();
   render();
+  revealResult(wasEmpty);
 }
 
 function renderSources() {
@@ -211,7 +268,10 @@ function renderSources() {
     row.append(shift);
     const drop = document.createElement("button");
     drop.type = "button";
-    drop.className = "chip-x";
+    // Shares the saved-view row's delete button, which is the same act on the
+    // same kind of row. `chip-x` was never a button style — it tints a span
+    // inside Leave's wheel chips, so this rendered as a raw user-agent button.
+    drop.className = "source-del";
     drop.title = `Remove ${source.file}`;
     drop.setAttribute("aria-label", `Remove ${source.file}`);
     drop.textContent = "×";
@@ -804,7 +864,16 @@ function applyView() {
   els.restView.hidden = !rest;
   els.viewTitle.textContent = rest ? "REST calls" : "Timeline";
   els.density.hidden = rest || strip.length === 0;
+  els.densityAxis.hidden = els.density.hidden;
   els.filterPills.hidden = rest || els.filterPills.children.length === 0;
+  // Copy and download hand over whatever is on screen, so the labels have to
+  // name it. Pointing "Copy shown" at the timeline while a table of calls is
+  // what's shown copied the view you are not looking at.
+  els.copy.textContent = rest ? "Copy calls" : "Copy shown";
+  els.copy.title = rest ? "Copy every REST call as a table" : "Copy every record currently shown";
+  els.download.title = rest
+    ? "Download every REST call as a table"
+    : "Download every record currently shown";
   // Counted in the terms of whatever is on screen. "10 of 10 records · 3 groups"
   // above a table of calls describes the view you are not looking at.
   els.counts.textContent = model.records.length === 0
@@ -1004,17 +1073,33 @@ function clockAt(ms, edge = "start") {
   return multiDay() ? text.slice(5) : text.slice(11);
 }
 
-/** One bar per time slice over the whole loaded set; errors tint their slice. */
+/**
+ * One bar per time slice over the whole loaded set; errors tint their slice.
+ *
+ * The eighty bars are one tab stop between them, not eighty. Each is still a
+ * button — that is what gives the keyboard the same power the drag gives the
+ * pointer — but only one is in the tab order at a time and the arrow keys move
+ * between them, which is the roving-tabindex pattern a radio group uses. Left as
+ * eighty stops they were 80 of the page's 156 focusable elements: tabbing from
+ * the panel head to the first record meant eighty presses across bars 3px wide.
+ */
 function renderDensity() {
   strip = densityBuckets(model.records, 80);
   els.density.hidden = strip.length === 0;
+  els.densityAxis.hidden = strip.length === 0;
   els.density.innerHTML = "";
   stripOverlay = null;
-  if (strip.length === 0) return;
+  if (strip.length === 0) {
+    els.densityAxis.innerHTML = "";
+    return;
+  }
   const top = Math.max(...strip.map((bucket) => bucket.count));
   for (const bucket of strip) {
     const bar = document.createElement("button");
     bar.type = "button";
+    // Only the first bar answers Tab; the rest are reached with the arrow keys
+    // below, which hand the -1 on as focus moves.
+    bar.tabIndex = els.density.children.length === 0 ? 0 : -1;
     bar.className = "density-bar";
     if (bucket.errors) bar.classList.add("is-err");
     else if (bucket.warns) bar.classList.add("is-warn");
@@ -1043,8 +1128,43 @@ function renderDensity() {
   stripOverlay.className = "density-sel";
   stripOverlay.hidden = true;
   els.density.append(stripOverlay);
+  // The axis: what window the strip covers, which nothing said before. Source
+  // timestamps via clockAt, like the brush's own pill labels — a reformatted
+  // clock here could disagree with the rows underneath.
+  const mid = strip[0].fromMs + (strip[strip.length - 1].toMs - strip[0].fromMs) / 2;
+  els.densityAxis.innerHTML = [
+    clockAt(strip[0].fromMs),
+    clockAt(mid),
+    clockAt(strip[strip.length - 1].toMs, "end"),
+  ].map((text) => `<span>${escapeHtml(text)}</span>`).join("");
   updateDensityOverlay();
 }
+
+/**
+ * Arrow keys across the strip, since only one bar is in the tab order.
+ *
+ * Focus moves and the roving `tabindex` moves with it, so tabbing away and back
+ * returns to the bar last looked at rather than to the start. Enter and Space are
+ * left alone: the bars are real buttons, so those already click them.
+ */
+els.density.addEventListener("keydown", (event) => {
+  const keys = { ArrowLeft: -1, ArrowRight: 1, Home: "first", End: "last" };
+  const move = keys[event.key];
+  if (move === undefined) return;
+  const bars =
+    /** @type {HTMLButtonElement[]} */ ([...els.density.querySelectorAll(".density-bar")]);
+  if (bars.length === 0) return;
+  const at = bars.indexOf(/** @type {any} */ (document.activeElement));
+  const next = move === "first"
+    ? 0
+    : move === "last"
+    ? bars.length - 1
+    : Math.min(bars.length - 1, Math.max(0, (at === -1 ? 0 : at) + move));
+  event.preventDefault();
+  for (const bar of bars) bar.tabIndex = -1;
+  bars[next].tabIndex = 0;
+  bars[next].focus();
+});
 
 /** Paint the selected window onto the strip (or hide the overlay). */
 function updateDensityOverlay() {
@@ -1234,12 +1354,8 @@ function groupEl(group, open, days) {
       : "",
     group.apps.length > 1 ? `<span class="chip chip-ok">${group.apps.length} apps</span>` : "",
     group.files.length > 1 ? `<span class="chip chip-ok">${group.files.length} files</span>` : "",
-    // Only when a pause is out of character for this group — see gapStats. A
-    // static chip like the others; the divider inside the group is what points
-    // at the row, and none of these badges is a control.
-    group.gapFlagged.length
-      ? `<span class="chip chip-warn">gap ${formatMs(group.gapMs)}</span>`
-      : "",
+    // No badge for a flagged pause: the divider drawn between the two records it
+    // separates says it in place, which is where the reader can act on it.
   ].filter(Boolean).join("");
 
   const summary = document.createElement("summary");
@@ -1619,7 +1735,12 @@ function detailEl(record, row) {
   });
   tools.append(decode);
 
-  wrap.append(tools);
+  // Inside the text box, not under it: these four act on the record whose text is
+  // in that box, and standing them outside it left them reading as belonging to
+  // the expansion as a whole. In flow at the end rather than floated into a
+  // corner — a record is often two lines, so there is no corner free to float
+  // into that would not sit on top of the text. The stylesheet fades them in.
+  pre.append(tools);
   return wrap;
 }
 
@@ -1656,8 +1777,30 @@ function downloadName(extension) {
   return `log${stamp}.${extension}`;
 }
 
-/** Everything currently shown, as text — what Copy and Send hand over. */
+/**
+ * The calls table as text, for when that is the view Copy is pointed at.
+ *
+ * Tab-separated rather than the timeline's prose headers: this is a table, and a
+ * table pasted into a ticket or a spreadsheet wants its columns kept.
+ */
+function restText() {
+  const head = REST_COLUMNS.map((column) => column.label).join("\t");
+  const rows = model.spans.map((span) =>
+    [
+      span.tsText,
+      span.service,
+      span.method,
+      span.url,
+      span.complete ? span.status ?? "?" : "no answer",
+      formatMs(span.ms) || "—",
+    ].join("\t")
+  );
+  return [head, ...rows].join("\n");
+}
+
+/** Everything currently shown, as text — what Copy, Download and Send hand over. */
 function shownText() {
+  if (view === "rest") return model.spans.length === 0 ? "" : restText();
   return shownGroups
     .map((group) => {
       const head = `# ${group.label}` +
@@ -1804,6 +1947,194 @@ els.overview.addEventListener("click", (event) => {
   renderFacets();
   render();
   /** @type {HTMLElement | null} */ (els.overview.querySelector(`[data-act="${act}"]`))?.focus();
+});
+
+/* ---------------------------- saved views ---------------------------- */
+
+/**
+ * The grouping and the filters, kept by name.
+ *
+ * A view is the question, not the log it was asked of: no records are stored here,
+ * so applying one puts its filters onto whatever is loaded at the time. That is the
+ * useful half — the same investigation runs again on next week's log — and it is
+ * why a restored view can legitimately show nothing, which the filter pills above
+ * the timeline then explain and undo.
+ *
+ * `pinned` stays out on purpose. Those are records, keyed to a file and a line; a
+ * name for a filter set has no business dragging evidence along behind it.
+ */
+const VIEWS_KEY = "meso-loganalysis-views";
+
+/** @returns {{ name: string, state: Record<string, any> }[]} */
+function readViews() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(VIEWS_KEY) ?? "[]");
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    // Unreadable or unavailable storage reads as "none saved" rather than taking
+    // the sidebar down with it.
+    return [];
+  }
+}
+
+/** @param {{ name: string, state: Record<string, any> }[]} views */
+function writeViews(views) {
+  try {
+    localStorage.setItem(VIEWS_KEY, JSON.stringify(views));
+    return true;
+  } catch {
+    showToast("Browser storage is unavailable — the view was not saved.");
+    return false;
+  }
+}
+
+/** Everything the sidebar and the brush contribute to what is on screen. */
+function snapshotView() {
+  return {
+    group: groupMode,
+    view,
+    links: els.linkAliases.checked,
+    query: els.query.value,
+    idFind: els.idFind.value,
+    minMs: els.minMs.value,
+    restOnly: els.restOnly.checked,
+    badOnly: els.badOnly.checked,
+    thread: els.threads.value,
+    window: windowSel,
+    facets: Object.fromEntries(
+      Object.entries(selected).map(([facet, values]) => [facet, [...values]]),
+    ),
+  };
+}
+
+/** @param {Record<string, any>} state */
+function restoreView(state) {
+  setGroup(state.group ?? "correlation");
+  setView(state.view ?? "timeline");
+  els.linkAliases.checked = !!state.links;
+  els.query.value = state.query ?? "";
+  els.idFind.value = state.idFind ?? "";
+  els.minMs.value = state.minMs ?? "";
+  els.restOnly.checked = !!state.restOnly;
+  els.badOnly.checked = !!state.badOnly;
+  windowSel = state.window ?? null;
+  for (const [facet, values] of Object.entries(selected)) {
+    // `selected` mixes Set<string> with Set<number>, and iterating it widens the
+    // two into a union whose `add` accepts nothing at all.
+    const set = /** @type {Set<any>} */ (values);
+    set.clear();
+    for (const value of state.facets?.[facet] ?? []) set.add(value);
+  }
+  renderFacets();
+  // After the rebuild, not before: renderFacets writes the option list from this
+  // log's threads, and a thread this log has never seen then simply leaves the
+  // select where it belongs, on "Any thread".
+  els.threads.value = state.thread ?? "";
+  render();
+}
+
+/** The line under a view's name: how it groups, and how much it narrows. */
+function viewSummary(state) {
+  const facets = Object.values(state.facets ?? {}).reduce((n, list) => n + list.length, 0);
+  const rest = [state.query, state.minMs, state.thread, state.window].filter(Boolean).length +
+    (state.restOnly ? 1 : 0) + (state.badOnly ? 1 : 0);
+  const total = facets + rest;
+  const label = els.groupSwitch.querySelector(`[data-group="${state.group}"]`)?.textContent ??
+    state.group;
+  return `${label} · ${total} ${total === 1 ? "filter" : "filters"}`;
+}
+
+function renderViews() {
+  els.viewList.innerHTML = "";
+  const views = readViews();
+  if (views.length === 0) {
+    els.viewList.innerHTML = '<span class="hint">Nothing saved yet.</span>';
+    return;
+  }
+  for (const entry of views) {
+    const row = document.createElement("div");
+    row.className = "view-row";
+    // Two buttons side by side rather than one with the other inside it: applying
+    // and deleting are separate acts, and a control nested in a control is neither
+    // reliably reachable nor reliably announced.
+    const apply = document.createElement("button");
+    apply.type = "button";
+    apply.className = "id-row";
+    apply.innerHTML = `<span class="id-value">${escapeHtml(entry.name)}</span>` +
+      `<span class="id-meta"><span class="id-label">` +
+      `${escapeHtml(viewSummary(entry.state))}</span></span>`;
+    apply.addEventListener("click", () => {
+      restoreView(entry.state);
+      showToast(`Showing “${entry.name}”.`);
+    });
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "view-del";
+    remove.textContent = "×";
+    remove.title = `Delete “${entry.name}”`;
+    remove.setAttribute("aria-label", `Delete saved view ${entry.name}`);
+    remove.addEventListener("click", () => {
+      if (!writeViews(readViews().filter((saved) => saved.name !== entry.name))) return;
+      renderViews();
+      showToast(`Deleted “${entry.name}”.`);
+    });
+
+    row.append(apply, remove);
+    els.viewList.append(row);
+  }
+}
+
+function saveCurrentView() {
+  const name = els.viewName.value.trim();
+  if (!name) {
+    els.viewName.focus();
+    showToast("Give the view a name first.");
+    return;
+  }
+  // Same name overwrites rather than doubling up: the second save of "REST
+  // failures" is a correction, not a rival.
+  const views = readViews().filter((saved) => saved.name !== name);
+  views.push({ name, state: snapshotView() });
+  if (!writeViews(views)) return;
+  els.viewName.value = "";
+  renderViews();
+  showToast(`Saved “${name}”.`);
+}
+
+els.saveView.addEventListener("click", saveCurrentView);
+els.viewName.addEventListener("keydown", (event) => {
+  if (/** @type {KeyboardEvent} */ (event).key !== "Enter") return;
+  event.preventDefault();
+  saveCurrentView();
+});
+renderViews();
+
+/**
+ * Whether an expanded record carries its MDC and identifier blocks at all.
+ *
+ * A display choice rather than a filter, so it is remembered like the fold states
+ * around it instead of being cleared by Reset filters. The flag rides `<html>` and
+ * the stylesheet does the hiding, which means the checkbox changes every record
+ * already on the page without rebuilding one of them — the blocks are built either
+ * way, and two folded rows cost nothing to carry unseen.
+ */
+const SHOW_META_KEY = "meso-loganalysis-show-meta";
+const paintMeta = () =>
+  document.documentElement.toggleAttribute("data-record-meta", els.showMeta.checked);
+try {
+  els.showMeta.checked = localStorage.getItem(SHOW_META_KEY) === "1";
+} catch {
+  /* storage unavailable; off, as authored */
+}
+paintMeta();
+els.showMeta.addEventListener("change", () => {
+  paintMeta();
+  try {
+    localStorage.setItem(SHOW_META_KEY, els.showMeta.checked ? "1" : "0");
+  } catch {
+    /* storage unavailable; the choice just won't persist */
+  }
 });
 
 els.reset.addEventListener("click", () => {
