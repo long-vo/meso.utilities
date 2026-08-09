@@ -13,6 +13,7 @@
  */
 import { analyse, shortUrl } from "../static/loganalysis/loganalysis.mjs";
 import { buildFlow, flowMermaid, laneKey, MAX_STEPS } from "../static/loganalysis/flow.mjs";
+import { foldWebhooks } from "../static/loganalysis/webhooks.mjs";
 
 function assertEquals(actual: unknown, expected: unknown, msg?: string): void {
   const a = JSON.stringify(actual);
@@ -257,6 +258,69 @@ Deno.test("buildFlow: a caller with no application falls back to its file", () =
   const flow = buildFlow(alt.records, alt.spans, [DOSSIER]);
   assertEquals(flow.steps.length, 1);
   assertEquals(flow.participants, ["gateway.log", "document-store"]);
+});
+
+Deno.test("buildFlow: a wire-only log still draws its calls", () => {
+  // No `Invoking` line and no completion line — the onboarding logs are like
+  // this, and the whole REST half of the diagram used to be missing from them,
+  // leaving a service receiving notifications about work nothing had asked for.
+  const wire = [
+    head(
+      "2026-05-15 10:07:36.709",
+      "DEBUG",
+      "runtimelog.balboa-bank-sob.balboa-bank-sob-api.rest_client",
+      "http-nio-8080-exec-25",
+      "application=balboa-bank-sob",
+    ),
+    ">> POST https://baloiseidt.com/baloise-id/api/baloiseid/document-baskets",
+    `{"extCaseId":"${DOSSIER}"}`,
+    head(
+      "2026-05-15 10:07:37.051",
+      "DEBUG",
+      "runtimelog.balboa-bank-sob.balboa-bank-sob-api.rest_client",
+      "http-nio-8080-exec-25",
+      "application=balboa-bank-sob",
+    ),
+    "<< 200 ",
+    `{"extCaseId":"${DOSSIER}","documentBasketStatus":"OUTSTANDING"}`,
+  ].join("\n");
+  const alt = analyse([{ file: "sob.log", text: wire }]);
+  const flow = buildFlow(alt.records, alt.spans, [DOSSIER]);
+  assertEquals(flow.calls, 1);
+  // The callee lane is the URL's host: nothing in this log names it otherwise.
+  assertEquals(flow.participants, ["balboa-bank-sob", "baloiseidt.com"]);
+  const [step] = flow.steps;
+  assertEquals(step.label, "POST /baloise-id/api/baloiseid/document-baskets");
+  assertEquals(step.result, "200 · 342 ms");
+  assertEquals(step.ok, true);
+});
+
+Deno.test("buildFlow: a queue hop is a step, and its publisher names its own lane", () => {
+  // A service that makes no REST calls at all still has traffic worth drawing;
+  // published-and-consumed within one app draws as the self-loop the renderer
+  // already handles.
+  const queue = [
+    `2026-07-01T10:20:01.828Z [-][-][-] INFO 7 --- [baloise-e-portal-api] [sched-1] ` +
+    `i.m.b.e.a.a.services.PGMQEventPublisher : [PGMQ] - Published AMLA PGMQEvent: ` +
+    `eventId=cc2f7856-65ae-48cf-b87e-3ef0e862bcd1, eventType=DOSSIER, eventAction=SAVE, ` +
+    `dossierId=${DOSSIER}`,
+    `2026-07-01T10:20:01.952Z [-][-][-] INFO 7 --- [baloise-e-portal-api] [sched-1] ` +
+    `i.m.b.e.a.w.services.PGMQEventConsumer : [PGMQ] - Received PGMQEvent and sent to queue: ` +
+    `eventId=cc2f7856-65ae-48cf-b87e-3ef0e862bcd1, dossierId=${DOSSIER}`,
+  ].join("\n");
+  const alt = analyse([{ file: "eportal.log", text: queue }]);
+  const flow = buildFlow(alt.records, alt.spans, [DOSSIER], foldWebhooks(alt.records));
+  assertEquals(flow.calls, 0);
+  assertEquals(flow.inbound, 1);
+  // One lane, both ends: the publisher logged its own name, so no alias competes.
+  assertEquals(flow.participants, ["baloise-e-portal-api"]);
+  const [step] = flow.steps;
+  assertEquals(step.from, step.to);
+  assertEquals(step.label, "DOSSIER SAVE");
+  assertEquals(step.result, "published · 124 ms");
+  assertEquals(step.ok, true, "it was consumed");
+  // The gap is drawn as an activation bar, which needs both ends of it.
+  assertEquals(step.endTsText, "2026-07-01 10:20:01.952");
 });
 
 Deno.test("buildFlow: caps the steps and reports what it dropped", () => {

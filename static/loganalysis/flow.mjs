@@ -272,7 +272,9 @@ export function buildFlow(records, spans, ids, events = []) {
     // the reverse of a REST call, where the record's app is the caller.
     steps.push({
       kind: "webhook",
-      from: lane(event.from || INBOUND_LANE, false),
+      // A queue event's sender names *itself* — the publisher logged it — where a
+      // webhook's is an alias read off the class its receiver printed.
+      from: lane(event.from || INBOUND_LANE, event.kind === "queue"),
       to: lane(event.to, true),
       method: "",
       url: "",

@@ -57,6 +57,24 @@ const NOTIFY_IN_RE = /^Received notification:\s*class\s+(\w+)/;
 const NOTIFY_SKIPPED_RE = /^Notification received\.\s*Ignore notification with status=(\w+)/;
 
 /**
+ * A queue hop, which pairs like a webhook but over a broker rather than a call.
+ *
+ *   [PGMQ] - Published AMLA PGMQEvent: eventId=cc2f…, eventType=DOSSIER, eventAction=SAVE
+ *   [PGMQ] - Received PGMQEvent and sent to queue: eventId=cc2f…
+ *
+ * Some services make no REST calls at all and talk entirely this way; without
+ * these their Flow diagram is empty while the log is full of traffic. The gap
+ * between the two lines is real queue latency, and a publish with no matching
+ * receive is an event nobody picked up — the same finding as an unhandled webhook,
+ * and the reason this pairs rather than standing as a single event.
+ */
+const QUEUE_OUT_RE = /^\[PGMQ\]\s*-?\s*Published\b.*?\bPGMQEvent\b/;
+const QUEUE_IN_RE = /^\[PGMQ\]\s*-?\s*Received\b.*?\bPGMQEvent\b/;
+const EVENT_ID_RE = /\beventId"?\s*[:=]\s*"?([A-Za-z0-9._-]+)/;
+const EVENT_TYPE_RE = /\beventType"?\s*[:=]\s*"?([A-Za-z0-9_]+)/;
+const EVENT_ACTION_RE = /\beventAction"?\s*[:=]\s*"?([A-Za-z0-9_]+)/;
+
+/**
  * Fields read out of the record body. Each tolerates the three spellings these
  * logs mix — a pretty-printed Java dump (`notificationId: 7ff9…`), JSON
  * (`"status":"SIGNED"`) and a `toString` (`status=VERIFICATION_PENDING`) — which
@@ -75,11 +93,25 @@ const NOTIFICATION_TYPE_RE = /\bnotificationType"?\s*[:=]\s*"?([A-Za-z0-9_]+)/;
 const STATUS_RE = /\bstatus"?\s*[:=]\s*"?([A-Z][A-Z_]*)/;
 /** A signing notification carries no bare `status`; this is its equivalent. */
 const BASKET_STATUS_RE = /\bdocumentBasketStatus"?\s*[:=]\s*"?([A-Z][A-Z_]*)/;
+/**
+ * What kind of notification a payload is, for the one shape that never says.
+ *
+ * `Notification received. Ignore notification with status=…` writes neither a
+ * `notificationType` nor a `class` name, so those events used to fall back to the
+ * literal word "notification" — three arrows in a row wearing a label that names
+ * nothing. The payload does tell you, by the same split {@link BASKET_STATUS_RE}
+ * already leans on: a signing notification names a document basket and an
+ * identification one names an identity profile, and neither ever carries the
+ * other's field.
+ */
+const BASKET_SHAPE_RE = /\bdocumentBasket(?:Id|Status)"?\s*[:=]/;
+const IDENTIFICATION_SHAPE_RE = /\b(?:identityProfile|ubiIdCategory)"?\s*[:=]/;
 
 /**
  * @typedef {Object} WebhookEvent
  * @property {number} id
- * @property {"webhook" | "notification"} kind webhooks pair, notifications don't
+ * @property {"webhook" | "notification" | "queue"} kind webhooks and queue hops
+ *   pair, notifications don't
  * @property {string} from the sending system, `""` when the log never names it
  * @property {string} to the application that received it
  * @property {string} label the notification type, falling back to its class
@@ -121,17 +153,39 @@ export function statusOf(text) {
 }
 
 /**
+ * The kind of notification a payload describes, when nothing in the record names
+ * it — `""` when the shape says nothing either.
+ *
+ * Lower case and spaced, deliberately unlike the `SIGNING_STATUS` a webhook's own
+ * `notificationType` field supplies. The two sit on adjacent arrows in the Flow
+ * diagram and describe the same stream, so they should read alike; but this one
+ * was inferred from the payload's shape and that one was quoted from the log, and
+ * styling them identically would hide the difference.
+ * @param {string} text
+ * @returns {string}
+ */
+export function labelFromShape(text) {
+  if (BASKET_SHAPE_RE.test(text)) return "signing status";
+  if (IDENTIFICATION_SHAPE_RE.test(text)) return "identification status";
+  return "";
+}
+
+/**
  * What the diagram prints under a webhook's arrow: the status it carried, whether
  * it was ignored, and how long the receiver took over it.
  * @param {WebhookEvent} event
  * @returns {string}
  */
 function resultOf(event) {
-  const parts = [event.status || "received"];
+  const queue = event.kind === "queue";
+  // A queue event carries no status of its own; that it went out is the news.
+  const parts = [event.status || (queue ? "published" : "received")];
   if (event.skipped) parts.push("ignored");
-  // Only a webhook is owed a closing line, so only a webhook can be missing one.
-  if (event.kind === "webhook" && !event.handled) parts.push("not handled");
-  else if (event.ms !== null) parts.push(formatMs(event.ms));
+  // Only a message someone was due to pick up can be left lying there: a
+  // notification is owed nothing, so it can never be missing anything.
+  if (event.kind !== "notification" && !event.handled) {
+    parts.push(queue ? "not consumed" : "not handled");
+  } else if (event.ms !== null) parts.push(formatMs(event.ms));
   return parts.join(" · ");
 }
 
@@ -155,10 +209,74 @@ export function foldWebhooks(records) {
   const lastOnLane = new Map();
   /** @type {Map<number, number | null>} */
   const openedAt = new Map();
+  /**
+   * Published events awaiting a consumer, by `eventId`. Kept apart from `open`
+   * rather than sharing it: the two id spaces mean different things, and a
+   * `Handled webhook notification` must never close a queue event.
+   */
+  /** @type {Map<string, number>} */
+  const queued = new Map();
 
   for (const record of records) {
     const first = recordSummary(record, 400);
     const lane = `${record.file}\0${record.thread}`;
+
+    if (QUEUE_IN_RE.test(first)) {
+      const id = EVENT_ID_RE.exec(recordText(record))?.[1] ?? "";
+      const at = id ? queued.get(id) : undefined;
+      if (at !== undefined) {
+        const event = events[at];
+        event.handled = true;
+        // The consumer names itself, and it need not be the publisher — this hop
+        // goes through a broker, so the other end is whoever picked the event up.
+        event.to = record.app || record.file || event.to;
+        const from = openedAt.get(at);
+        if (from !== null && from !== undefined && record.ts !== null) {
+          event.ms = record.ts - from;
+        }
+        event.endTs = record.ts;
+        event.endTsText = record.tsText;
+        event.records.push(record.i);
+        event.result = resultOf(event);
+        record.webhook = at;
+        queued.delete(id);
+      }
+      continue;
+    }
+
+    if (QUEUE_OUT_RE.test(first)) {
+      const text = recordText(record);
+      const publisher = record.app || record.file || "unknown";
+      const type = EVENT_TYPE_RE.exec(text)?.[1] ?? "";
+      const action = EVENT_ACTION_RE.exec(text)?.[1] ?? "";
+      /** @type {WebhookEvent} */
+      const event = {
+        id: events.length,
+        kind: "queue",
+        from: publisher,
+        // Until a consumer picks it up the publisher is the only end named, which
+        // draws as a self-loop and reads right: an event that went out and came
+        // back to nobody else.
+        to: publisher,
+        label: [type, action].filter(Boolean).join(" ") || "PGMQEvent",
+        status: "",
+        ms: null,
+        endTs: null,
+        endTsText: "",
+        handled: false,
+        skipped: false,
+        result: "",
+        tsText: record.tsText,
+        notificationId: EVENT_ID_RE.exec(text)?.[1] ?? "",
+        records: [record.i],
+      };
+      event.result = resultOf(event);
+      events.push(event);
+      record.webhook = event.id;
+      openedAt.set(event.id, record.ts);
+      if (event.notificationId) queued.set(event.notificationId, event.id);
+      continue;
+    }
 
     const done = WEBHOOK_DONE_RE.exec(first);
     if (done) {
@@ -219,7 +337,7 @@ export function foldWebhooks(records) {
       notificationId: NOTIFICATION_ID_RE.exec(text)?.[1] ?? "",
       records: [record.i],
     };
-    if (!event.label) event.label = "notification";
+    if (!event.label) event.label = labelFromShape(text) || "notification";
     event.result = resultOf(event);
     events.push(event);
     record.webhook = event.id;

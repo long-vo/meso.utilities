@@ -194,6 +194,74 @@ const REST_LOG = [
   `Invoking REST service baloise-id (30a5cb38-5242-4987-a2a6-16d82cee5826) call to GET ${CASE_URL}`,
 ].join("\n");
 
+const BASKETS_URL = "https://baloiseidt.com/baloise-id/api/baloiseid/document-baskets";
+/**
+ * A log that writes only the wire — no `Invoking` line naming the callee, no
+ * completion line carrying the duration, just `>>` and `<<`. Whole integrations
+ * log this way, and every REST call in such a log used to fold into nothing.
+ *
+ * Three shapes, and the last two are what an excerpt does to a thread: a call
+ * with both halves, a lone response whose request was never logged, and a thread
+ * where the first response went missing and a second call followed it.
+ */
+const WIRE_LOG = [
+  head(
+    "2026-05-15 10:07:36.709",
+    "DEBUG",
+    "runtimelog.balboa-bank-sob.balboa-bank-sob-api.rest_client",
+    "http-nio-8080-exec-25",
+    "application=balboa-bank-sob, requestId=3134255",
+  ),
+  `>> POST ${BASKETS_URL}`,
+  "Content-Type: application/json",
+  `{"extCaseId":"${DOSSIER}","extApplication":"SELF_ONBOARDING"}`,
+  head(
+    "2026-05-15 10:07:37.051",
+    "DEBUG",
+    "runtimelog.balboa-bank-sob.balboa-bank-sob-api.rest_client",
+    "http-nio-8080-exec-25",
+    "application=balboa-bank-sob, requestId=3134255",
+  ),
+  "<< 200 ",
+  "content-type: application/json",
+  `{"extCaseId":"${DOSSIER}","documentBasketStatus":"OUTSTANDING"}`,
+  // A response on a thread whose request is outside the excerpt.
+  head(
+    "2026-05-15 10:07:37.503",
+    "DEBUG",
+    "runtimelog.balboa-bank-sob.balboa-bank-sob-api.rest_client",
+    "http-nio-8080-exec-34",
+    "application=balboa-bank-sob, requestId=3134256",
+  ),
+  "<< 200 ",
+  `{"extCaseId":"${DOSSIER}"}`,
+  // Two requests on one thread, only the second answered.
+  head(
+    "2026-05-15 10:07:40.000",
+    "DEBUG",
+    "runtimelog.balboa-bank-sob.balboa-bank-sob-api.rest_client",
+    "http-nio-8080-exec-9",
+    "application=balboa-bank-sob, requestId=3134300",
+  ),
+  `>> GET ${BASKETS_URL}/434b7929`,
+  head(
+    "2026-05-15 10:07:41.000",
+    "DEBUG",
+    "runtimelog.balboa-bank-sob.balboa-bank-sob-api.rest_client",
+    "http-nio-8080-exec-9",
+    "application=balboa-bank-sob, requestId=3134301",
+  ),
+  `>> DELETE ${BASKETS_URL}/434b7929`,
+  head(
+    "2026-05-15 10:07:41.400",
+    "DEBUG",
+    "runtimelog.balboa-bank-sob.balboa-bank-sob-api.rest_client",
+    "http-nio-8080-exec-9",
+    "application=balboa-bank-sob, requestId=3134301",
+  ),
+  "<< 500 ",
+].join("\n");
+
 /* ------------------------------- parsing ------------------------------- */
 
 Deno.test("parseMdc: splits on a comma that starts a new key, not on every comma", () => {
@@ -425,6 +493,40 @@ Deno.test("extractIds: a UUID inside a URL or a filename is found", () => {
   assertEquals(record.ids.sort(), [CASE, GOB_DOSSIER].sort());
 });
 
+Deno.test("extractIds: a full stop ends the sentence, not the identifier", () => {
+  const text = [
+    head("2026-05-15 10:00:00.000", "INFO ", "runtimelog.a.b.user_code", "t", ""),
+    `[CLOSED-CRM-ISSUE] - No tracked dossier for CRM issue externalId=387340588.`,
+  ].join("\n");
+  const record = extractIds(parseRecords(text, "a.log")[0]);
+  assertEquals(record.labelled, [{ label: "externalId", value: "387340588" }]);
+});
+
+Deno.test("extractIds: a trailing dot does not split one id into two facets", () => {
+  // The bare sweep reads the UUID clean and the labelled sweep used to read it
+  // with the full stop attached, so one dossier arrived as two facets and each
+  // filtered to only part of its own records.
+  const text = [
+    head("2026-05-15 10:00:00.000", "INFO ", "runtimelog.a.b.user_code", "t", ""),
+    `Activity name=SEND_REMINDER_LETTER, status=SUCCESS by dossierId=${GOB_DOSSIER}.`,
+  ].join("\n");
+  const record = extractIds(parseRecords(text, "a.log")[0]);
+  assertEquals(record.ids, [GOB_DOSSIER]);
+  assertEquals(indexIds([record]).size, 1);
+});
+
+Deno.test("extractIds: a short all-digit value is a status code, not an id", () => {
+  const text = [
+    head("2026-05-15 10:00:00.000", "INFO ", "runtimelog.a.b.user_code", "t", ""),
+    "[DISCARD_CRM_ISSUE] - No CRM issues to be processed. " +
+    "statusCodeExternalIds=[30005, 50005, 55005, 56005], page=1, messageId=314391",
+  ].join("\n");
+  const record = extractIds(parseRecords(text, "a.log")[0]);
+  // A key ending in "Ids" holding none of them; six digits is where the real
+  // numeric ids in these logs start, and this list sits a digit below it.
+  assertEquals(record.labelled, [{ label: "messageId", value: "314391" }]);
+});
+
 Deno.test("indexIds: an id collects every label it is logged under, across files", () => {
   const records = mergeSources([
     { file: "bank.log", text: BANK_LOG },
@@ -517,6 +619,196 @@ Deno.test("foldRestSpans: the same URL on two threads does not cross wires", () 
   assertEquals(sameUrl[0].complete, true);
   assertEquals(sameUrl[1].thread, "http-nio-8080-exec-7");
   assertEquals(sameUrl[1].complete, false);
+});
+
+Deno.test("foldRestSpans: a wire-only call folds, timed by the two records' clocks", () => {
+  const records = mergeSources([{ file: "wire.log", text: WIRE_LOG }]);
+  const spans = foldRestSpans(records);
+  const post = spans[0];
+  // Nothing named the callee, so the URL's host does.
+  assertEquals(post.service, "baloiseidt.com");
+  assertEquals(post.method, "POST");
+  assertEquals(post.url, BASKETS_URL);
+  assertEquals(post.status, 200);
+  assertEquals(post.complete, true);
+  assertEquals(post.ok, true);
+  // No `in 342 [ms]` line exists: 10:07:36.709 → 10:07:37.051 is the duration.
+  assertEquals(post.ms, 342);
+  // Two records, not four — this log writes neither of the other two.
+  assertEquals(post.records.length, 2);
+  for (const i of post.records) assertEquals(records[i].span, 0);
+});
+
+Deno.test("foldRestSpans: a response whose request was never logged is dropped", () => {
+  const records = mergeSources([{ file: "wire.log", text: WIRE_LOG }]);
+  const spans = foldRestSpans(records);
+  // exec-34 holds a `<< 200` and nothing else. It answered something, but with
+  // no method and no URL there is no call to fold and no arrow to draw.
+  assertEquals(spans.some((s) => s.thread === "http-nio-8080-exec-34"), false);
+  assertEquals(records.find((r) => r.thread === "http-nio-8080-exec-34")?.span, -1);
+});
+
+Deno.test("foldRestSpans: a wire request takes over a thread its answer never reached", () => {
+  const spans = foldRestSpans(mergeSources([{ file: "wire.log", text: WIRE_LOG }]));
+  const lane = spans.filter((s) => s.thread === "http-nio-8080-exec-9");
+  assertEquals(lane.length, 2);
+  // The excerpt dropped the GET's response, so it reads as unanswered…
+  assertEquals(lane[0].method, "GET");
+  assertEquals(lane[0].complete, false);
+  assertEquals(lane[0].ms, null);
+  // …and the DELETE behind it is still folded, rather than lost with it.
+  assertEquals(lane[1].method, "DELETE");
+  assertEquals(lane[1].status, 500);
+  assertEquals(lane[1].complete, true);
+  assertEquals(lane[1].ok, false);
+});
+
+Deno.test("foldRestSpans: a `>>` under an Invoking span never opens a second one", () => {
+  // The `Invoking` pairing is explicit; a `>>` that disagrees with it is the
+  // logger writing a redirect or a retry, not a call of its own, and folding one
+  // would double every span in an ordinary log.
+  const text = [
+    head(
+      "2026-05-15 10:13:54.889",
+      "DEBUG",
+      "runtimelog.balboa-bank.balboa-bank-api.rest_client",
+      "http-nio-8080-exec-3",
+      "application=balboa-bank",
+    ),
+    `Invoking REST service baloise-id (30a5cb38) call to GET ${CASE_URL}`,
+    head(
+      "2026-05-15 10:13:54.890",
+      "DEBUG",
+      "runtimelog.balboa-bank.balboa-bank-api.rest_client",
+      "http-nio-8080-exec-3",
+      "application=balboa-bank",
+    ),
+    `>> GET ${CASE_URL}/redirected`,
+  ].join("\n");
+  const spans = foldRestSpans(mergeSources([{ file: "rest.log", text }]));
+  assertEquals(spans.length, 1);
+  assertEquals(spans[0].url, CASE_URL);
+});
+
+/** A Spring Boot console header for the gateway, whose pattern names no app. */
+function gwHead(ts: string, thread: string, logger: string): string {
+  return `${ts} DEBUG 7 --- [${thread}] ${logger} : `;
+}
+
+/**
+ * One micrometer observation block, trimmed to the fields the fold reads but
+ * keeping the two that trip a careless reader: `http.status_code='UNKNOWN'`
+ * ahead of the real `status`, and a nested `parentObservation` carrying a second
+ * `startTimeNanos` that belongs to the inbound server request, not this call.
+ */
+function observation(o: {
+  method: string;
+  route: string;
+  target: string;
+  uri: string;
+  seconds: string;
+  nanos: string;
+  status: string;
+}): string {
+  return `{name=http.client.requests(null), error=null, ` +
+    `lowCardinalityKeyValues=[http.method='${o.method}', http.status_code='UNKNOWN', ` +
+    `spring.cloud.gateway.route.id='${o.route}', ` +
+    `spring.cloud.gateway.route.uri='${o.target}'], ` +
+    `highCardinalityKeyValues=[http.uri='${o.uri}'], ` +
+    `map=[class io.micrometer.core.instrument.LongTaskTimer$Sample=` +
+    `'SampleImpl{duration(seconds)=${o.seconds}, startTimeNanos=${o.nanos}}'], ` +
+    `parentObservation={name=http.server.requests(null), lowCardinalityKeyValues=[` +
+    `exception='none', outcome='SUCCESS', status='${o.status}', uri='UNKNOWN'], ` +
+    `map=[class io.micrometer.core.instrument.LongTaskTimer$Sample=` +
+    `'SampleImpl{duration(seconds)=9.9, startTimeNanos=99999999999999999}'], ` +
+    `parentObservation=null}}`;
+}
+
+const IAM = {
+  method: "DELETE",
+  route: "airlock_iam",
+  target: "https://baloise-mock-service.okd4.dev.mesoneer.io:443",
+  uri: "http://hub-service.svc.cluster.local:8080/external-iam/rest/users/8793593",
+  seconds: "0.001014545",
+  nanos: "15348315994714208",
+  status: "200",
+};
+
+const GATEWAY_LOG = [
+  // Instrumented on epoll-2 …
+  gwHead(
+    "2026-08-07T08:03:51.414Z",
+    "or-http-epoll-2",
+    "g.f.h.o.ObservedRequestHttpHeadersFilter",
+  ) +
+  `Client observation  ${observation(IAM)} created for the request.`,
+  // … and answered on epoll-4, which is the whole reason for the pairing key.
+  gwHead(
+    "2026-08-07T08:03:53.210Z",
+    "or-http-epoll-4",
+    ".f.h.o.ObservedResponseHttpHeadersFilter",
+  ) +
+  `The response was handled for observation ${observation({ ...IAM, seconds: "1.799033132" })}`,
+  // A second exchange nothing ever answers.
+  gwHead(
+    "2026-08-07T08:04:00.000Z",
+    "or-http-epoll-2",
+    "g.f.h.o.ObservedRequestHttpHeadersFilter",
+  ) +
+  `Client observation  ${
+    observation({
+      method: "POST",
+      route: "ubidoc",
+      target: "https://baloise-ubidoc-dev.okd4.dev.mesoneer.io:443",
+      uri: "http://hub-service.svc.cluster.local:8080/ubidoc/api/documents/generate",
+      seconds: "0.00016983",
+      nanos: "15348318116053935",
+      status: "200",
+    })
+  } created for the request.`,
+].join("\n");
+
+Deno.test("foldRestSpans: a gateway exchange folds from its observation pair", () => {
+  const records = mergeSources([{ file: "hub.log", text: GATEWAY_LOG }]);
+  const spans = foldRestSpans(records);
+  const [proxied] = spans;
+  // The route id, not the target host: it is the gateway's own name for the
+  // service behind it, and the counterpart of an `Invoking` line's alias.
+  assertEquals(proxied.service, "airlock_iam");
+  assertEquals(proxied.method, "DELETE");
+  // Neither logged field is the reached URL alone — the target's origin joined
+  // to the rewritten path is. Note the default :443 drops out.
+  assertEquals(
+    proxied.url,
+    "https://baloise-mock-service.okd4.dev.mesoneer.io/external-iam/rest/users/8793593",
+  );
+  // `http.status_code='UNKNOWN'` sits ahead of this and must not be read instead.
+  assertEquals(proxied.status, 200);
+  assertEquals(proxied.ok, true);
+  // duration(seconds) on the closing line, in milliseconds.
+  assertEquals(proxied.ms, 1799);
+  assertEquals(proxied.records.length, 2);
+  for (const i of proxied.records) assertEquals(records[i].span, 0);
+});
+
+Deno.test("foldRestSpans: a gateway pairs across threads, not along one", () => {
+  const records = mergeSources([{ file: "hub.log", text: GATEWAY_LOG }]);
+  const spans = foldRestSpans(records);
+  // The request was instrumented on epoll-2 and the response handled on epoll-4;
+  // a thread-keyed map would have closed nothing here.
+  assertEquals(records[0].thread, "or-http-epoll-2");
+  assertEquals(records[1].thread, "or-http-epoll-4");
+  assertEquals(spans[0].complete, true);
+});
+
+Deno.test("foldRestSpans: a gateway exchange nothing answered stays open", () => {
+  const spans = foldRestSpans(mergeSources([{ file: "hub.log", text: GATEWAY_LOG }]));
+  assertEquals(spans.length, 2);
+  const hung = spans[1];
+  assertEquals(hung.service, "ubidoc");
+  assertEquals(hung.complete, false);
+  assertEquals(hung.status, null);
+  assertEquals(hung.ms, null, "the request leg's own duration is not the call's");
 });
 
 /* ------------------------------ REST rollup ------------------------------ */
@@ -1002,6 +1294,48 @@ Deno.test("parseRecords: the plain Spring Boot console header", () => {
   assertEquals(recordSummary(start), "Starting application with PID 7");
   assertEquals(start.tsText, "2026-08-07 08:00:18.831", "T and Z normalised for display");
   assert(start.ts !== null && route.ts !== null && route.ts > start.ts, "timestamps parse");
+});
+
+/** The same gateway, with the boot line Spring Boot really writes. */
+const HUB_BOOTED = HUB_LOG.replace(
+  "Starting application with PID 7",
+  "Starting BaloiseEPortalIntegrationHubApplication v2.1.0-SNAPSHOT using Java 21.0.8 " +
+    "with PID 7 (/apps/baloise-e-portal-integration-hub.jar started by 1001320000 in /apps)",
+);
+
+Deno.test("parseRecords: a file that names no application takes it from the boot line", () => {
+  // The gateway's log pattern has no application slot, so every one of its
+  // records would join a merged timeline anonymous — missing from the
+  // Applications facet, and named in the Flow diagram by its pod filename.
+  const records = parseRecords(HUB_BOOTED, "hub.log");
+  for (const record of records) {
+    assertEquals(record.app, "baloise-e-portal-integration-hub", `line ${record.line}`);
+  }
+});
+
+Deno.test("parseRecords: the jar name is the one the platform elsewhere prints", () => {
+  // The API logs both: a boot line naming the jar, and an application in its own
+  // pattern. They agree, which is why the jar wins over the class beside it —
+  // `BaloiseEPortalApiApplication` would have been a third spelling.
+  const booted = [
+    "2026-08-07T08:00:21.973Z [-][-][-] INFO 7 --- [baloise-e-portal-api] [           main] " +
+    "i.m.b.e.a.BaloiseEPortalApiApplication   : Starting BaloiseEPortalApiApplication " +
+    "v2.1.0-SNAPSHOT using Java 21.0.8 with PID 7 (/apps/baloise-e-portal-api.jar " +
+    "started by 1001320000 in /apps)",
+  ].join("\n");
+  const [record] = parseRecords(booted, "api.log");
+  assertEquals(record.app, "baloise-e-portal-api");
+});
+
+Deno.test("parseRecords: a file that names itself is never renamed by its banner", () => {
+  // API_LOG's pattern prints an application on every line and carries no boot
+  // line; the banner rule must not reach into a file that already answered.
+  for (const record of parseRecords(API_LOG, "api.log")) {
+    assertEquals(record.app, "baloise-e-portal-api");
+  }
+  // And with no boot line to read, an unnamed file stays unnamed rather than
+  // being given a guess.
+  assertEquals(parseRecords(HUB_LOG, "hub.log")[1].app, "");
 });
 
 Deno.test("parseRecords: the e-portal MDC prefix, app name and flush ERROR", () => {

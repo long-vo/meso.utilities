@@ -94,6 +94,19 @@ export function parseBracketMdc(run) {
  */
 const LOOSE_HEAD_RE = /^\[?(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d{1,3})?)\]?[\s|]*/;
 
+/**
+ * Spring Boot's own startup line, which names the jar it is running from:
+ *
+ *   Starting BaloiseEPortalApiApplication v2.1.0-SNAPSHOT using Java 21.0.8
+ *   with PID 7 (/apps/baloise-e-portal-api.jar started by 1001320000 in /apps)
+ *
+ * The jar's base name is taken, not the application class beside it, because the
+ * jar already *is* the kebab-case name the rest of the platform uses: in the one
+ * file that logs both, the jar name and the `[baloise-e-portal-api]` its own
+ * pattern prints are the same string, and `BaloiseEPortalApiApplication` is not.
+ */
+const SPRING_BOOT_JAR_RE = /^Starting\b[^(]*\((?:[^()]*\/)?([\w.-]+)\.jar started by /;
+
 const LEVEL_RE = /\b(FATAL|SEVERE|ERROR|WARNING|WARN|INFO|DEBUG|TRACE)\b/;
 
 /** Characters of a loose line searched for a level, so a body word can't retag it. */
@@ -229,6 +242,33 @@ export function recordSummary(record, cap = 200) {
     (record.body.split("\n").find((line) => line.trim() !== "") ?? "");
   const flat = first.replace(/\s+/g, " ").trim();
   return flat.length > cap ? `${flat.slice(0, cap - 1)}…` : flat;
+}
+
+/**
+ * Name a file's application from its startup banner, for a service whose log
+ * pattern never prints one.
+ *
+ * Spring Boot's default pattern has no application slot — a service gets one only
+ * if its logback config asks for it. A gateway that does not, merged beside an API
+ * that does, contributes every one of its records to the timeline under a blank
+ * application: absent from the Applications facet, and named in the Flow diagram
+ * by {@link callerOf}'s fallback, which is the hundred-character pod filename.
+ * The boot line is written by Spring Boot itself, on every service, before
+ * anything the service logs.
+ *
+ * Applied only when *no* record in the file carries an application, so a file that
+ * names itself keeps its own answer, and only within that file — this runs before
+ * the merge, and one pod's banner says nothing about another pod's records.
+ * @param {LogRecord[]} records one file's records, in file order
+ */
+function nameFromBanner(records) {
+  if (records.some((record) => record.app)) return;
+  for (const record of records) {
+    const found = SPRING_BOOT_JAR_RE.exec(record.msg);
+    if (!found) continue;
+    for (const each of records) each.app = found[1];
+    return;
+  }
 }
 
 /**
@@ -369,6 +409,7 @@ export function parseRecords(text, file = "log") {
     body.push(line);
   }
   flush();
+  nameFromBanner(records);
   return records;
 }
 
@@ -427,6 +468,62 @@ const SEND_RE = /^>> ([A-Z]+) (\S+)/;
 const RECV_RE = /^<< (\d+)\b/;
 
 /**
+ * Spring Cloud Gateway's outbound leg, as micrometer's observation filters write
+ * it. A proxied call is `Client observation {…}` on the way out and `The response
+ * was handled for observation {…}` on the way back; both print the same
+ * observation block, carrying the method, the route the gateway matched, the URI
+ * it rewrote to and — on the return — the status and the time it took.
+ *
+ * Pairing is on `startTimeNanos` rather than on the thread, because the gateway is
+ * reactive and the two legs need not share one: a request instrumented on
+ * `or-http-epoll-2` at 08:04:33.417 has its response handled on `or-http-epoll-4`
+ * at .711, and a thread-keyed map would close the wrong exchange or none at all.
+ * That field is the observation's own monotonic start stamp, written identically
+ * on both lines.
+ */
+const GATEWAY_OPEN_RE = /^Client observation\b/;
+const GATEWAY_DONE_RE = /^The response was handled for observation\b/;
+/**
+ * The pairing key, and deliberately the block's *first* start stamp: the
+ * observation nests a `parentObservation` for the inbound server request, which
+ * carries a start stamp of its own that belongs to a different span.
+ */
+const GATEWAY_KEY_RE = /\bstartTimeNanos=(\d+)/;
+const GATEWAY_METHOD_RE = /\bhttp\.method='([A-Z]+)'/;
+const GATEWAY_ROUTE_RE = /\bspring\.cloud\.gateway\.route\.id='([^']*)'/;
+const GATEWAY_TARGET_RE = /\bspring\.cloud\.gateway\.route\.uri='([^']*)'/;
+const GATEWAY_URI_RE = /\bhttp\.uri='([^']*)'/;
+/**
+ * The proxied response's status. `http.status_code='UNKNOWN'` sits in the same
+ * block and stays `UNKNOWN` for the whole exchange, but the `='` here only
+ * follows the bare key, so it cannot be read instead.
+ */
+const GATEWAY_STATUS_RE = /\bstatus='(\d+)'/;
+const GATEWAY_SECONDS_RE = /\bduration\(seconds\)=([\d.eE+-]+)/;
+
+/**
+ * The URL a gateway exchange actually reached.
+ *
+ * Neither logged field is that URL on its own: `http.uri` carries the rewritten
+ * *path* but still the gateway's own host, because micrometer records the URI
+ * before routing; `route.uri` carries the target's scheme and host but no path.
+ * Spring Cloud Gateway builds its outgoing request from exactly these two, so
+ * joining them reconstructs it rather than guessing at it. Either half being
+ * unparseable falls back to whichever was logged.
+ * @param {string} target the route's `uri`
+ * @param {string} uri the observation's `http.uri`
+ * @returns {string}
+ */
+function gatewayUrl(target, uri) {
+  try {
+    const rewritten = new URL(uri);
+    return `${new URL(target).origin}${rewritten.pathname}${rewritten.search}`;
+  } catch {
+    return uri || target || "";
+  }
+}
+
+/**
  * @typedef {Object} RestSpan
  * @property {number} id
  * @property {string} service
@@ -441,6 +538,27 @@ const RECV_RE = /^<< (\d+)\b/;
  * @property {string} tsText when the call was invoked
  * @property {number[]} records indices of the records making up the span
  */
+
+/**
+ * The service a wire-logged call reached, when no `Invoking` line named it: the
+ * URL's host.
+ *
+ * The alias a caller's REST client was configured with (`baloiseId`) exists only
+ * on the `Invoking` line, so a log that omits it leaves the host as the only
+ * name for the callee. It is an honest one — `baloiseidt.com` is where the call
+ * actually went — and deliberately not guessed any closer: mapping a host back
+ * to an application name would have to assume `baloiseidt.com` is the same
+ * system as `baloise-id`, which these logs nowhere state.
+ * @param {string} url
+ * @returns {string}
+ */
+function serviceFromUrl(url) {
+  try {
+    return new URL(url).host || url;
+  } catch {
+    return url;
+  }
+}
 
 /**
  * Milliseconds for a duration written as `257 [ms]` or `1 [s]`.
@@ -464,6 +582,21 @@ function durationMs(value, unit) {
  * threads the same URL is called concurrently all over these logs, so a
  * URL-keyed map would cross the wires.
  *
+ * **Some logs write only the wire**, with no `Invoking` and no completion line —
+ * just `>> POST …` and `<< 200`. Those two carry everything a span needs bar the
+ * duration, which the records' own timestamps give, so a `>>` that no `Invoking`
+ * opened starts a span of its own and the next `<<` on that thread closes it.
+ * Without this the whole REST layer of such a log is invisible: not merely
+ * uncounted, but absent from the Flow diagram, which then shows a service
+ * receiving notifications about work nothing in the picture asked for.
+ *
+ * A bare `<<` whose request was never logged is still dropped. It answered
+ * *something*, but with no method and no URL there is no arrow to draw.
+ *
+ * **A third format has no arrows at all**: a Spring Cloud Gateway logs its
+ * proxied calls through micrometer's observation filters, keyed on the
+ * observation rather than the thread — see {@link GATEWAY_OPEN_RE}.
+ *
  * `records[].span` is set as a side effect, which is what lets a row render as
  * part of its call. An `Invoking` that never completes stays `complete: false` —
  * exactly the trace a hung integration leaves behind, and worth surfacing.
@@ -477,6 +610,15 @@ export function foldRestSpans(records) {
   const open = new Map();
   /** @type {Map<string, number>} */
   const justClosed = new Map();
+  /**
+   * Spans a `>>` opened on its own, mapped to that record's timestamp — both the
+   * marker that says a `<<` may close this one, and the start of its duration.
+   */
+  /** @type {Map<number, number | null>} */
+  const wire = new Map();
+  /** Gateway exchanges by their observation's start stamp — see the note there. */
+  /** @type {Map<string, number>} */
+  const exchanges = new Map();
 
   for (const record of records) {
     const lane = `${record.file}\0${record.thread}`;
@@ -522,22 +664,118 @@ export function foldRestSpans(records) {
       continue;
     }
 
+    if (GATEWAY_OPEN_RE.test(first)) {
+      const text = recordText(record);
+      const key = GATEWAY_KEY_RE.exec(text)?.[1];
+      if (key && !exchanges.has(key)) {
+        const span = {
+          id: spans.length,
+          // The route id is the gateway's own name for the service behind it —
+          // `ubidoc`, `airlock_iam` — which is the name a reader wants on the
+          // lane, and the counterpart of the alias an `Invoking` line carries.
+          service: GATEWAY_ROUTE_RE.exec(text)?.[1] || "gateway",
+          method: GATEWAY_METHOD_RE.exec(text)?.[1] || "",
+          url: gatewayUrl(
+            GATEWAY_TARGET_RE.exec(text)?.[1] ?? "",
+            GATEWAY_URI_RE.exec(text)?.[1] ?? "",
+          ),
+          file: record.file,
+          thread: record.thread,
+          status: /** @type {number | null} */ (null),
+          ms: /** @type {number | null} */ (null),
+          complete: false,
+          ok: false,
+          tsText: record.tsText,
+          records: [record.i],
+        };
+        spans.push(span);
+        exchanges.set(key, span.id);
+        record.span = span.id;
+      }
+      continue;
+    }
+
+    if (GATEWAY_DONE_RE.test(first)) {
+      const text = recordText(record);
+      const key = GATEWAY_KEY_RE.exec(text)?.[1];
+      const at = key ? exchanges.get(key) : undefined;
+      if (at !== undefined) {
+        const span = spans[at];
+        span.complete = true;
+        const status = GATEWAY_STATUS_RE.exec(text);
+        span.status = status ? Number(status[1]) : null;
+        span.ok = span.status !== null && span.status >= 200 && span.status < 300;
+        const seconds = Number(GATEWAY_SECONDS_RE.exec(text)?.[1]);
+        if (Number.isFinite(seconds)) span.ms = Math.round(seconds * 1000);
+        span.records.push(record.i);
+        record.span = at;
+        exchanges.delete(/** @type {string} */ (key));
+      }
+      continue;
+    }
+
     const send = SEND_RE.exec(first);
     if (send) {
       const id = open.get(lane);
       if (id !== undefined && spans[id].method === send[1] && spans[id].url === send[2]) {
         spans[id].records.push(record.i);
         record.span = id;
+        continue;
+      }
+      // Nothing open to attach to, or the open call is itself a wire span whose
+      // response never arrived — a filtered excerpt drops responses all the time,
+      // and the thread is sequential, so this `>>` is the next call on it. The
+      // abandoned span keeps `complete: false` and reads as unanswered, which is
+      // what it is. A mismatched `>>` under an *`Invoking`* span is left alone:
+      // that pairing is already explicit and a second opinion would only fight it.
+      if (id === undefined || wire.has(id)) {
+        const span = {
+          id: spans.length,
+          service: serviceFromUrl(send[2]),
+          method: send[1],
+          url: send[2],
+          file: record.file,
+          thread: record.thread,
+          status: /** @type {number | null} */ (null),
+          ms: /** @type {number | null} */ (null),
+          complete: false,
+          ok: false,
+          tsText: record.tsText,
+          records: [record.i],
+        };
+        spans.push(span);
+        open.set(lane, span.id);
+        wire.set(span.id, record.ts);
+        record.span = span.id;
       }
       continue;
     }
 
-    if (RECV_RE.test(first)) {
+    const recv = RECV_RE.exec(first);
+    if (recv) {
       const id = justClosed.get(lane);
       if (id !== undefined) {
         spans[id].records.push(record.i);
         record.span = id;
         justClosed.delete(lane);
+        continue;
+      }
+      // No completion line closed a call on this thread, so this `<<` is the only
+      // record of how the open wire call went — status from the line itself,
+      // duration from the two records' clocks.
+      const at = open.get(lane);
+      if (at !== undefined && wire.has(at)) {
+        const span = spans[at];
+        span.complete = true;
+        span.status = Number(recv[1]);
+        span.ok = span.status >= 200 && span.status < 300;
+        const sent = wire.get(at);
+        if (sent !== null && sent !== undefined && record.ts !== null) {
+          span.ms = record.ts - sent;
+        }
+        span.records.push(record.i);
+        record.span = at;
+        open.delete(lane);
       }
     }
   }
@@ -725,7 +963,32 @@ const BARE_UUID_RE =
 function usableId(value) {
   if (!value || value.startsWith("*")) return false;
   if (value === "null" || value === "undefined") return false;
+  // All digits and short: a status or error code, not an identifier. Across these
+  // logs every numeric id runs to six digits or more — `messageId=314391`,
+  // `personKey=7082617`, `externalId=96544486`, `crmIssueId=865726315` — while
+  // `statusCodeExternalIds=[30005, 50005, 55005, 56005]`, a key ending in "Ids"
+  // holding none, is five. Five is also {@link LABELLED_ID_RE}'s own floor, so
+  // this rejects exactly that width and nothing wider.
+  if (/^\d{1,5}$/.test(value)) return false;
   return /[\d-]/.test(value);
+}
+
+/**
+ * A captured value minus the punctuation that ended the sentence rather than the
+ * identifier.
+ *
+ * `.` has to be *inside* {@link LABELLED_ID_RE}'s value class — dotted values and
+ * `firstName.lastName@censored` need it — so an id written last in a sentence
+ * swallows the full stop: `No tracked dossier for CRM issue externalId=387340588.`
+ * yields `387340588.`. Worse with a UUID, where the bare sweep indexes the clean
+ * value in the same breath: one dossier arrives as two facets, and each of them
+ * filters to only part of its own records. Nothing ends an identifier with a dot,
+ * so trailing dots come off — which takes a truncation ellipsis with them.
+ * @param {string} value
+ * @returns {string}
+ */
+function trimValue(value) {
+  return value.replace(/\.+$/, "");
 }
 
 /**
@@ -743,7 +1006,7 @@ export function extractIds(record) {
   const labelled = [];
 
   for (const match of text.matchAll(LABELLED_ID_RE)) {
-    const value = match[2];
+    const value = trimValue(match[2]);
     if (!usableId(value)) continue;
     labelled.push({ label: match[1], value });
     ids.add(value);

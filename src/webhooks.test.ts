@@ -16,7 +16,12 @@
  * Dependency-free on purpose (no remote std import) so it runs offline.
  */
 import { analyse } from "../static/loganalysis/loganalysis.mjs";
-import { foldWebhooks, senderFromClass, statusOf } from "../static/loganalysis/webhooks.mjs";
+import {
+  foldWebhooks,
+  labelFromShape,
+  senderFromClass,
+  statusOf,
+} from "../static/loganalysis/webhooks.mjs";
 
 function assertEquals(actual: unknown, expected: unknown, msg?: string): void {
   const a = JSON.stringify(actual);
@@ -117,6 +122,82 @@ const LOG = [
 const model = analyse([{ file: "bal-9685.log", text: LOG }]);
 const events = foldWebhooks(model.records);
 
+/** A Spring Boot header for the e-portal, whose pattern does name its app. */
+function pgHead(ts: string, app: string, logger: string): string {
+  return `${ts} [-][-][7082617] INFO 7 --- [${app}] [ble-scheduler-1] ${logger} : `;
+}
+
+const PUBLISHER = "i.m.b.e.a.a.services.PGMQEventPublisher";
+const CONSUMER = "i.m.b.e.a.w.services.PGMQEventConsumer";
+const EVENT = "cc2f7856-65ae-48cf-b87e-3ef0e862bcd1";
+const LOST = "da683eb5-4a4c-4e34-8b74-efba1b89afd1";
+const CROSS = "add9f5ba-d930-45cc-a39b-440fc8e27a5a";
+
+/**
+ * A queue hop, three ways: one published and consumed, one published and never
+ * picked up, and one consumed by a *different* service — which is the case that
+ * makes the far end worth reading off the closing record rather than assuming it.
+ */
+const QUEUE_LOG = [
+  pgHead("2026-07-01T10:20:01.828Z", "baloise-e-portal-api", PUBLISHER) +
+  `[PGMQ] - Published AMLA PGMQEvent: eventId=${EVENT}, eventType=DOSSIER, eventAction=SAVE`,
+  pgHead("2026-07-01T10:20:01.952Z", "baloise-e-portal-api", CONSUMER) +
+  `[PGMQ] - Received PGMQEvent and sent to queue: eventId=${EVENT}`,
+  pgHead("2026-07-01T10:20:04.174Z", "baloise-e-portal-api", PUBLISHER) +
+  `[PGMQ] - Published AMLA PGMQEvent: eventId=${LOST}, eventType=TASK, eventAction=SAVE`,
+  pgHead("2026-07-01T10:20:05.000Z", "baloise-e-portal-api", PUBLISHER) +
+  `[PGMQ] - Published AMLA PGMQEvent: eventId=${CROSS}, eventType=DOSSIER, eventAction=DELETE`,
+  pgHead("2026-07-01T10:20:05.400Z", "baloise-e-portal-worker", CONSUMER) +
+  `[PGMQ] - Received PGMQEvent and sent to queue: eventId=${CROSS}`,
+].join("\n");
+
+const queueModel = analyse([{ file: "eportal.log", text: QUEUE_LOG }]);
+const queueEvents = foldWebhooks(queueModel.records);
+
+Deno.test("foldWebhooks: a published event pairs with the consumer that took it", () => {
+  assertEquals(queueEvents.length, 3);
+  const [taken] = queueEvents;
+  assertEquals(taken.kind, "queue");
+  assertEquals(taken.from, "baloise-e-portal-api");
+  assertEquals(taken.to, "baloise-e-portal-api");
+  // The event's own type and action, which is what it *is* — nothing else in the
+  // line names it.
+  assertEquals(taken.label, "DOSSIER SAVE");
+  assertEquals(taken.handled, true);
+  assertEquals(taken.notificationId, EVENT);
+  // 10:20:01.828 → .952 is real queue latency, and the only place it is written.
+  assertEquals(taken.ms, 124);
+  assertEquals(taken.result, "published · 124 ms");
+  assertEquals(taken.records.length, 2);
+});
+
+Deno.test("foldWebhooks: an event nobody consumed says so", () => {
+  const lost = queueEvents.find((event) => event.notificationId === LOST)!;
+  assert(lost !== undefined, "the unconsumed publish was still folded");
+  assertEquals(lost.handled, false);
+  assertEquals(lost.ms, null);
+  assertEquals(lost.label, "TASK SAVE");
+  assertEquals(lost.result, "published · not consumed");
+  // With no consumer named, both ends are the publisher — which draws as the
+  // self-loop the diagram already knows how to render.
+  assertEquals(lost.from, lost.to);
+});
+
+Deno.test("foldWebhooks: the consumer names the far end, publisher or not", () => {
+  const crossed = queueEvents.find((event) => event.notificationId === CROSS)!;
+  assertEquals(crossed.from, "baloise-e-portal-api");
+  assertEquals(crossed.to, "baloise-e-portal-worker", "a broker hop can cross services");
+  assertEquals(crossed.label, "DOSSIER DELETE");
+  assertEquals(crossed.ms, 400);
+});
+
+Deno.test("foldWebhooks: a queue event never closes a webhook, or the reverse", () => {
+  // Both pair on an id out of the payload, and the two id spaces are unrelated;
+  // sharing one map would let a `Handled webhook notification` consume an event.
+  for (const event of queueEvents) assertEquals(event.kind, "queue");
+  for (const event of events) assert(event.kind !== "queue", "no webhook folded as a queue hop");
+});
+
 /* ------------------------------ folding ------------------------------ */
 
 Deno.test("foldWebhooks: finds every inbound message, in log order", () => {
@@ -215,6 +296,35 @@ Deno.test("foldWebhooks: a signing notification falls back to documentBasketStat
   const signing = events.find((event) => event.label === "SigningNotificationRequest")!;
   assert(signing !== undefined, "the signing notification was folded");
   assertEquals(signing.status, "SIGNED", "there is no bare `status` in that payload");
+});
+
+Deno.test("labelFromShape: the payload names the kind when the record does not", () => {
+  assertEquals(labelFromShape('{"documentBasketId":"x","signers":[]}'), "signing status");
+  assertEquals(labelFromShape('{"documentBasketStatus":"SIGNED"}'), "signing status");
+  assertEquals(labelFromShape("    identityProfile: 2"), "identification status");
+  assertEquals(labelFromShape('{"ubiIdCategory":null}'), "identification status");
+  // Nothing to go on is answered with nothing, not with a guess.
+  assertEquals(labelFromShape('{"extCaseId":"x"}'), "");
+});
+
+Deno.test("foldWebhooks: an unnamed notification is labelled from its payload", () => {
+  // `Notification received. Ignore notification with status=…` writes no class
+  // and no notificationType, and three of them in a row all reading
+  // "notification" name nothing at all.
+  const ignored = events[0];
+  assertEquals(ignored.kind, "notification");
+  assertEquals(ignored.skipped, true);
+  assertEquals(ignored.label, "signing status");
+  assertEquals(ignored.result, "OUTSTANDING · ignored");
+});
+
+Deno.test("foldWebhooks: a record that names itself is never relabelled", () => {
+  // The shape is only ever a fallback: a class name and a notificationType are
+  // what the log actually said, and both outrank anything inferred from fields.
+  const named = events.find((event) => event.label === "IdentificationNotificationRequest")!;
+  assert(named !== undefined, "the class-named notification kept its class name");
+  const typed = events.find((event) => event.label === "IDENTIFICATION_STATUS")!;
+  assert(typed !== undefined, "and the webhook kept its notificationType");
 });
 
 Deno.test("foldWebhooks: every event's records point back at the log", () => {

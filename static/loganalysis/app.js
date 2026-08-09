@@ -11,8 +11,10 @@
 import {
   analyse,
   buildGroups,
+  CASE_LABELS,
   contextAround,
   densityBuckets,
+  DOSSIER_LABELS,
   facetCounts,
   filterRecords,
   formatMs,
@@ -26,7 +28,7 @@ import {
   shortUrl,
   spanSummary,
 } from "./loganalysis.mjs";
-import { buildFlow, flowMermaid } from "./flow.mjs";
+import { buildFlow, flowMermaid, INBOUND_LANE } from "./flow.mjs";
 import { foldWebhooks } from "./webhooks.mjs";
 import { clusterProblems, messageText, parseThrowable, problemIndex } from "./problems.mjs";
 import { gunzip, unzipEntries } from "./unzip.mjs";
@@ -1200,17 +1202,32 @@ const LANE_CHARS = 22;
 /** @type {ReturnType<typeof buildFlow> | null} */
 let shownFlow = null;
 
+/**
+ * How many of a flow's lanes are systems.
+ *
+ * The inbound lane is a stand-in for whoever pushed a message in from outside
+ * these logs, not a system anyone could go and look at, so it is a lane the
+ * diagram draws but not a service anything counts. Shared by the counts line and
+ * the diagram's accessible name, which otherwise disagree about one number.
+ * @param {string[]} participants
+ * @returns {number}
+ */
+function serviceCount(participants) {
+  return participants.filter((name) => name !== INBOUND_LANE).length;
+}
+
 /** `9 calls · 6 received · 4 services · 2 failed or unanswered`. */
 function flowCounts() {
   if (!shownFlow || shownFlow.steps.length === 0) return "";
   const { participants, failed, calls, inbound } = shownFlow;
+  const services = serviceCount(participants);
   // Counted apart because they are different findings: an outbound call that
   // failed is this system's problem, an inbound message never handled is a
   // message it dropped.
   return [
     calls ? `${calls} ${plural(calls, "call")}` : "",
     inbound ? `${inbound} received` : "",
-    `${participants.length} ${plural(participants.length, "service")}`,
+    `${services} ${plural(services, "service")}`,
     failed ? `${failed} failed or unanswered` : "",
   ].filter(Boolean).join(" · ");
 }
@@ -1299,6 +1316,102 @@ function stepRef(step) {
   return step.kind === "rest" ? `data-span="${step.spanId}"` : `data-event="${step.eventId}"`;
 }
 
+/** How many identifiers a tooltip lists before it stops being a tooltip. */
+const TITLE_IDS = 8;
+
+/**
+ * How near the top of a tooltip an identifier belongs — the same order the
+ * Identifiers sidebar ranks by, so the two agree about what matters: the dossier
+ * a call was about, then the case within it, then everything else.
+ * @param {string} label
+ * @returns {number}
+ */
+function idRank(label) {
+  if (!label) return 3;
+  const lower = label.toLowerCase();
+  if (DOSSIER_LABELS.some((known) => known.toLowerCase() === lower)) return 0;
+  if (CASE_LABELS.some((known) => known.toLowerCase() === lower)) return 1;
+  return 2;
+}
+
+/**
+ * The identifiers written across a step's own records — its request line, its
+ * body, and whatever came back.
+ *
+ * Both sweeps, not just the labelled one. A gateway exchange writes its dossier
+ * nowhere but inside `http.uri='…/documents/48dcaa2c-…'`, with no `xxxId=` key in
+ * front of it, so only the bare UUID sweep ever sees it — reading `labelled`
+ * alone left exactly the calls this exists for with an empty tooltip. A bare
+ * value some label already claimed is dropped, so an id written both ways lists
+ * once, under the name the log gave it.
+ *
+ * Deduped on label *and* value, because the same id is normally written on both
+ * legs (a dossier posted in the request comes back in the response) and listing
+ * it twice would spend the tooltip on nothing; but one label legitimately
+ * carries several values in one call, so the label alone is not the key.
+ * `sort` is stable, so within a rank the order is the order the log wrote them.
+ * @param {number[]} at indices into the merged records
+ * @returns {string[]} `label value`, best first, capped
+ */
+function stepIds(at) {
+  /** @type {Set<string>} */
+  const seen = new Set();
+  /** Values some label named, so the bare sweep does not repeat them. */
+  /** @type {Set<string>} */
+  const named = new Set();
+  /** @type {{ label: string, value: string }[]} */
+  const found = [];
+  for (const i of at) {
+    for (const id of model.records[i]?.labelled ?? []) {
+      const key = `${id.label} ${id.value}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      found.push(id);
+      named.add(id.value);
+    }
+  }
+  for (const i of at) {
+    for (const value of model.records[i]?.ids ?? []) {
+      if (named.has(value) || seen.has(value)) continue;
+      seen.add(value);
+      found.push({ label: "", value });
+    }
+  }
+  found.sort((a, b) => idRank(a.label) - idRank(b.label));
+  const lines = found.slice(0, TITLE_IDS).map((id) => `${id.label} ${id.value}`.trim());
+  // A response body listing a document per line runs to dozens; say what was cut
+  // rather than let the list read as all of them.
+  if (found.length > TITLE_IDS) lines.push(`+${found.length - TITLE_IDS} more`);
+  return lines;
+}
+
+/**
+ * What a step's tooltip says: what was called, and which records it concerned.
+ *
+ * The row already carries the times, the outcome and both ends, and the diagram
+ * is read by scanning those — so the tooltip spends itself on the two things the
+ * row physically cannot hold. The URL in full, because the label truncates it
+ * from the left. Then the identifiers out of this call's own request and
+ * response, which is the question a sequence diagram otherwise leaves open:
+ * `POST /document-baskets` twice over tells you nothing until you can see that
+ * one was for this dossier and one was not.
+ *
+ * Newline-separated, which browsers render as separate lines in the tooltip.
+ * Native `title` rather than a hover card because it is what every other tooltip
+ * in this tool uses — the REST table's URLs, the lane headings above these very
+ * steps — and a second, prettier mechanism for one diagram would be the odd one
+ * out rather than an improvement.
+ * @param {import("./flow.mjs").FlowStep} step
+ * @returns {string}
+ */
+function stepTitle(step) {
+  const what = step.kind === "rest" ? `${step.method} ${step.url}`.trim() : step.label;
+  const source = step.kind === "rest"
+    ? (step.spanId === null ? null : model.spans[step.spanId])
+    : (step.eventId === null ? null : events[step.eventId]);
+  return [what, ...stepIds(source?.records ?? [])].join("\n");
+}
+
 /**
  * One step's arrows, labels and hit target.
  *
@@ -1332,9 +1445,7 @@ function flowStepSvg(step, n, participants, width) {
     `Show ${inbound ? "this message" : "this call"}'s records.`;
 
   const parts = [
-    `<title>${
-      escapeHtml(step.kind === "rest" ? `${step.method} ${step.url}` : `${step.label} — received`)
-    }</title>`,
+    `<title>${escapeHtml(stepTitle(step))}</title>`,
     bad
       ? `<rect class="flow-band" x="${gutter - 8}" y="${rowY}" width="${
         width - gutter + 8
@@ -1487,7 +1598,8 @@ function renderFlowView() {
     `role="group" aria-label="${
       escapeHtml(
         `Service call flow: ${flow.total} ${plural(flow.total, "call")} across ` +
-          `${flow.participants.length} ${plural(flow.participants.length, "service")}, ` +
+          `${serviceCount(flow.participants)} ` +
+          `${plural(serviceCount(flow.participants), "service")}, ` +
           `${flow.failed} failed or unanswered.`,
       )
     }">` +
