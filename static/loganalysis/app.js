@@ -16,15 +16,18 @@ import {
   facetCounts,
   filterRecords,
   formatMs,
+  groupIds,
   LEVELS,
   parseQuery,
   pinnedMarkdown,
-  rankedIds,
   recordSummary,
   recordText,
   restStats,
+  shortUrl,
   spanSummary,
 } from "./loganalysis.mjs";
+import { buildFlow, flowMermaid } from "./flow.mjs";
+import { foldWebhooks } from "./webhooks.mjs";
 import { clusterProblems, messageText, parseThrowable, problemIndex } from "./problems.mjs";
 import { gunzip, unzipEntries } from "./unzip.mjs";
 import { sendHandoff, takeHandoff } from "../handoff.mjs";
@@ -76,6 +79,7 @@ const els = {
   viewSwitch: $("view-switch"),
   viewTitle: $("view-title"),
   restView: $("rest-view"),
+  flowView: $("flow-view"),
 };
 
 /** Trailing debounce. Filtering re-groups and redraws the whole timeline —
@@ -95,6 +99,13 @@ const showToast = makeToast($("toast"));
 let sources = [];
 /** @type {ReturnType<typeof analyse>} */
 let model = analyse([]);
+/** Inbound notifications and webhooks, folded from the merged records.
+ *
+ * Held beside the model rather than inside `analyse()`: webhooks.mjs imports
+ * loganalysis.mjs, so folding them there would make the two circular. Same
+ * arrangement problems.mjs already has. */
+/** @type {ReturnType<typeof foldWebhooks>} */
+let events = [];
 /** Groups currently rendered, so the copy button and expand-all can reach them. */
 /** @type {ReturnType<typeof buildGroups>} */
 let shownGroups = [];
@@ -113,6 +124,7 @@ const selected = {
   /** @type {Set<string>} */ files: new Set(),
   /** @type {Set<string>} */ ids: new Set(),
   /** @type {Set<number>} */ spanIds: new Set(),
+  /** @type {Set<number>} */ webhookIds: new Set(),
 };
 
 /** The brushed time window, or null. Labels are source timestamps, not
@@ -216,8 +228,15 @@ function reload() {
   for (const value of [...selected.ids]) {
     if (!model.index.has(value)) selected.ids.delete(value);
   }
-  // Spans are renumbered by the re-fold, so a span filter cannot survive it.
+  events = foldWebhooks(model.records);
+  // Spans and events are both renumbered by the re-fold, so neither filter can
+  // survive it.
   selected.spanIds.clear();
+  selected.webhookIds.clear();
+  // The groups are keyed by this log's dossiers, so a fold state from the previous
+  // one names nothing. Reseeded on the next render.
+  openIdGroups.clear();
+  idGroupsSeeded = false;
   // Pins survive — they name a file and a line, not a merge position — but a pin
   // in a file that has just been removed has nothing left to point at. The
   // window is absolute time, so it needs no reconciling at all.
@@ -432,55 +451,169 @@ function renderFacets() {
   renderIds();
 }
 
+/**
+ * Which identifier groups are unfolded.
+ *
+ * Session state, deliberately not `localStorage`: a group is keyed by a dossier
+ * id, so persisting the fold would write one key per dossier of every log ever
+ * opened and never clean any of them up. Held here instead, so it survives a
+ * re-render and a filter keystroke but not a reload.
+ * @type {Set<string>}
+ */
+const openIdGroups = new Set();
+/** Whether {@link openIdGroups} has been seeded for the loaded log. */
+let idGroupsSeeded = false;
+
+/**
+ * One identifier row: the value, what it is called, and how much it explains.
+ *
+ * `onToggle` lets the row's group update its own selected count. `render()` does
+ * not rebuild the facet lists — a rebuild would destroy the focused row — so
+ * anything derived from the selection has to be kept in step by hand.
+ */
+function idRow(facet, onToggle) {
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "id-row";
+  if (selected.ids.has(facet.value)) row.classList.add("is-on");
+  row.setAttribute("aria-pressed", String(selected.ids.has(facet.value)));
+  const labels = facet.labels.length ? facet.labels.join(", ") : "unlabelled";
+  // The per-id file count means nothing while only one file is loaded.
+  const files = sources.length > 1
+    ? ` · ${facet.files.length} ${facet.files.length === 1 ? "file" : "files"}`
+    : "";
+  row.innerHTML = `<span class="id-value">${escapeHtml(facet.value)}</span>` +
+    `<span class="id-meta"><span class="id-label">${escapeHtml(labels)}</span>` +
+    `<span class="id-count">${facet.count} rec${files}</span></span>`;
+  row.addEventListener("click", () => {
+    // In place, not a rebuild — the rebuild would destroy the focused row.
+    const on = !selected.ids.has(facet.value);
+    if (on) selected.ids.add(facet.value);
+    else selected.ids.delete(facet.value);
+    row.classList.toggle("is-on", on);
+    row.setAttribute("aria-pressed", String(on));
+    onToggle?.();
+    render();
+  });
+  return row;
+}
+
+/**
+ * The identifiers, grouped by the REST calls that relate them.
+ *
+ * Folded by their own heading with the chevron at the panel's right edge, per the
+ * project's foldable-sections convention — but *not* wearing the sidebar labels'
+ * gradient, because these sit one level inside a field body and reading as equal
+ * to "Identifiers" above them would flatten the hierarchy.
+ *
+ * While the filter box has something in it every group with a match is forced
+ * open: you are searching, and a hit hidden behind a fold is a hit you cannot
+ * see. The fold state is remembered underneath, so clearing the box restores it.
+ */
 function renderIds() {
   const needle = els.idFind.value.trim().toLowerCase();
-  const all = rankedIds(model.index);
-  const matching = needle
-    ? all.filter((facet) =>
-      facet.value.toLowerCase().includes(needle) ||
-      facet.labels.some((label) => label.toLowerCase().includes(needle))
-    )
-    : all;
-  // Selected ids stay listed even when the search box excludes them, so a filter
-  // can always be switched off where it was switched on.
-  const pinned = all.filter((facet) => selected.ids.has(facet.value) && !matching.includes(facet));
-  const list = [...pinned, ...matching].slice(0, 200);
-  const total = pinned.length + matching.length;
+  const groups = groupIds(
+    model.records,
+    model.spans,
+    model.index,
+    model.aliases,
+    els.linkAliases.checked,
+    events,
+  );
+  // The busiest group starts open — one dossier's ids are what a reader came for,
+  // and every group folded is a wall of chevrons with nothing to read.
+  if (!idGroupsSeeded && groups.length) {
+    openIdGroups.add(groups[0].slug);
+    idGroupsSeeded = true;
+  }
+
+  const hits = (facet) =>
+    !needle ||
+    facet.value.toLowerCase().includes(needle) ||
+    facet.labels.some((label) => label.toLowerCase().includes(needle));
 
   els.idList.innerHTML = "";
-  if (list.length === 0) {
+  let shown = 0;
+  let total = 0;
+  let rendered = 0;
+
+  for (const group of groups) {
+    // Selected ids stay listed even when the search box excludes them, so a
+    // filter can always be switched off where it was switched on.
+    const members = group.ids.filter((facet) => hits(facet) || selected.ids.has(facet.value));
+    if (members.length === 0) continue;
+    total += members.length;
+
+    const open = needle ? true : openIdGroups.has(group.slug);
+    const bodyId = `id-group-${rendered}`;
+    rendered++;
+
+    const head = document.createElement("button");
+    head.type = "button";
+    head.className = "id-group-head";
+    head.setAttribute("aria-controls", bodyId);
+    head.setAttribute("aria-expanded", String(open));
+    const meta = [
+      `${members.length} ${plural(members.length, "id")}`,
+      group.calls ? `${group.calls} ${plural(group.calls, "call")}` : "",
+      group.received ? `${group.received} received` : "",
+      group.services.length ? group.services.join(", ") : "",
+    ].filter(Boolean).join(" · ");
+    head.innerHTML = `<span class="id-group-line">` +
+      `<span class="id-group-title">${escapeHtml(group.title)}</span>` +
+      `<span class="caret" aria-hidden="true">${open ? "▾" : "▸"}</span></span>` +
+      `<span class="id-group-meta"><span>${escapeHtml(meta)}</span>` +
+      `<span class="id-group-on" hidden></span></span>`;
+
+    // How many of this group's ids are filtering the view — the one thing worth
+    // knowing about a group folded shut, and the reason it is kept in step by
+    // hand rather than falling out of a rebuild that never happens.
+    const badge = /** @type {HTMLElement} */ (head.querySelector(".id-group-on"));
+    const syncBadge = () => {
+      const chosen = members.filter((facet) => selected.ids.has(facet.value)).length;
+      badge.textContent = chosen ? `${chosen} selected` : "";
+      badge.hidden = chosen === 0;
+    };
+    syncBadge();
+
+    const body = document.createElement("div");
+    body.id = bodyId;
+    body.className = "id-group-body";
+    body.hidden = !open;
+    for (const facet of members) {
+      // The cap is over the whole list, not per group: a log with three hundred
+      // ids spread over ten dossiers is as slow to build as one flat list of them.
+      if (shown >= 200) break;
+      body.append(idRow(facet, syncBadge));
+      shown++;
+    }
+
+    head.addEventListener("click", () => {
+      // Toggled in place for the same reason a row is: rebuilding would throw
+      // focus back to the top of the sidebar.
+      const next = body.hidden;
+      body.hidden = !next;
+      head.setAttribute("aria-expanded", String(next));
+      const caret = head.querySelector(".caret");
+      if (caret) caret.textContent = next ? "▾" : "▸";
+      if (next) openIdGroups.add(group.slug);
+      else openIdGroups.delete(group.slug);
+    });
+
+    const wrap = document.createElement("div");
+    wrap.className = "id-group";
+    wrap.append(head, body);
+    els.idList.append(wrap);
+  }
+
+  if (rendered === 0) {
     els.idList.innerHTML = '<span class="hint">No identifiers found.</span>';
     return;
   }
-  for (const facet of list) {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "id-row";
-    if (selected.ids.has(facet.value)) row.classList.add("is-on");
-    row.setAttribute("aria-pressed", String(selected.ids.has(facet.value)));
-    const labels = facet.labels.length ? facet.labels.join(", ") : "unlabelled";
-    // The per-id file count means nothing while only one file is loaded.
-    const files = sources.length > 1
-      ? ` · ${facet.files.length} ${facet.files.length === 1 ? "file" : "files"}`
-      : "";
-    row.innerHTML = `<span class="id-value">${escapeHtml(facet.value)}</span>` +
-      `<span class="id-meta"><span class="id-label">${escapeHtml(labels)}</span>` +
-      `<span class="id-count">${facet.count} rec${files}</span></span>`;
-    row.addEventListener("click", () => {
-      // In place, not a rebuild — the rebuild would destroy the focused row.
-      const on = !selected.ids.has(facet.value);
-      if (on) selected.ids.add(facet.value);
-      else selected.ids.delete(facet.value);
-      row.classList.toggle("is-on", on);
-      row.setAttribute("aria-pressed", String(on));
-      render();
-    });
-    els.idList.append(row);
-  }
-  if (total > list.length) {
+  if (total > shown) {
     const more = document.createElement("span");
     more.className = "hint";
-    more.textContent = `Showing ${list.length} of ${total} — type above to narrow.`;
+    more.textContent = `Showing ${shown} of ${total} — type above to narrow.`;
     els.idList.append(more);
   }
 }
@@ -497,6 +630,7 @@ function currentFilters() {
     threads: els.threads.value ? [els.threads.value] : [],
     ids: [...selected.ids],
     spanIds: [...selected.spanIds],
+    webhookIds: [...selected.webhookIds],
     query: els.query.value.trim(),
     restOnly: els.restOnly.checked,
     badOnly: els.badOnly.checked,
@@ -593,18 +727,6 @@ const STAT_ACTIONS = {
 function toggleLevel(level) {
   if (selected.levels.has(level)) selected.levels.delete(level);
   else selected.levels.add(level);
-}
-
-/** Path and last segment only — full integration URLs are 120 characters wide. */
-function shortUrl(url) {
-  try {
-    const parsed = new URL(url);
-    return parsed.pathname.length > 48
-      ? `…${parsed.pathname.slice(-48)}${parsed.search}`
-      : parsed.pathname + parsed.search;
-  } catch {
-    return url;
-  }
 }
 
 /**
@@ -765,6 +887,15 @@ function renderPills(filters) {
       undo: () => selected.spanIds.delete(spanId),
     });
   }
+  for (const eventAt of filters.webhookIds) {
+    const event = events[eventAt];
+    if (!event) continue;
+    pills.push({
+      text: `received ${clip(event.label, 24)}`,
+      full: `${event.label} received by ${event.to}${event.status ? ` — ${event.status}` : ""}`,
+      undo: () => selected.webhookIds.delete(eventAt),
+    });
+  }
   if (filters.query) {
     pills.push({
       text: `search “${clip(filters.query, 18)}”`,
@@ -848,31 +979,42 @@ function refocusPills(index) {
   /** @type {HTMLElement} */ (remaining[Math.min(index, remaining.length - 1)]).focus();
 }
 
-/* ---------------------------- the two views ---------------------------- */
+/* --------------------------- the three views --------------------------- */
 
 /**
- * Show the view that is selected, and hide the controls belonging to the other.
+ * Show the view that is selected, and hide the controls belonging to the others.
  *
  * The density strip and the filter pills are timeline instruments — they brush
  * and explain a set of *records*. The REST table lists calls over the whole
- * loaded log, so leaving those two on above it would claim a relationship that
- * isn't there.
+ * loaded log, and the flow diagram answers to the identifier selection alone, so
+ * leaving those two on above either would claim a relationship that isn't there.
  */
 function applyView() {
   const rest = view === "rest";
-  els.groups.hidden = rest;
+  const flow = view === "flow";
+  // Built once here so the counts line, the diagram and Copy all describe the
+  // same flow. Driven by the identifier selection alone — never `currentFilters`.
+  shownFlow = flow ? buildFlow(model.records, model.spans, [...selected.ids], events) : null;
+  els.groups.hidden = rest || flow;
   els.restView.hidden = !rest;
-  els.viewTitle.textContent = rest ? "REST calls" : "Timeline";
-  els.density.hidden = rest || strip.length === 0;
+  els.flowView.hidden = !flow;
+  els.viewTitle.textContent = rest ? "REST calls" : flow ? "Flow" : "Timeline";
+  els.density.hidden = rest || flow || strip.length === 0;
   els.densityAxis.hidden = els.density.hidden;
-  els.filterPills.hidden = rest || els.filterPills.children.length === 0;
+  els.filterPills.hidden = rest || flow || els.filterPills.children.length === 0;
   // Copy and download hand over whatever is on screen, so the labels have to
   // name it. Pointing "Copy shown" at the timeline while a table of calls is
   // what's shown copied the view you are not looking at.
-  els.copy.textContent = rest ? "Copy calls" : "Copy shown";
-  els.copy.title = rest ? "Copy every REST call as a table" : "Copy every record currently shown";
+  els.copy.textContent = rest ? "Copy calls" : flow ? "Copy as Mermaid" : "Copy shown";
+  els.copy.title = rest
+    ? "Copy every REST call as a table"
+    : flow
+    ? "Copy the flow as Mermaid sequenceDiagram source"
+    : "Copy every record currently shown";
   els.download.title = rest
     ? "Download every REST call as a table"
+    : flow
+    ? "Download the flow as a Mermaid .mmd file"
     : "Download every record currently shown";
   // Counted in the terms of whatever is on screen. "10 of 10 records · 3 groups"
   // above a table of calls describes the view you are not looking at.
@@ -881,9 +1023,12 @@ function applyView() {
     : rest
     ? `${model.spans.length} ${plural(model.spans.length, "call")} · ` +
       `${model.summary.restFailed} failed or unanswered`
+    : flow
+    ? flowCounts()
     : `${shownCount} of ${model.records.length} records · ${shownGroups.length} ` +
       `${shownGroups.length === 1 ? "group" : "groups"}`;
   if (rest) renderRestView();
+  if (flow) renderFlowView();
 }
 
 /** Sort state for the calls table: which accessor, and which direction. */
@@ -1018,6 +1163,395 @@ function renderRestView() {
   }
   table.append(body);
   els.restView.append(table);
+}
+
+/* ------------------------------ flow view ------------------------------ */
+
+/**
+ * The flow diagram's geometry, in pixels.
+ *
+ * Kept here rather than in `flow.mjs` for the same reason the density strip's
+ * sizing is: the module decides what the steps *are*, the view decides how wide
+ * a lane is. `step` covers a request arrow and its response, 24px apart.
+ */
+const FLOW = {
+  gutter: 96,
+  lane: 200,
+  head: 46,
+  step: 64,
+  padB: 24,
+  selfOut: 46,
+  barW: 9,
+  /** Sideways step for a bar that opens while another is still running. */
+  barGap: 11,
+  /** A sub-row handling time still has to be visible, so a bar never goes thinner. */
+  barMin: 16,
+  /** Below this a bar has no room beside it for the finish timestamp. */
+  barLabel: 24,
+  /** Right margin the finish timestamps need, added only when one is drawn. */
+  finPad: 160,
+};
+
+/** Lane names run to `document-basket-service`; past this they are cut and the
+ * full name lives in the step's tooltip instead. */
+const LANE_CHARS = 22;
+
+/** The flow last built, so the counts line, the diagram and Copy agree. */
+/** @type {ReturnType<typeof buildFlow> | null} */
+let shownFlow = null;
+
+/** `9 calls · 6 received · 4 services · 2 failed or unanswered`. */
+function flowCounts() {
+  if (!shownFlow || shownFlow.steps.length === 0) return "";
+  const { participants, failed, calls, inbound } = shownFlow;
+  // Counted apart because they are different findings: an outbound call that
+  // failed is this system's problem, an inbound message never handled is a
+  // message it dropped.
+  return [
+    calls ? `${calls} ${plural(calls, "call")}` : "",
+    inbound ? `${inbound} received` : "",
+    `${participants.length} ${plural(participants.length, "service")}`,
+    failed ? `${failed} failed or unanswered` : "",
+  ].filter(Boolean).join(" · ");
+}
+
+/** Unfold the Identifiers field and put the cursor in its filter box. */
+function revealIds() {
+  const button = document.querySelector('#controls .field-collapse[aria-controls="ids-body"]');
+  if (button instanceof HTMLElement && button.getAttribute("aria-expanded") === "false") {
+    button.click();
+  }
+  els.idFind.focus();
+  els.idFind.scrollIntoView({ block: "nearest" });
+}
+
+/**
+ * Where each handled webhook was still being worked on: an activation bar down
+ * the receiver's lifeline, from the row the message arrived on to the moment its
+ * `Handled` line landed.
+ *
+ * The point is what a duration printed on one row cannot show — that the work
+ * was still running while later rows happened. In the onboarding logs one webhook
+ * takes 13 s, during which the next notification arrives and the next webhook is
+ * received; without a bar those read as a tidy sequence rather than as overlap.
+ *
+ * Rows sit at fixed intervals ordered by time, not scaled to it, so a bar's foot
+ * is placed proportionally between the two rows its finish falls between. That
+ * puts the end in the right place *relative to the other events*, which is the
+ * question being asked. It does mean bar lengths are not to scale with each other
+ * — a 1 ms bar and a 13 s bar are not 13000× apart — and scaling the rows to time
+ * instead would blow the diagram apart on any log with a quiet stretch in it.
+ * @param {import("./flow.mjs").Flow} flow
+ */
+function flowBars(flow) {
+  const { head, step: stepH, barMin } = FLOW;
+  const rowY = (n) => head + n * stepH + 30;
+  /** @type {{ to: number, top: number, bottom: number, depth: number, at: string }[]} */
+  const bars = [];
+
+  flow.steps.forEach((step, n) => {
+    if (step.kind !== "webhook" || step.endTs === null || step.ts === null) return;
+    // The last row that had already happened when this finished.
+    let j = n;
+    while (j + 1 < flow.steps.length) {
+      const next = flow.steps[j + 1].ts;
+      if (next === null || next > step.endTs) break;
+      j++;
+    }
+    let bottom;
+    const after = j + 1 < flow.steps.length ? flow.steps[j + 1].ts : null;
+    const here = flow.steps[j].ts;
+    if (after !== null && here !== null && after > here) {
+      const part = (step.endTs - here) / (after - here);
+      bottom = rowY(j) + Math.max(0, Math.min(1, part)) * stepH;
+    } else {
+      // Still in flight when the log ends: the bar runs off the last row rather
+      // than stopping neatly on it, which is the honest picture.
+      bottom = rowY(flow.steps.length - 1) + stepH * 0.6;
+    }
+    const top = rowY(n) - 8;
+    bars.push({
+      to: step.to,
+      top,
+      bottom: Math.max(bottom, top + barMin),
+      depth: 0,
+      at: step.endTsText,
+    });
+  });
+
+  // Nesting: a bar opening on a lane that already has one running steps aside, so
+  // two concurrent handlings are two bars rather than one drawn over the other.
+  bars.forEach((bar, i) => {
+    bar.depth = bars.filter((other, k) =>
+      k < i && other.to === bar.to && other.bottom > bar.top
+    ).length;
+  });
+  return bars;
+}
+
+/**
+ * What a step points back at: a REST span or an inbound event. One attribute or
+ * the other, so the click wiring can tell which filter to set from the DOM alone.
+ * @param {import("./flow.mjs").FlowStep} step
+ * @returns {string}
+ */
+function stepRef(step) {
+  return step.kind === "rest" ? `data-span="${step.spanId}"` : `data-event="${step.eventId}"`;
+}
+
+/**
+ * One step's arrows, labels and hit target.
+ *
+ * The request is solid and the response dashed, which is the sequence-diagram
+ * convention Mermaid also follows. A 2xx return stays in the neutral line colour
+ * — only a failure takes `--danger`, because colouring success green as well
+ * turns a forty-call flow into a traffic light nobody can scan.
+ *
+ * A call nothing answered gets a short dotted stub and a note rather than a
+ * return arrow: drawing one would claim a response that never came. The stub
+ * points back toward the caller, so it never runs off the diagram's edge.
+ * @param {import("./flow.mjs").FlowStep} step
+ * @param {number} n position in the flow
+ * @param {string[]} participants
+ * @param {number} width
+ * @returns {string}
+ */
+function flowStepSvg(step, n, participants, width) {
+  const { gutter, lane, head, step: stepH, selfOut } = FLOW;
+  const cx = (at) => gutter + at * lane + lane / 2;
+  const reqY = head + n * stepH + 30;
+  const resY = reqY + 24;
+  const from = cx(step.from);
+  const to = cx(step.to);
+  const bad = !step.complete || !step.ok;
+  const rowY = head + n * stepH + 4;
+  const inbound = step.kind === "webhook";
+  const label = `${step.tsText} — ${participants[step.from]} ` +
+    `${inbound ? "sent" : "to"} ${participants[step.to]}, ` +
+    `${step.label}, ${step.result}. ` +
+    `Show ${inbound ? "this message" : "this call"}'s records.`;
+
+  const parts = [
+    `<title>${
+      escapeHtml(step.kind === "rest" ? `${step.method} ${step.url}` : `${step.label} — received`)
+    }</title>`,
+    bad
+      ? `<rect class="flow-band" x="${gutter - 8}" y="${rowY}" width="${
+        width - gutter + 8
+      }" height="${stepH - 8}" rx="4" />`
+      : "",
+    `<rect class="flow-hit" x="0" y="${rowY}" width="${width}" height="${stepH - 8}" />`,
+    `<text class="flow-ts" x="${gutter - 18}" y="${reqY + 4}" text-anchor="end">${
+      escapeHtml(step.tsText.slice(11) || step.tsText)
+    }</text>`,
+  ];
+
+  if (step.from === step.to) {
+    // A service calling itself: a lane cannot arrow to itself, so the request
+    // loops out to the right and comes back one row down.
+    parts.push(
+      `<path class="flow-req" d="M${from} ${reqY} h${selfOut} V${resY} H${from}" ` +
+        `marker-end="url(#flow-ah)" />`,
+      `<text class="flow-label" x="${from + selfOut + 8}" y="${reqY + 4}">${
+        escapeHtml(step.label)
+      }</text>`,
+      `<text class="flow-result${bad ? " is-bad" : ""}" x="${from + selfOut + 8}" y="${resY + 4}">${
+        escapeHtml(step.result)
+      }</text>`,
+    );
+    return `<g class="flow-step flow-${step.kind}${bad ? " is-bad" : ""}" role="button" ` +
+      `tabindex="0" ${stepRef(step)} aria-label="${escapeHtml(label)}">${parts.join("")}</g>`;
+  }
+
+  const mid = (from + to) / 2;
+  parts.push(
+    `<line class="flow-req${inbound ? " flow-async" : ""}" x1="${from}" y1="${reqY}" x2="${to}" ` +
+      `y2="${reqY}" marker-end="url(#flow-ah${inbound && bad ? "-bad" : ""})" />`,
+    `<text class="flow-label" x="${mid}" y="${reqY - 8}" text-anchor="middle">${
+      escapeHtml(step.label)
+    }</text>`,
+  );
+
+  if (inbound) {
+    // One arrow, not two: nothing was sent back to the sender. A `Handled` line is
+    // the receiver finishing its work, so the outcome — the status carried, the
+    // time taken, whether it was ignored — sits under the arrow that delivered it.
+    parts.push(
+      `<text class="flow-result${bad ? " is-bad" : ""}" x="${mid}" y="${reqY + 15}" ` +
+        `text-anchor="middle">${escapeHtml(step.result)}</text>`,
+    );
+  } else if (step.complete) {
+    parts.push(
+      `<line class="flow-ret${step.ok ? "" : " is-bad"}" x1="${to}" y1="${resY}" x2="${from}" ` +
+        `y2="${resY}" marker-end="url(#flow-ah${step.ok ? "" : "-bad"})" />`,
+      `<text class="flow-result${step.ok ? "" : " is-bad"}" x="${mid}" y="${resY - 8}" ` +
+        `text-anchor="middle">${escapeHtml(step.result)}</text>`,
+    );
+  } else {
+    const dir = from > to ? 1 : -1;
+    const endX = to + dir * 56;
+    parts.push(
+      `<line class="flow-ret flow-unanswered" x1="${to}" y1="${resY}" x2="${endX}" y2="${resY}" />`,
+      `<text class="flow-result is-bad" x="${endX + dir * 8}" y="${resY + 4}" ` +
+        `text-anchor="${dir === 1 ? "start" : "end"}">${escapeHtml(step.result)}</text>`,
+    );
+  }
+
+  return `<g class="flow-step flow-${step.kind}${bad ? " is-bad" : ""}" role="button" ` +
+    `tabindex="0" ${stepRef(step)} aria-label="${escapeHtml(label)}">${parts.join("")}</g>`;
+}
+
+/**
+ * The selected identifiers' calls as a sequence diagram.
+ *
+ * Three empty states rather than one, because each has a different way out: no
+ * log yet, no identifier picked, or an identifier that no REST call mentions.
+ * The last is a real answer — it says the integration was never called for this
+ * dossier — so it names the timeline's record count instead of looking broken.
+ */
+function renderFlowView() {
+  els.flowView.innerHTML = "";
+  if (model.records.length === 0) {
+    els.flowView.append(emptyState(
+      "Drop log files anywhere on this page to begin — or paste a log into the sidebar.",
+      [
+        ["Try with sample log", () => els.example.click()],
+        ["Choose files…", () => els.fileInput.click()],
+      ],
+    ));
+    return;
+  }
+  if (selected.ids.size === 0) {
+    els.flowView.append(emptyState(
+      "Pick an identifier — a dossier or a case id — to trace the messages between services.",
+      [["Choose an identifier", revealIds]],
+    ));
+    return;
+  }
+  const flow = shownFlow;
+  if (!flow || flow.steps.length === 0) {
+    const many = selected.ids.size > 1;
+    els.flowView.append(emptyState(
+      `No REST calls or inbound messages mention ` +
+        `${many ? "these identifiers" : "this identifier"}. ` +
+        `The timeline still has ${shownCount} ${plural(shownCount, "record")}.`,
+      [["Back to the timeline", () => {
+        setView("timeline");
+        applyView();
+      }]],
+    ));
+    return;
+  }
+
+  const { gutter, lane, head, step, padB, barW, barGap, barLabel, finPad } = FLOW;
+  const cx = (at) => gutter + at * lane + lane / 2;
+  const bars = flowBars(flow);
+  const labelled = bars.some((bar) => bar.bottom - bar.top >= barLabel && bar.at);
+  // A bar can outlast the final row, and its finish timestamp needs room to the
+  // right of the last lane — so the canvas answers to the bars, not only the rows.
+  const width = gutter + flow.participants.length * lane + (labelled ? finPad : 0);
+  const height = Math.max(
+    head + flow.steps.length * step + padB,
+    ...bars.map((bar) => bar.bottom + padB),
+  );
+
+  const barSvg = bars.map((bar) => {
+    const x = cx(bar.to) - barW / 2 + bar.depth * barGap;
+    const tall = bar.bottom - bar.top >= barLabel;
+    return `<rect class="flow-act" x="${x}" y="${bar.top}" width="${barW}" height="${
+      bar.bottom - bar.top
+    }" rx="2" />` +
+      (tall && bar.at
+        ? `<text class="flow-fin" x="${x + barW + 8}" y="${bar.bottom + 4}">${
+          escapeHtml(`└ finished ${bar.at.slice(11) || bar.at}`)
+        }</text>`
+        : "");
+  }).join("");
+
+  const lanes = flow.participants.map((name, at) => {
+    const x = cx(at);
+    const cut = name.length > LANE_CHARS ? `${name.slice(0, LANE_CHARS - 1)}…` : name;
+    return `<g><title>${escapeHtml(name)}</title>` +
+      `<rect class="flow-lane-box" x="${x - lane / 2 + 10}" y="8" width="${
+        lane - 20
+      }" height="30" rx="4" />` +
+      `<text class="flow-lane" x="${x}" y="27" text-anchor="middle">${escapeHtml(cut)}</text>` +
+      `</g>` +
+      `<line class="flow-life" x1="${x}" y1="${head}" x2="${x}" y2="${height - padB / 2}" />`;
+  });
+
+  // role="group" rather than role="img": every step inside is focusable and
+  // carries its own name, so the steps *are* the accessible reading of the
+  // diagram — there is no second hidden list to drift out of step with it.
+  const svg = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" ` +
+    `role="group" aria-label="${
+      escapeHtml(
+        `Service call flow: ${flow.total} ${plural(flow.total, "call")} across ` +
+          `${flow.participants.length} ${plural(flow.participants.length, "service")}, ` +
+          `${flow.failed} failed or unanswered.`,
+      )
+    }">` +
+    `<defs>` +
+    `<marker id="flow-ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" ` +
+    `orient="auto"><path d="M0 0 L8 4 L0 8 z" /></marker>` +
+    `<marker id="flow-ah-bad" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" ` +
+    `markerHeight="7" orient="auto"><path class="is-bad" d="M0 0 L8 4 L0 8 z" /></marker>` +
+    `</defs>` +
+    lanes.join("") +
+    // Behind the arrows: a bar is the background a step is drawn on, and an
+    // arrowhead landing on one has to stay readable.
+    barSvg +
+    flow.steps.map((s, n) => flowStepSvg(s, n, flow.participants, width)).join("") +
+    `</svg>`;
+
+  const scroll = document.createElement("div");
+  scroll.className = "flow-scroll";
+  scroll.innerHTML = svg;
+  els.flowView.append(scroll);
+
+  // Both filters are cleared either way: picking a step means "show me this one",
+  // and leaving the other kind's filter set would narrow to their intersection,
+  // which is always empty.
+  const jump = (node) => {
+    const spanAt = node.getAttribute("data-span");
+    const eventAt = node.getAttribute("data-event");
+    selected.spanIds.clear();
+    selected.webhookIds.clear();
+    if (spanAt !== null) {
+      const span = model.spans[Number(spanAt)];
+      if (!span) return;
+      selected.spanIds.add(Number(spanAt));
+      setView("timeline");
+      render();
+      showToast(`Filtered to ${span.method} ${shortUrl(span.url)}.`);
+      return;
+    }
+    const event = events[Number(eventAt)];
+    if (!event) return;
+    selected.webhookIds.add(Number(eventAt));
+    setView("timeline");
+    render();
+    showToast(`Filtered to ${event.label} received by ${event.to}.`);
+  };
+  for (const node of scroll.querySelectorAll("[data-span], [data-event]")) {
+    node.addEventListener("click", () => jump(node));
+    node.addEventListener("keydown", (keyed) => {
+      const key = /** @type {KeyboardEvent} */ (keyed).key;
+      if (key !== "Enter" && key !== " ") return;
+      keyed.preventDefault();
+      jump(node);
+    });
+  }
+
+  const legend = document.createElement("p");
+  legend.className = "hint flow-legend";
+  legend.textContent = flow.truncated
+    ? `Showing the first ${flow.steps.length} of ${flow.total} messages — ` +
+      `${flow.truncated} not drawn. Narrow the identifier selection to see the rest.`
+    : "Solid is a request, dashed its response; a dotted arrow is a message received, " +
+      "and the bar beneath one is how long its receiver was still working on it. " +
+      "Pick any of them to filter the timeline to it.";
+  els.flowView.append(legend);
 }
 
 /** Switch view, keeping the button row in step. Does not render. */
@@ -1801,6 +2335,7 @@ function restText() {
 /** Everything currently shown, as text — what Copy, Download and Send hand over. */
 function shownText() {
   if (view === "rest") return model.spans.length === 0 ? "" : restText();
+  if (view === "flow") return shownFlow ? flowMermaid(shownFlow) : "";
   return shownGroups
     .map((group) => {
       const head = `# ${group.label}` +
@@ -1924,7 +2459,13 @@ for (const button of els.viewSwitch.querySelectorAll("[data-view]")) {
   });
 }
 
-els.linkAliases.addEventListener("change", render);
+// The identifier groups follow the same alias link the timeline's grouping does,
+// so this one has to rebuild the sidebar list too — `render()` redraws the
+// timeline and leaves the facet lists alone.
+els.linkAliases.addEventListener("change", () => {
+  renderIds();
+  render();
+});
 els.restOnly.addEventListener("change", render);
 els.badOnly.addEventListener("change", render);
 // Typing filters are debounced; the discrete controls above re-render at once.
@@ -2164,7 +2705,7 @@ els.copy.addEventListener("click", async () => {
     return;
   }
   await navigator.clipboard.writeText(text);
-  showToast("Copied what's shown.");
+  showToast(view === "flow" ? "Copied the flow as Mermaid." : "Copied what's shown.");
 });
 
 els.copyPinned.addEventListener("click", async () => {
@@ -2183,8 +2724,8 @@ els.download.addEventListener("click", () => {
     showToast("Nothing to download.");
     return;
   }
-  download(text, downloadName("log"));
-  showToast("Downloaded what's shown.");
+  download(text, downloadName(view === "flow" ? "mmd" : "log"));
+  showToast(view === "flow" ? "Downloaded the flow as Mermaid." : "Downloaded what's shown.");
 });
 
 els.downloadPinned.addEventListener("click", () => {
@@ -2240,6 +2781,15 @@ registerCommands([
     title: "Log Analysis: group by request",
     run: () => pickGroup("request"),
     keywords: ["request", "requestid", "group"],
+  },
+  {
+    icon: TOOL_ICONS.loganalysis,
+    title: "Log Analysis: flow diagram",
+    run: () => {
+      setView("flow");
+      applyView();
+    },
+    keywords: ["flow", "sequence", "diagram", "mermaid", "trace", "service", "call"],
   },
   {
     icon: TOOL_ICONS.loganalysis,

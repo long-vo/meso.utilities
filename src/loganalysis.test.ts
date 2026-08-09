@@ -23,6 +23,7 @@ import {
   foldRestSpans,
   formatMs,
   gapStats,
+  groupIds,
   indexIds,
   mergeSources,
   parseMdc,
@@ -40,6 +41,7 @@ import {
   summarize,
 } from "../static/loganalysis/loganalysis.mjs";
 import { gunzip, unzipEntries } from "../static/loganalysis/unzip.mjs";
+import { foldWebhooks } from "../static/loganalysis/webhooks.mjs";
 
 function assertEquals(actual: unknown, expected: unknown, msg?: string): void {
   const a = JSON.stringify(actual);
@@ -826,6 +828,129 @@ Deno.test("analyse: an empty source list yields an empty, usable result", () => 
   assertEquals(result.spans, []);
   assertEquals(result.summary.records, 0);
   assertEquals(rankedIds(result.index), []);
+  assertEquals(groupIds(result.records, result.spans, result.index, result.aliases), []);
+});
+
+/* ------------------------- identifier groups ------------------------- */
+
+Deno.test("groupIds: files a call's ids under the same key the timeline groups by", () => {
+  const { records, spans, index, aliases } = analyse(ALL_SOURCES);
+  const groups = groupIds(records, spans, index, aliases);
+  // REST_LOG's calls are to /baloiseid/cases/<CASE>, and CASE resolves to
+  // GOB_DOSSIER through the alias map — the same resolution correlationOf does,
+  // which is the whole point of reusing it.
+  const anchored = groups.filter((group) => group.key !== "");
+  assert(anchored.length > 0, "at least one group is anchored on a correlation id");
+  for (const group of anchored) {
+    const first = records.find((record) => record.ids.includes(group.ids[0].value))!;
+    assert(first !== undefined, `${group.title} names ids the log actually has`);
+  }
+  const gob = groups.find((group) => group.key === GOB_DOSSIER);
+  assert(gob !== undefined, "the dossier the REST calls belong to has its own group");
+  assert(gob!.calls > 0, "and it was formed by REST calls");
+  assert(gob!.ids.some((facet) => facet.value === CASE), "the case travelled with it");
+});
+
+Deno.test("groupIds: the heading names the anchor by its label", () => {
+  const { records, spans, index, aliases } = analyse(ALL_SOURCES);
+  const gob = groupIds(records, spans, index, aliases).find((g) => g.key === GOB_DOSSIER)!;
+  assert(gob.title.includes(GOB_DOSSIER), "the heading carries the id");
+  assert(/^(dossierId|extCaseId) /.test(gob.title), `labelled heading, got "${gob.title}"`);
+});
+
+Deno.test("groupIds: records the services a group's calls went to", () => {
+  const { records, spans, index, aliases } = analyse(ALL_SOURCES);
+  const groups = groupIds(records, spans, index, aliases);
+  const withCalls = groups.filter((group) => group.calls > 0);
+  assert(withCalls.length > 0, "some group was formed by calls");
+  assert(
+    withCalls.every((group) => group.services.length > 0),
+    "a group formed by calls names the services they went to",
+  );
+  assert(
+    withCalls.some((group) => group.services.includes("baloise-id")),
+    "and baloise-id is among them",
+  );
+});
+
+Deno.test("groupIds: inbound messages relate ids the same way a REST call does", () => {
+  // A whole integration can be webhook-only — the onboarding flow logs no
+  // `Invoking REST service` line at all — and grouping that log by calls alone
+  // would file every id under the catch-all.
+  const inbound = [
+    "[2026-05-15 10:00:00.000][INFO ][runtimelog.bank.bank-api.user_code][t-1]{application=bank}",
+    "Received webhook notification. notification = class BaloiseIdNotificationRequest {",
+    "    notificationId: 11111111-1111-4111-8111-111111111111",
+    "    notificationType: IDENTIFICATION_STATUS",
+    `    notificationData: {"extCaseId":"${DOSSIER}","status":"VERIFICATION_PENDING"}`,
+    "}",
+  ].join("\n");
+  const alt = analyse([{ file: "hook.log", text: inbound }]);
+  const events = foldWebhooks(alt.records);
+  const bare = groupIds(alt.records, alt.spans, alt.index, alt.aliases, true);
+  assertEquals(bare[0].title, "No calls or messages", "without events, nothing relates them");
+  const withEvents = groupIds(alt.records, alt.spans, alt.index, alt.aliases, true, events);
+  const anchored = withEvents.find((group) => group.key === DOSSIER);
+  assert(anchored !== undefined, "the webhook filed its ids under the dossier it named");
+  assertEquals(anchored!.received, 1);
+  assertEquals(anchored!.calls, 0);
+  assertEquals(anchored!.services, ["BaloiseId"], "the sender is the other party");
+});
+
+Deno.test("groupIds: ids no exchange mentions collect in a trailing group", () => {
+  const { records, spans, index, aliases } = analyse(ALL_SOURCES);
+  const groups = groupIds(records, spans, index, aliases);
+  const last = groups[groups.length - 1];
+  assertEquals(last.title, "No calls or messages");
+  assertEquals(last.calls, 0);
+  assertEquals(last.services, []);
+  // Nothing is lost: every indexed id is in exactly one bucket or another.
+  const listed = new Set(groups.flatMap((group) => group.ids.map((facet) => facet.value)));
+  for (const value of index.keys()) {
+    assert(listed.has(value), `${value} is listed somewhere`);
+  }
+});
+
+Deno.test("groupIds: the alias link moves the sidebar groups and the timeline together", () => {
+  const { records, spans, index, aliases } = analyse(ALL_SOURCES);
+  const linked = groupIds(records, spans, index, aliases, true);
+  const unlinked = groupIds(records, spans, index, aliases, false);
+  // Unlinked, a call naming only the case can no longer reach its dossier, so it
+  // files under the case itself — exactly what the timeline does with Link off.
+  assert(
+    linked.some((group) => group.key === GOB_DOSSIER),
+    "linked, the calls file under the dossier",
+  );
+  assert(
+    unlinked.some((group) => group.key === CASE),
+    "unlinked, they file under the case they name",
+  );
+});
+
+Deno.test("groupIds: busiest group first, catch-alls last", () => {
+  const { records, spans, index, aliases } = analyse(ALL_SOURCES);
+  const groups = groupIds(records, spans, index, aliases);
+  const anchored = groups.filter((group) => group.key !== "");
+  for (let i = 1; i < anchored.length; i++) {
+    assert(anchored[i - 1].calls >= anchored[i].calls, "anchored groups sort by call count");
+  }
+  const titles = groups.map((group) => group.title);
+  const catchAll = titles.findIndex((title) =>
+    title === "Unattributed" || title === "No calls or messages"
+  );
+  if (catchAll !== -1) {
+    assert(
+      titles.slice(catchAll).every((t) => t === "Unattributed" || t === "No calls or messages"),
+      "nothing anchored sorts below a catch-all",
+    );
+  }
+});
+
+Deno.test("groupIds: every group has a unique fold key", () => {
+  const { records, spans, index, aliases } = analyse(ALL_SOURCES);
+  const groups = groupIds(records, spans, index, aliases);
+  const slugs = groups.map((group) => group.slug);
+  assertEquals(new Set(slugs).size, slugs.length, "both catch-alls share key '' but not slug");
 });
 
 /* ------------------------- Spring Boot console logs ------------------------- */

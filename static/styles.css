@@ -6117,6 +6117,71 @@ button.out:focus-visible::after {
   max-height: 320px;
   overflow-y: auto;
 }
+/* ---- sidebar: identifier groups ---- */
+/* Identifiers filed under the dossier whose REST calls relate them. Folded by
+   their own heading with the chevron at the right edge, following the same
+   convention as the field headings above — but *not* wearing their
+   `background-clip: text` gradient: these sit one level inside a field body, and
+   reading as equal to "Identifiers" would flatten the hierarchy. */
+.page-loganalysis .id-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.page-loganalysis .id-group + .id-group {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border);
+}
+.page-loganalysis .id-group-head {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 2px 2px 3px;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-dim);
+}
+.page-loganalysis .id-group-head:hover {
+  color: var(--text);
+}
+.page-loganalysis .id-group-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+.page-loganalysis .id-group-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+.page-loganalysis .id-group-head .caret {
+  flex: none;
+  font-size: 9px;
+  color: var(--text-faint);
+}
+.page-loganalysis .id-group-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--la-meta);
+}
+.page-loganalysis .id-group-on {
+  flex: none;
+  color: var(--accent);
+}
+.page-loganalysis .id-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
 .page-loganalysis .id-row {
   display: flex;
   flex-direction: column;
@@ -6948,6 +7013,141 @@ button.out:focus-visible::after {
 }
 .page-loganalysis .rest-sort.is-on {
   color: var(--accent);
+}
+
+/* ------------------------------- flow view -------------------------------
+   The selected identifiers' REST calls as a sequence diagram. Hand-drawn SVG
+   rather than a diagram library: `static/` ships no dependencies and has no
+   build step, and everything else visual here (the density strip, the card art)
+   is drawn the same way.
+   A diagram this wide scrolls inside its own box — four services is 896px of
+   lanes, and the page itself must never scroll sideways. */
+.page-loganalysis .log-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.page-loganalysis .flow-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+  padding-bottom: 4px;
+}
+.page-loganalysis .log-flow svg {
+  display: block;
+}
+/* Markers do not inherit paint from the line that references them, so the two
+   arrowheads are coloured here rather than on `.flow-req`. */
+.page-loganalysis .log-flow marker path {
+  fill: var(--text-dim);
+}
+.page-loganalysis .log-flow marker path.is-bad {
+  fill: var(--danger);
+}
+.page-loganalysis .flow-lane-box {
+  fill: var(--bg-inset);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+.page-loganalysis .flow-lane {
+  fill: var(--text);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+}
+.page-loganalysis .flow-life {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+.page-loganalysis .flow-ts {
+  fill: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.page-loganalysis .flow-req {
+  stroke: var(--text-dim);
+  stroke-width: 1.4;
+  fill: none;
+}
+.page-loganalysis .flow-ret {
+  stroke: var(--text-dim);
+  stroke-width: 1.2;
+  stroke-dasharray: 5 4;
+  fill: none;
+}
+.page-loganalysis .flow-ret.is-bad {
+  stroke: var(--danger);
+  stroke-width: 1.4;
+}
+/* The activation bar: how long a webhook's receiver was still working on it.
+   Translucent rather than solid so the lifeline and any arrowhead landing on it
+   stay readable underneath — it is a span of time, not an object in front. */
+.page-loganalysis .flow-act {
+  fill: color-mix(in srgb, var(--accent) 22%, transparent);
+  stroke: var(--accent);
+  stroke-width: 1;
+}
+.page-loganalysis .flow-fin {
+  fill: var(--accent);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+/* A message received rather than a call made. Dotted along its whole length,
+   because it is one-way: nothing was sent back, so there is no reply arrow to
+   distinguish it from. Tinted with the accent so a glance separates "this system
+   was told something" from "this system asked for something". */
+.page-loganalysis .flow-async {
+  stroke: var(--accent);
+  stroke-dasharray: 1 3;
+}
+/* A call nothing answered: a stub, not an arrow, and dotted rather than dashed
+   so it reads as cut off instead of merely returned. */
+.page-loganalysis .flow-unanswered {
+  stroke: var(--danger);
+  stroke-dasharray: 2 4;
+}
+.page-loganalysis .flow-label {
+  fill: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.page-loganalysis .flow-result {
+  fill: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+.page-loganalysis .flow-result.is-bad {
+  fill: var(--danger);
+}
+.page-loganalysis .flow-band {
+  fill: color-mix(in srgb, var(--danger) 9%, transparent);
+}
+/* The hit target *and* the hover tint, in one rect: an SVG group only takes
+   pointer events where something is painted, so without this a click between a
+   step's arrow and its label would fall through to the background. */
+.page-loganalysis .flow-hit {
+  fill: var(--accent);
+  opacity: 0;
+}
+.page-loganalysis .flow-step {
+  cursor: pointer;
+}
+.page-loganalysis .flow-step:hover .flow-hit {
+  opacity: 0.07;
+}
+.page-loganalysis .flow-step:focus-visible {
+  outline: none;
+}
+.page-loganalysis .flow-step:focus-visible .flow-hit {
+  opacity: 0.12;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+.page-loganalysis .flow-legend {
+  margin: 0;
 }
 
 /* Side by side, but with the sidebar's 340px already spent: the thread is the

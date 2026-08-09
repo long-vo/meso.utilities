@@ -241,6 +241,8 @@
             aria-pressed="true">Timeline</button>
           <button class="mode-btn" type="button" data-view="rest" aria-pressed="false"
             title="Every REST call as a sortable table, with per-service latency">REST calls</button>
+          <button class="mode-btn" type="button" data-view="flow" aria-pressed="false"
+            title="The selected identifiers' calls as a service sequence diagram">Flow</button>
         </div>
         <div class="result-tools">
           <span id="counts" class="status" aria-live="polite"></span>
@@ -289,6 +291,11 @@
           log into the sidebar. Everything is parsed in this tab; nothing is uploaded.</p>
       </div>
       <div id="rest-view" class="rest-view" role="region" aria-label="REST calls" hidden></div>
+      <!-- The selected identifiers' REST calls as a sequence diagram. Driven by
+           the identifier selection alone, never the other filters — see the note
+           on buildFlow in flow.mjs. -->
+      <div id="flow-view" class="log-flow" role="region" aria-label="Service call flow" hidden>
+      </div>
     </section>
   </main>
 

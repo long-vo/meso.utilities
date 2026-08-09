@@ -202,6 +202,9 @@ export function detectLevel(line) {
  * @property {string[]} ids identifier values mentioned anywhere in the record
  * @property {{ label: string, value: string }[]} labelled labelled id occurrences
  * @property {number} span index into the span list, or -1
+ * @property {number} [webhook] index into the webhook event list, when the record
+ *   is part of one. Optional rather than defaulted to -1 like `span`, so folding
+ *   the inbound messages did not have to touch all four record constructors.
  */
 
 /**
@@ -631,6 +634,28 @@ export function spanSummary(span) {
   const status = span.complete ? (span.status ?? "?") : "no response";
   const took = span.ms === null ? "" : ` · ${formatMs(span.ms)}`;
   return `${span.method} ${span.url} → ${status}${took}`;
+}
+
+/**
+ * A span's URL trimmed to what identifies the call: the path and query, with a
+ * long path truncated from the *left*. These URLs end in the part that differs
+ * (`/cases/5a3c…/files.zip`); cutting the tail would leave every call to one
+ * service looking identical.
+ *
+ * A URL that will not parse — a relative path, a template still carrying `{id}` —
+ * is handed back untouched rather than mangled.
+ * @param {string} url
+ * @returns {string}
+ */
+export function shortUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname.length > 48
+      ? `…${parsed.pathname.slice(-48)}${parsed.search}`
+      : parsed.pathname + parsed.search;
+  } catch {
+    return url;
+  }
 }
 
 /**
@@ -1161,6 +1186,7 @@ export function buildGroups(records, options = {}) {
  * @property {boolean} [badOnly] non-2xx or unanswered REST calls
  * @property {number} [minMs] slower-than threshold for REST calls
  * @property {number[]} [spanIds] only the records of these REST calls
+ * @property {number[]} [webhookIds] only the records of these inbound events
  * @property {number | null} [fromMs] time window start, inclusive
  * @property {number | null} [toMs] time window end, inclusive
  */
@@ -1226,6 +1252,14 @@ export function filterRecords(records, filters = {}, spans = []) {
     // record belonging to no span is excluded rather than passed through.
     if (filters.spanIds && filters.spanIds.length) {
       if (record.span === -1 || !filters.spanIds.includes(record.span)) return false;
+    }
+    // Same contract as spanIds: picking one inbound event out of the Flow view
+    // narrows to exactly its records, so a record belonging to none is excluded
+    // rather than passed through.
+    if (filters.webhookIds && filters.webhookIds.length) {
+      if (record.webhook === undefined || !filters.webhookIds.includes(record.webhook)) {
+        return false;
+      }
     }
     if (filters.restOnly && !span) return false;
     if (filters.badOnly) {
@@ -1438,17 +1472,193 @@ export function analyse(sources) {
  * @returns {IdFacet[]}
  */
 export function rankedIds(index, limit = 400) {
+  return [...index.values()].sort(byRank).slice(0, limit);
+}
+
+/**
+ * How near the top of a filter list an id belongs: dossier, then case, then any
+ * other labelled id, then the bare ones a UUID sweep found.
+ * @param {IdFacet} facet
+ * @returns {number}
+ */
+function idWeight(facet) {
+  if (facet.labels.some((label) => inList(DOSSIER_LABELS, label))) return 0;
+  if (facet.labels.some((label) => inList(CASE_LABELS, label))) return 1;
+  return facet.labels.length ? 2 : 3;
+}
+
+/**
+ * The order the filter list shows ids in, flat or grouped — shared so a group's
+ * members rank the same way the ungrouped list did.
+ * @param {IdFacet} a
+ * @param {IdFacet} b
+ * @returns {number}
+ */
+function byRank(a, b) {
+  return idWeight(a) - idWeight(b) || b.count - a.count || a.value.localeCompare(b.value);
+}
+
+/**
+ * @typedef {Object} IdGroup
+ * @property {string} key the correlation id the group is filed under, `""` for
+ *   the two catch-alls
+ * @property {string} slug unique per group — both catch-alls share an empty
+ *   `key`, so the fold state keys off this instead
+ * @property {string} title what the group heading reads
+ * @property {IdFacet[]} ids members, ranked
+ * @property {number} calls REST calls that formed the group
+ * @property {number} received inbound messages that formed the group
+ * @property {string[]} services the other party in those exchanges
+ */
+
+/**
+ * The identifiers grouped by the REST calls that relate them.
+ *
+ * A REST call is the evidence: the ids its four records mention travelled through
+ * that call together, so they belong on screen together. Each call is filed under
+ * {@link correlationOf} — the *same* key the timeline's Dossier grouping uses — so
+ * the groups in the sidebar and the groups in the timeline are the same groups,
+ * and the "Link cases to dossier" switch moves both. Inventing a second scheme
+ * here would give two different answers to "what belongs with this dossier".
+ *
+ * Two catch-alls, kept apart because they mean different things and lead
+ * different places: ids that are in REST calls but under no dossier or case
+ * (**Unattributed**, matching the timeline's trailing group), and ids no REST
+ * call mentions at all (**No REST calls** — the Flow view has nothing to draw for
+ * these, which is worth knowing before you pick one). Both sort last.
+ *
+ * Note what this deliberately does *not* do: link ids transitively. One id riding
+ * on every call — a tenant id, an auth token id — would fuse every dossier into a
+ * single useless group, which is the same trap {@link CASE_LABELS} stays narrow to
+ * avoid. Anchoring on a correlation key cannot degenerate that way. The cost is
+ * that an id genuinely shared across dossiers is listed under each of them, which
+ * is the truth rather than a duplicate.
+ * @param {LogRecord[]} records the merged set
+ * @param {RestSpan[]} spans
+ * @param {Map<string, IdFacet>} index
+ * @param {Map<string, string>} aliases
+ * @param {boolean} [link] follow the alias map, as the timeline does
+ * @param {import("./webhooks.mjs").WebhookEvent[]} [events] inbound messages,
+ *   which relate ids exactly as a REST call does — a whole integration can be
+ *   webhook-only, and grouping that log by calls alone would file every id under
+ *   "nothing to see here"
+ * @returns {IdGroup[]}
+ */
+export function groupIds(records, spans, index, aliases, link = true, events = []) {
+  /** @type {Map<string, { ids: Set<string>, calls: number, received: number,
+   *   services: Set<string> }>} */
+  const bins = new Map();
+  /** Every id an exchange mentions, so the leftovers can be worked out. */
+  const inCalls = new Set();
+
+  /** @type {{ records: number[], service: string, inbound: boolean }[]} */
+  const exchanges = [
+    ...(spans ?? []).map((span) => ({
+      records: span.records,
+      service: span.service,
+      inbound: false,
+    })),
+    // The sender is the other party, the way a span's callee is.
+    ...(events ?? []).map((event) => ({
+      records: event.records,
+      service: event.from || "inbound",
+      inbound: true,
+    })),
+  ];
+
+  for (const span of exchanges) {
+    const own = span.records.map((i) => records[i]).filter(Boolean);
+    if (own.length === 0) continue;
+    // A span's records are one call, so they agree on a correlation; the first
+    // that resolves one is the call's. Ivy logs the dossier on the invoking line
+    // sometimes and only in the response body other times.
+    let key = "";
+    for (const record of own) {
+      const found = correlationOf(record, index, aliases, link);
+      if (found) {
+        key = found;
+        break;
+      }
+    }
+    let bin = bins.get(key);
+    if (!bin) {
+      bin = { ids: new Set(), calls: 0, received: 0, services: new Set() };
+      bins.set(key, bin);
+    }
+    if (span.inbound) bin.received++;
+    else bin.calls++;
+    if (span.service) bin.services.add(span.service);
+    for (const record of own) {
+      for (const value of record.ids) {
+        bin.ids.add(value);
+        inCalls.add(value);
+      }
+    }
+  }
+
   /**
-   * How near the top of the filter list an id belongs.
-   * @param {IdFacet} facet
-   * @returns {number}
+   * The ranked facets for a set of id values. A value with no facet cannot arise
+   * — {@link indexIds} indexes every id a record carries — but the lookup is
+   * narrowed rather than asserted.
+   * @param {Iterable<string>} values
+   * @returns {IdFacet[]}
    */
-  const weight = (facet) => {
-    if (facet.labels.some((label) => inList(DOSSIER_LABELS, label))) return 0;
-    if (facet.labels.some((label) => inList(CASE_LABELS, label))) return 1;
-    return facet.labels.length ? 2 : 3;
+  const facetsOf = (values) => {
+    /** @type {IdFacet[]} */
+    const out = [];
+    for (const value of values) {
+      const facet = index.get(value);
+      if (facet) out.push(facet);
+    }
+    return out.sort(byRank);
   };
-  return [...index.values()]
-    .sort((a, b) => weight(a) - weight(b) || b.count - a.count || a.value.localeCompare(b.value))
-    .slice(0, limit);
+
+  /** @type {IdGroup[]} */
+  const groups = [];
+  for (const [key, bin] of bins) {
+    if (!key) continue;
+    const facet = index.get(key);
+    const label = facet?.labels[0] ?? "";
+    groups.push({
+      key,
+      slug: `id:${key}`,
+      title: label ? `${label} ${key}` : key,
+      ids: facetsOf(bin.ids),
+      calls: bin.calls,
+      received: bin.received,
+      services: [...bin.services],
+    });
+  }
+  // Anchored groups first, the busiest at the top — the dossier with the most
+  // traffic is where an investigation starts.
+  groups.sort((a, b) =>
+    (b.calls + b.received) - (a.calls + a.received) || a.title.localeCompare(b.title)
+  );
+
+  const loose = bins.get("");
+  if (loose && loose.ids.size) {
+    groups.push({
+      key: "",
+      slug: "unattributed",
+      title: "Unattributed",
+      ids: facetsOf(loose.ids),
+      calls: loose.calls,
+      received: loose.received,
+      services: [...loose.services],
+    });
+  }
+
+  const rest = [...index.keys()].filter((value) => !inCalls.has(value));
+  if (rest.length) {
+    groups.push({
+      key: "",
+      slug: "no-rest",
+      title: "No calls or messages",
+      ids: facetsOf(rest),
+      calls: 0,
+      received: 0,
+      services: [],
+    });
+  }
+  return groups;
 }

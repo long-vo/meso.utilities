@@ -20,8 +20,10 @@ everything here runs entirely in your browser and deploys to GitHub Pages.
   **problem** folds four hundred ERROR rows into the handful of distinct failures they really are,
   each naming its root cause and the dossiers it touched; a pause that is out of character for its
   group is called out where it happened; and **± Context** brings back the neighbouring records a
-  filter hid. Pin the records that tell the story and copy them as a Markdown ticket comment. Runs
-  fully client-side; logs are never stored.
+  filter hid. Pick an identifier and a **Flow** view draws that dossier's REST calls _and_ the
+  webhooks it received as a service sequence diagram, copyable as Mermaid for a ticket. Pin the
+  records that tell the story and copy them as a Markdown ticket comment. Runs fully client-side;
+  logs are never stored.
 - **Leave Request** (`/leave/`) — fill one small form and get the two artifacts the team's leave
   process needs: the pre-formatted HR leave-request email (step 1) and the Outlook calendar event
   (step 2), with one-click hand-offs to your mail app and to Outlook. Runs fully client-side.
@@ -158,6 +160,21 @@ record, and text with no timestamps at all is shown as-is rather than refused.
 finds it everywhere else; filtering matches the value, so none of those four are missed. Values that
 are a run of `*` are skipped, so a sanitized log grows no mask-shaped filters.
 
+**The identifier list is grouped by the REST calls that relate them.** A call's four records mention
+a set of ids that travelled through it together, so they belong on screen together. Each call is
+filed under the same key the timeline's dossier grouping uses, which means the groups in the sidebar
+and the groups in the timeline are the same groups and the **Link cases to dossier** switch moves
+both — a second scheme here would give two different answers to "what belongs with this dossier".
+Inbound messages count as exchanges here exactly as calls do, so a webhook-only log groups just as
+well. Each group folds by its own heading and names how many ids it holds, how many calls and
+messages formed it and who the other party was; a folded group still shows how many of its ids are
+filtering the view. Two catch-alls sort last and mean different things: **Unattributed** (in an
+exchange, but under no dossier or case) and **No calls or messages** — for the latter the Flow view
+has nothing to draw, which is worth knowing before you pick one. Ids are deliberately _not_ linked
+transitively: one id riding on every call, a tenant or auth id, would fuse every dossier into a
+single useless group. The cost is that an id genuinely shared across dossiers is listed under each,
+which is the truth rather than a duplicate.
+
 **Cases are linked to their dossier.** A record carrying both `ubiIdCaseId: 8df4…` and
 `extCaseId: 5dad…` teaches that the case belongs to that dossier, so records naming only the case
 join the dossier's group — which is what makes several application logs read as one flow. Only
@@ -209,6 +226,44 @@ different places — and a call with no readable duration is kept out of the per
 folded in as 0 ms, which would report a hung integration as the fastest thing in the log.
 Percentiles are nearest-rank, so every figure names a call you can find in the table under it. Pick
 any call to take its records back to the timeline as a removable filter.
+
+**A flow view draws one dossier's traffic as a sequence diagram.** Select an identifier and the
+**Flow** view puts each application and service in its own lane, every exchange an arrow in time
+order — the "who called whom, in what order, and where did it break" picture the table cannot give.
+Outbound REST calls carry method, path, status and latency. **Inbound notifications and webhooks are
+drawn too**, which matters because whole integrations make no REST call at all: the onboarding flow
+is one system pushing a status into the next, and to a REST-only reader its log looks empty when it
+is in fact the entire story. Those arrive as dotted one-way arrows carrying the business status —
+SCHEDULED → INITIALIZED → VERIFICATION_PENDING → VERIFICATION_CONFIRMED → SIGNED → DOWNLOADED reads
+straight down the page. `Received webhook notification` pairs with `Handled webhook notification` on
+the `notificationId` both carry — not on thread order, because they overlap — so the diagram shows
+real handling time, and a webhook that was received and never handled is flagged the way an
+unanswered REST call is. **How long that handling took is drawn, not just printed**: a bar runs down
+the receiver's lifeline from the message's row to the row its `Handled` line falls on, labelled with
+the finish timestamp. That is the thing a duration on one row cannot say — in these logs one webhook
+takes 13 s, during which the next notification arrives and the next webhook is received, and without
+the bar those read as a tidy sequence instead of as overlap. A bar that opens while another is still
+running on the same lane steps sideways, so two concurrent handlings are two bars. Rows are ordered
+by time but not scaled to it, so a bar's foot is placed proportionally between the rows its finish
+falls between: the end lands correctly _relative to the other events_, though bar lengths are not to
+scale with one another. Scaling rows to time instead would tear the diagram apart on any log with a
+quiet stretch — and these have a three-minute one. A message the receiver said it was ignoring is
+annotated rather than coloured as a failure: skipping a status you do not act on is routine, and
+reddening six of those would make a healthy log look like an incident. A sender the log never names
+— the upstream pushing into the first hop — arrives from a single `inbound` lane rather than an
+invented system name. A call joins the flow when _any_ record of it mentions the id, which matters
+because the dossier id usually appears in a request body rather than the URL. **A system's two
+spellings are one lane**: a service is named once by itself (`application=baloise-id`) and once by
+whoever calls it, out of that caller's REST client config (`Invoking REST service
+baloiseId`) —
+keyed literally those become two lanes and the diagram falls into disconnected halves, so lanes
+match on the name with case folded and separators dropped, and the system's own name wins the label.
+Only the identifier selection drives it — level, search, application and the time window are ignored
+on purpose, since narrowing to ERROR is exactly when the whole flow is worth keeping. A 2xx return
+stays neutral and only failures take the error colour, so a forty-call flow can still be scanned;
+never-answered calls get a stub and a note rather than a return arrow they never sent. Pick any step
+to filter the timeline to that call. **Copy as Mermaid** hands over `sequenceDiagram` source for a
+Jira comment or a Confluence page, and the download button writes it as `.mmd`.
 
 **Reading and reporting.** A density strip above the timeline shows where records — and errors —
 cluster; drag across it (or click one slice) to filter the view to a window, shown as a removable
@@ -587,6 +642,8 @@ src/
   logview.test.ts     log-view numbering/level/search tests (import the module from static/)
   loganalysis.test.ts log parsing/id-extraction/grouping tests (from static/loganalysis/)
   problems.test.ts    throwable-parsing and error-clustering tests (from static/loganalysis/)
+  flow.test.ts        flow-diagram step/lane and Mermaid tests (from static/loganalysis/)
+  webhooks.test.ts    inbound notification/webhook folding tests (from static/loganalysis/)
   suggest.test.ts     sensitive-field suggestion tests (import the module from static/)
   encode.test.ts      encode-chain parity tests (roundtrip through decode.mjs)
   jwt.test.ts         JWT verification tests (import the module from static/decode/)
@@ -629,6 +686,8 @@ static/
     app.js            timeline UI logic (imports ./loganalysis.mjs)
     loganalysis.mjs   record parsing, id index, REST spans, grouping (browser and tests)
     problems.mjs      throwable parsing, message normalising, error clustering
+    webhooks.mjs      inbound notifications/webhooks folded into events
+    flow.mjs          selected ids' exchanges as a service sequence + Mermaid source
   leave/
     index.html        Leave Request UI
     app.js            leave UI logic (imports ./leave.mjs)
