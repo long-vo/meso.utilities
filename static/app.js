@@ -1,7 +1,7 @@
 // meso.utilities — browser UI for the JSON sanitizer.
 // Imports the SAME masking module the server uses, so results are identical and
 // the payload never has to leave the page.
-import { parseFields, runSanitize, runSanitizeLog } from "./sanitize.mjs";
+import { collectLogFields, parseFields, runSanitize, runSanitizeLog } from "./sanitize.mjs";
 import { buildRows, filterRows, linesAligned, presentLevels, rowHtml } from "./logview.mjs";
 import { changedCount, pairLineDiff } from "./diff.mjs";
 import { suggestSensitiveFields } from "./suggest.mjs";
@@ -12,7 +12,8 @@ import { escapeHtml, highlightJson, makeToast } from "./ui.mjs";
 const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
 const els = {
-  fields: /** @type {HTMLInputElement} */ ($("fields")),
+  fields: /** @type {HTMLTextAreaElement} */ ($("fields")),
+  resetFields: $("reset-fields"),
   keepRange: /** @type {HTMLInputElement} */ ($("keep-range")),
   keepNum: /** @type {HTMLInputElement} */ ($("keep-num")),
   input: /** @type {HTMLTextAreaElement} */ ($("input")),
@@ -59,9 +60,12 @@ const KEEP_MAX = 12;
 /** Input length (~1 MB) above which masking gets a busy hint and a longer
  *  debounce, since it runs synchronously on the main thread. */
 const LARGE_INPUT = 1_000_000;
+/** localStorage key for the remembered field list. Only the list of key *names*
+ *  is stored — never the payload, which is the sensitive half. */
+const FIELDS_KEY = "meso-sanitize-fields";
 
 const EXAMPLE = {
-  fields: "lastName, email, phoneNumber, token, iban",
+  fields: "lastName, email, phoneNumber, firstName, iban",
   keepLast: 4,
   json: {
     customer: {
@@ -85,11 +89,19 @@ const EXAMPLE = {
   },
 };
 
+/**
+ * Chosen so the default field list has something to bite on: `firstName` and
+ * `lastName` are masked on load (Java dump lines), while `customerEmail` is not
+ * in the default list and so turns up under Suggested fields — masking matches
+ * keys exactly, so it is a genuine miss rather than a near-match of `email`.
+ */
 const LOG_EXAMPLE = [
-  "[2026-07-10 04:12:39.550][INFO ][runtimelog.baloise-id]{application=baloise-id, client=172.31.138.81, requestId=15317}",
+  "[2026-07-10 04:12:39.550][INFO ][runtimelog.baloise-id]{application=baloise-id, client=172.31.138.81, customerEmail=jara.weber@example.com, requestId=15317}",
   "Received notification: class IdentificationNotificationRequest {",
   "    id: a0884b97-24df-4eaf-9077-d9f6b43629ee",
   "    tenantId: f346611c-6a34-4c32-b7d0-759f8299f8c4",
+  "    firstName: Jara",
+  "    lastName: Weber",
   "    status: VERIFICATION_CONFIRMED",
   "    language: null",
   "}",
@@ -260,17 +272,90 @@ function resetLogView() {
   els.logSearchCount.textContent = "";
 }
 
+/* ------------------------------ field list ------------------------------ */
+
+/** The remembered field list, or null when this browser has none stored. */
+function readFields() {
+  try {
+    return localStorage.getItem(FIELDS_KEY);
+  } catch {
+    return null; // storage unavailable; the default list stands in
+  }
+}
+
+function saveFields() {
+  try {
+    localStorage.setItem(FIELDS_KEY, els.fields.value);
+  } catch {
+    /* storage may be unavailable; the list just won't outlive the tab */
+  }
+}
+
+/**
+ * Replace the field list from code — a chip removal, Reset, or a suggestion —
+ * remembering it and recomputing. Typing saves from the textarea's own listener.
+ */
+function setFields(value) {
+  els.fields.value = value;
+  saveFields();
+  compute();
+}
+
+/** How the list is currently written, so edits keep its one-per-line layout. */
+const listSeparator = (value) => (value.includes("\n") ? "\n" : ", ");
+
+/** Restore the default list — the same one "Load example" fills in. */
+function resetFields() {
+  setFields(EXAMPLE.fields);
+}
+
+/**
+ * One removable chip per field name. The row is deduplicated case-insensitively,
+ * keeping the first spelling: masking lowercases every name, so `email` and
+ * `Email` are one field, and two chips that each removed the other would read as
+ * a bug. (The stats row already counts fields this way.)
+ */
 function renderChips(fields, matchedLower) {
   els.chips.innerHTML = "";
+  const seen = new Set();
   for (const name of fields) {
-    const chip = document.createElement("span");
-    chip.className = "chip";
+    const lower = name.toLowerCase();
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip chip-del";
     if (matchedLower) {
-      chip.classList.add(matchedLower.has(name.toLowerCase()) ? "matched" : "unused");
+      chip.classList.add(matchedLower.has(lower) ? "matched" : "unused");
     }
+    chip.setAttribute("aria-label", `Remove field: ${name}`);
     chip.textContent = name;
+    const mark = document.createElement("span");
+    mark.className = "chip-x-mark";
+    mark.setAttribute("aria-hidden", "true");
+    mark.textContent = "×";
+    chip.appendChild(mark);
+    const index = seen.size - 1;
+    chip.addEventListener("click", () => removeField(name, index));
     els.chips.appendChild(chip);
   }
+}
+
+/**
+ * Drop a field from the mask list. The chips are rendered off the #fields input,
+ * so removal rewrites that input rather than keeping state of its own — matching
+ * case-insensitively, because masking does.
+ *
+ * Focus is restored here and not in renderChips: that runs on every keystroke via
+ * the debounce, so refocusing there would pull focus out of the input mid-typing.
+ */
+function removeField(name, index) {
+  const lower = name.toLowerCase();
+  const kept = parseFields(els.fields.value).filter((f) => f.toLowerCase() !== lower);
+  setFields(kept.join(listSeparator(els.fields.value)));
+  const chips = els.chips.querySelectorAll("button");
+  if (chips.length === 0) els.fields.focus();
+  /** @type {HTMLElement} */ else chips[Math.min(index, chips.length - 1)].focus();
 }
 
 function renderStats(stats, fields) {
@@ -318,8 +403,7 @@ function renderSuggestions(suggestions) {
     chip.title = `${reason} — click to add it to the mask list`;
     chip.addEventListener("click", () => {
       const current = els.fields.value.trim().replace(/[,\s]+$/, "");
-      els.fields.value = current === "" ? name : `${current}, ${name}`;
-      compute();
+      setFields(current === "" ? name : `${current}${listSeparator(current)}${name}`);
     });
     els.suggestChips.appendChild(chip);
   }
@@ -396,10 +480,11 @@ function computeLog() {
 
   els.input.classList.remove("invalid");
   els.inputError.textContent = "";
-  renderChips(maskAll ? [] : fields, null);
-  renderSuggestions([]);
 
   if (text.trim() === "") {
+    // Nothing to match against yet, so the chips stay untinted.
+    renderChips(maskAll ? [] : fields, null);
+    renderSuggestions([]);
     els.inputStatus.textContent = "";
     els.inputStatus.className = "status";
     els.output.innerHTML = `<span class="j-null">// attach or paste a log to begin</span>`;
@@ -416,6 +501,14 @@ function computeLog() {
     fields,
   });
   lastOutput = result.text;
+
+  // Tinted the same way as the JSON path — matched fields amber, unused dimmed.
+  renderChips(
+    maskAll ? [] : fields,
+    new Set(result.stats.matchedKeys.map((k) => k.toLowerCase())),
+  );
+  // With "mask all" on every value goes regardless, so there is nothing to suggest.
+  renderSuggestions(maskAll ? [] : suggestSensitiveFields(collectLogFields(text), fields));
 
   const { blocks, maskedValues, patternHits } = result.stats;
   const total = maskedValues + patternHits;
@@ -468,7 +561,11 @@ function scheduleCompute() {
 
 /* ------------------------------- actions -------------------------------- */
 
-function loadExample() {
+/**
+ * @param {boolean} [withFields] Pass false to leave the field list alone — the
+ *   startup call does that so a remembered list outranks the example's.
+ */
+function loadExample(withFields = true) {
   if (mode === "log") {
     els.input.value = LOG_EXAMPLE;
     logFileName = "";
@@ -476,7 +573,10 @@ function loadExample() {
     compute();
     return;
   }
-  els.fields.value = EXAMPLE.fields;
+  if (withFields) {
+    els.fields.value = EXAMPLE.fields;
+    saveFields();
+  }
   els.keepNum.value = String(EXAMPLE.keepLast);
   els.keepRange.value = String(Math.min(KEEP_MAX, EXAMPLE.keepLast));
   els.input.value = JSON.stringify(EXAMPLE.json, null, 2);
@@ -486,6 +586,7 @@ function loadExample() {
 function clearAll() {
   els.input.value = "";
   els.fields.value = "";
+  saveFields(); // an emptied list is a choice worth remembering; Reset brings the default back
   logFileName = "";
   els.logfileName.textContent = "or paste log text below";
   compute();
@@ -541,7 +642,10 @@ function sendResultTo(target) {
 
 /* --------------------------------- wire --------------------------------- */
 
-els.fields.addEventListener("input", scheduleCompute);
+els.fields.addEventListener("input", () => {
+  saveFields();
+  scheduleCompute();
+});
 els.input.addEventListener("input", scheduleCompute);
 els.minify.addEventListener("change", compute);
 els.diff.addEventListener("change", compute);
@@ -622,7 +726,9 @@ editorPanel.addEventListener("drop", (e) => {
   loadLogFile(file);
 });
 
-els.loadExample.addEventListener("click", loadExample);
+// Wrapped: a bare listener would hand loadExample the MouseEvent as `withFields`.
+els.loadExample.addEventListener("click", () => loadExample());
+els.resetFields.addEventListener("click", resetFields);
 els.clear.addEventListener("click", clearAll);
 els.copy.addEventListener("click", copyResult);
 els.download.addEventListener("click", downloadResult);
@@ -650,7 +756,7 @@ registerCommands([
       compute();
     },
   },
-  { icon: "✨", title: "Load example", hint: "action", run: loadExample },
+  { icon: "✨", title: "Load example", hint: "action", run: () => loadExample() },
   {
     icon: "🔎",
     title: "Find in the masked log",
@@ -716,7 +822,13 @@ globalThis.addEventListener("pageshow", (event) => {
   if (event.persisted) receiveHandoff();
 });
 
+// Restored before either branch below, so the first compute already has it and
+// the page renders once — and so an incoming handoff keeps the remembered list too.
+const remembered = readFields();
+if (remembered !== null) els.fields.value = remembered;
+
 if (!receiveHandoff()) {
-  // Start with the example so the page looks alive.
-  loadExample();
+  // Start with the example so the page looks alive, but never overwrite a
+  // remembered field list with the demo one.
+  loadExample(remembered === null);
 }

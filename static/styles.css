@@ -1380,13 +1380,29 @@ body.is-resizing {
 }
 
 /* Section labels in the controls sidebar read like panel headings
-   (checkbox `.switch` labels keep their regular form style). */
-.controls .field > label:not(.switch) {
+   (checkbox `.switch` labels keep their regular form style). `.field-head > label`
+   is listed too: a field whose label shares a row with an action button wraps the
+   pair in `.field-head`, which puts the label out of reach of the `>` above. */
+.controls .field > label:not(.switch),
+.controls .field-head > label {
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.3px;
   text-transform: uppercase;
   color: var(--text-dim);
+}
+
+/* Label row for a field that carries an action button (Sanitize's Reset). The
+   label's own bottom margin is dropped so the row owns the gap to the control. */
+.field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+.field-head > label {
+  margin-bottom: 0;
 }
 
 /* ---- mode switch ---- */
@@ -1457,7 +1473,10 @@ body[data-mode="encode"] .only-decode {
   background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
-input:disabled {
+/* `textarea` is here for Sanitize's field list, which log mode disables while
+   "mask all" is on — as an <input> it dimmed for free, as a textarea it would not. */
+input:disabled,
+textarea:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -1565,6 +1584,28 @@ select:focus {
 }
 .chip.unused {
   opacity: 0.55;
+}
+/* The field list is a textarea so a long list wraps and one-per-line entry works
+   — the hint has always promised newlines, which a single-line input could not hold. */
+#fields {
+  resize: vertical;
+  line-height: 1.5;
+}
+/* Removable field chip — a whole-chip button, like Log Analysis' filter pills.
+   `.chip` already spells out the border, background, colour, padding and font, so
+   every UA button default that would otherwise show through is covered and only
+   the cursor is left. Deliberately not `font: inherit` (what `.chip-add` uses):
+   that shorthand would drop `.chip`'s `--mono` and render field names in the body
+   font. */
+.chip-del {
+  cursor: pointer;
+}
+#field-chips .chip-x-mark {
+  margin-left: 4px;
+  color: var(--text-faint);
+}
+#field-chips .chip-del:hover .chip-x-mark {
+  color: inherit;
 }
 
 .keep-row {
@@ -2843,6 +2884,7 @@ body.page-hub .card.card--hidden {
   .join-panel h1,
   .panel-head h2,
   .controls .field > label:not(.switch),
+  .controls .field-head > label,
   .controls .field > .field-collapse,
   .room-label,
   .story-panel > label,

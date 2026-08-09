@@ -58,10 +58,10 @@
 
       <div class="field only-log">
         <label class="switch mask-all">
-          <input id="mask-all" type="checkbox" checked /> <span>Mask all values</span>
+          <input id="mask-all" type="checkbox" /> <span>Mask all values</span>
         </label>
-        <p class="hint">Mask every value in each JSON block, Java <code>toString</code> dump and
-          <code>key=value</code> map. Turn off to mask only the fields below.</p>
+        <p class="hint">Off by default — only the fields below are masked. When on, masks every
+          value in each JSON block, Java <code>toString</code> dump and <code>key=value</code> map.</p>
       </div>
 
       <div class="field only-log">
@@ -73,17 +73,23 @@
       </div>
 
       <div class="field">
-        <label for="fields">Field names to mask</label>
-        <input id="fields" type="text" spellcheck="false" autocomplete="off"
-          placeholder="lastName, email, phoneNumber, token" />
-        <p class="hint">Comma, space or newline separated. Matches keys at any depth (case-insensitive).</p>
+        <div class="field-head">
+          <label for="fields">Field names to mask</label>
+          <button id="reset-fields" class="btn btn-small btn-ghost" type="button"
+            title="Restore the default field list">Reset</button>
+        </div>
+        <textarea id="fields" rows="2" spellcheck="false" autocomplete="off"
+          placeholder="lastName, email, phoneNumber, token"></textarea>
+        <p class="hint">Comma, space or newline separated. Matches keys at any depth (case-insensitive).
+          Click a chip's × to drop that field. Your list is remembered in this browser.</p>
         <div id="field-chips" class="chips" aria-live="polite"></div>
       </div>
 
-      <div class="field only-json" id="suggest-box" hidden>
+      <div class="field" id="suggest-box" hidden>
         <label>Suggested fields</label>
         <div id="suggest-chips" class="chips" aria-live="polite"></div>
-        <p class="hint">Keys in your payload that look sensitive — by name or value shape — but
+        <p class="hint">Keys in your <span class="only-json">payload</span><span
+            class="only-log">log</span> that look sensitive — by name or value shape — but
           aren't masked yet. Click one to add it.</p>
       </div>
 

@@ -300,9 +300,10 @@ function isJavaMap(inner) {
  * @param {number} keepLast
  * @param {Set<string>} fieldSet
  * @param {boolean} maskAll
+ * @param {Set<string>} matched collects the field names that matched a key
  * @returns {{ text: string, masked: number }}
  */
-function maskJavaMap(inner, keepLast, fieldSet, maskAll) {
+function maskJavaMap(inner, keepLast, fieldSet, maskAll, matched) {
   let masked = 0;
   const text = inner
     .split(", ")
@@ -312,7 +313,9 @@ function maskJavaMap(inner, keepLast, fieldSet, maskAll) {
       const key = segment.slice(0, eq);
       const value = segment.slice(eq + 1);
       if (value === "") return segment;
-      if (!(maskAll || fieldSet.has(key.trim().toLowerCase()))) return segment;
+      const hit = fieldSet.has(key.trim().toLowerCase());
+      if (!(maskAll || hit)) return segment;
+      if (hit) matched.add(key.trim());
       masked++;
       return `${key}=${maskString(value, keepLast)}`;
     })
@@ -328,9 +331,10 @@ function maskJavaMap(inner, keepLast, fieldSet, maskAll) {
  * @param {number} keepLast
  * @param {Set<string>} fieldSet
  * @param {boolean} maskAll
+ * @param {Set<string>} matched collects the field names that matched a key
  * @returns {{ text: string, jsonBlocks: number, mapBlocks: number, masked: number }}
  */
-function maskBraceBlocks(src, keepLast, fieldSet, maskAll) {
+function maskBraceBlocks(src, keepLast, fieldSet, maskAll, matched) {
   const n = src.length;
   let out = "";
   let lastCut = 0;
@@ -361,6 +365,7 @@ function maskBraceBlocks(src, keepLast, fieldSet, maskAll) {
         const stats = { maskedValues: 0, matchedKeys: new Set() };
         maskedBlock = sanitize(parsed, fieldSet, keepLast, stats);
         masked += stats.maskedValues;
+        for (const key of stats.matchedKeys) matched.add(key);
       }
       out += src.slice(lastCut, i) +
         emitJsonBlock(maskedBlock, candidate, lineIndent(src, i));
@@ -372,7 +377,7 @@ function maskBraceBlocks(src, keepLast, fieldSet, maskAll) {
 
     const inner = candidate.slice(1, -1);
     if (isJavaMap(inner)) {
-      const r = maskJavaMap(inner, keepLast, fieldSet, maskAll);
+      const r = maskJavaMap(inner, keepLast, fieldSet, maskAll, matched);
       out += src.slice(lastCut, i) + "{" + r.text + "}";
       mapBlocks++;
       masked += r.masked;
@@ -393,9 +398,10 @@ function maskBraceBlocks(src, keepLast, fieldSet, maskAll) {
  * @param {number} keepLast
  * @param {Set<string>} fieldSet
  * @param {boolean} maskAll
+ * @param {Set<string>} matched collects the field names that matched a key
  * @returns {{ text: string, count: number }}
  */
-function maskFieldLines(src, keepLast, fieldSet, maskAll) {
+function maskFieldLines(src, keepLast, fieldSet, maskAll, matched) {
   let count = 0;
   const lines = src.split("\n");
   for (let i = 0; i < lines.length; i++) {
@@ -406,7 +412,9 @@ function maskFieldLines(src, keepLast, fieldSet, maskAll) {
     if (value.startsWith("{") || value.startsWith("[") || value.startsWith("class ")) {
       continue; // nested structure opener — handled elsewhere
     }
-    if (!(maskAll || fieldSet.has(key.toLowerCase()))) continue;
+    const hit = fieldSet.has(key.toLowerCase());
+    if (!(maskAll || hit)) continue;
+    if (hit) matched.add(key);
     lines[i] = `${indent}${key}: ${maskString(value, keepLast)}`;
     count++;
   }
@@ -426,6 +434,7 @@ function maskFieldLines(src, keepLast, fieldSet, maskAll) {
  * @typedef {Object} LogStats
  * @property {number} blocks JSON + Java-map blocks masked
  * @property {number} maskedValues total structural values masked
+ * @property {string[]} matchedKeys field names that matched at least one key
  * @property {number} jsonBlocks
  * @property {number} mapBlocks
  * @property {number} fieldLines Java object-dump field values masked
@@ -450,12 +459,15 @@ export function maskLogText(text, options = {}) {
 
   let src = String(text ?? "");
   let maskedValues = 0;
+  /** Field names that matched at least one key, so the UI can tint them like
+   *  the JSON path does — dim means "you asked for it, the log never had it". */
+  const matchedKeys = new Set();
 
-  const braces = maskBraceBlocks(src, keepLast, fieldSet, maskAll);
+  const braces = maskBraceBlocks(src, keepLast, fieldSet, maskAll, matchedKeys);
   src = braces.text;
   maskedValues += braces.masked;
 
-  const lines = maskFieldLines(src, keepLast, fieldSet, maskAll);
+  const lines = maskFieldLines(src, keepLast, fieldSet, maskAll, matchedKeys);
   src = lines.text;
   maskedValues += lines.count;
 
@@ -471,12 +483,96 @@ export function maskLogText(text, options = {}) {
     stats: {
       blocks: braces.jsonBlocks + braces.mapBlocks,
       maskedValues,
+      matchedKeys: [...matchedKeys],
       jsonBlocks: braces.jsonBlocks,
       mapBlocks: braces.mapBlocks,
       fieldLines: lines.count,
       patternHits,
     },
   };
+}
+
+/**
+ * Harvest the key/value pairs a log exposes, in a shape `suggestSensitiveFields`
+ * can walk: every parseable JSON block as-is (it recurses into those itself),
+ * plus one synthetic object for the flat shapes — Java `key=value` map entries
+ * and `key: value` dump lines.
+ *
+ * This deliberately lives beside the masker and reuses its scanners: a suggestion
+ * for a key the masker cannot reach would be a broken promise, so the two must
+ * agree on which shapes a log has.
+ *
+ * Each key maps to an array of the values seen for it, capped at the five
+ * `suggestSensitiveFields` samples, so the shape checks have something to read.
+ * @param {string} text
+ * @param {number} [keyLimit] distinct flat keys to keep — logs run to hundreds of
+ *   thousands of lines, and only the first eight suggestions are ever shown
+ * @returns {unknown[]} JSON blocks followed by the flat-key object
+ */
+export function collectLogFields(text, keyLimit = 500) {
+  const src = String(text ?? "");
+  /** @type {unknown[]} */
+  const blocks = [];
+  /** @type {Map<string, string[]>} */
+  const flat = new Map();
+
+  /** @type {(rawKey: string, value: string) => void} */
+  const addFlat = (rawKey, value) => {
+    const key = rawKey.trim();
+    if (key === "") return;
+    let seen = flat.get(key);
+    if (seen === undefined) {
+      if (flat.size >= keyLimit) return;
+      seen = [];
+      flat.set(key, seen);
+    }
+    if (seen.length < 5) seen.push(value);
+  };
+
+  // Mirrors maskBraceBlocks: JSON and Java-map blocks are consumed whole, while
+  // other braces (`class X { … }`) are scanned into for the blocks they nest.
+  for (let i = 0; i < src.length; i++) {
+    if (src[i] !== "{") continue;
+    const end = findBalancedEnd(src, i);
+    if (end === -1) break;
+
+    const candidate = src.slice(i, end);
+    let parsed;
+    try {
+      parsed = JSON.parse(candidate);
+    } catch {
+      parsed = undefined;
+    }
+    if (parsed !== undefined && parsed !== null && typeof parsed === "object") {
+      blocks.push(parsed);
+      i = end - 1;
+      continue;
+    }
+
+    const inner = candidate.slice(1, -1);
+    if (isJavaMap(inner)) {
+      for (const segment of inner.split(", ")) {
+        const eq = segment.indexOf("=");
+        if (eq === -1) continue;
+        const value = segment.slice(eq + 1);
+        if (value !== "") addFlat(segment.slice(0, eq), value);
+      }
+      i = end - 1;
+    }
+  }
+
+  // Java object dumps, one field per line. The regex wants a bare identifier, so
+  // a JSON block's own `"key": value` lines cannot match here and double-count.
+  for (const line of src.split("\n")) {
+    const m = /^(\s*)([A-Za-z_]\w*):\s(.+)$/.exec(line);
+    if (m === null) continue;
+    const [, , key, value] = m;
+    if (value === "null") continue;
+    if (value.startsWith("{") || value.startsWith("[") || value.startsWith("class ")) continue;
+    addFlat(key, value);
+  }
+
+  return [...blocks, Object.fromEntries(flat)];
 }
 
 /**

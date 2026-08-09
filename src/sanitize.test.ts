@@ -5,6 +5,7 @@
  * Dependency-free on purpose (no remote std import) so it runs offline.
  */
 import {
+  collectLogFields,
   findBalancedEnd,
   maskString,
   runSanitize,
@@ -171,6 +172,79 @@ Deno.test("maskLog: field-list mode masks only matching keys inside blocks", () 
   const r = runSanitizeLog(line, { keepLast: 0, maskAll: false, fields: "email" });
   assertEquals(r.text, 'msg={"email":"*******","name":"Jara"}');
   assertEquals(r.stats.maskedValues, 1);
+});
+
+// The UI tints a field chip by whether the field actually matched, so log mode
+// has to report matched keys the way the JSON path does — otherwise every chip
+// renders untinted and "you asked for a field this log never had" is invisible.
+Deno.test("maskLog: matchedKeys names the fields that hit, inside a JSON block", () => {
+  const line = 'msg={"email":"a@b.com","name":"Jara"}';
+  const r = runSanitizeLog(line, { keepLast: 0, maskAll: false, fields: "email, absent" });
+  assertEquals(r.stats.matchedKeys, ["email"]);
+});
+
+Deno.test("maskLog: matchedKeys covers a Java map key", () => {
+  const line = "[INFO]{application=baloise-id, client=172.31.138.81}";
+  const r = runSanitizeLog(line, { keepLast: 0, maskAll: false, fields: "client, absent" });
+  assertEquals(r.stats.matchedKeys, ["client"]);
+  assertEquals(r.text.includes("baloise-id"), true); // untargeted key left alone
+});
+
+Deno.test("maskLog: matchedKeys covers a Java object-dump field line", () => {
+  const log = ["class Foo {", "    tenantId: abc-123", "    status: OK", "}"].join("\n");
+  const r = runSanitizeLog(log, { keepLast: 0, maskAll: false, fields: "tenantId, absent" });
+  assertEquals(r.stats.matchedKeys, ["tenantId"]);
+  assertEquals(r.text.includes("OK"), true);
+});
+
+Deno.test("maskLog: matchedKeys is empty when no field matches", () => {
+  const r = runSanitizeLog('msg={"name":"Jara"}', {
+    keepLast: 0,
+    maskAll: false,
+    fields: "email",
+  });
+  assertEquals(r.stats.matchedKeys, []);
+});
+
+// collectLogFields feeds log-mode's "Suggested fields". It must see exactly the
+// shapes the masker can mask, or a suggestion would name a field masking cannot
+// reach. Last element is always the flat-key object; JSON blocks come first.
+Deno.test("collectLogFields: a JSON block is handed over whole, to be walked", () => {
+  const got = collectLogFields('12:00 INFO req={"reqCtx":{"logonId":"L006344"},"n":1}');
+  assertEquals(got[0], { reqCtx: { logonId: "L006344" }, n: 1 });
+  assertEquals(got[got.length - 1], {});
+});
+
+Deno.test("collectLogFields: Java map entries land as flat keys", () => {
+  const got = collectLogFields("[INFO]{application=baloise-id, client=10.0.0.1, empty=}");
+  assertEquals(got[got.length - 1], { application: ["baloise-id"], client: ["10.0.0.1"] });
+});
+
+Deno.test("collectLogFields: object-dump lines land as flat keys", () => {
+  const log = [
+    "class Foo {",
+    "    email: jara@example.com",
+    "    language: null", // never masked, so never suggested
+    "    nested: {",
+    "}",
+  ].join("\n");
+  assertEquals(collectLogFields(log)[0], { email: ["jara@example.com"] });
+});
+
+Deno.test("collectLogFields: a JSON block's quoted keys are not also read as dump lines", () => {
+  const got = collectLogFields('body={\n  "lastName": "Weber"\n}');
+  assertEquals(got[0], { lastName: "Weber" });
+  assertEquals(got[got.length - 1], {}, "the quoted key must not double-count as a flat key");
+});
+
+Deno.test("collectLogFields: repeated keys keep up to five value samples", () => {
+  const log = ["a: 1", "a: 2", "a: 3", "a: 4", "a: 5", "a: 6"].join("\n");
+  assertEquals(collectLogFields(log)[0], { a: ["1", "2", "3", "4", "5"] });
+});
+
+Deno.test("collectLogFields: distinct flat keys are capped", () => {
+  const log = ["k1: a", "k2: b", "k3: c"].join("\n");
+  assertEquals(Object.keys(collectLogFields(log, 2)[0] as object), ["k1", "k2"]);
 });
 
 Deno.test("maskLog: braces inside a string value do not break parsing", () => {
