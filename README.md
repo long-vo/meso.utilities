@@ -42,6 +42,13 @@ everything here runs entirely in your browser and deploys to GitHub Pages.
 - **Scrum Poker** — planning poker for team estimation. Lives in its own repo,
   [meso.poker](https://github.com/long-vo/meso.poker), and is hosted on Render (it needs a server
   for live rooms); the hub links straight to it.
+- **Runbook** — replay a whole multi-step form on one of your own web apps: describe the steps once
+  as JSON (`fill`, `click`, `clickByText`, `select`, `waitForNavigation`, …) and run the wizard with
+  one click. The run continues across page navigations and copes with AJAX panels and PrimeFaces
+  dropdowns; a failure names the step and selector that didn't match. A
+  [Chrome extension](https://chromewebstore.google.com/detail/runbook-%E2%80%94-multi-step-form/kgammijeilbindmlecgccmanmababhha)
+  rather than a page here — driving a site the hub doesn't own takes one — so the hub links to the
+  store with an ↗ card. Definitions stay in the browser's own storage.
 
 New here? **Take a tour** in the hub toolbar walks through the tools one screen at a time — what
 each one is for and what it actually does — with Back/Continue, the arrow keys, and a progress rail
@@ -665,8 +672,9 @@ slidedown/            Slidedown viewer (Vite/React/TS) — built into /slidedown
 Each no-build tool lives in its own `static/<tool>/` folder and is linked from the hub; shared
 assets (`styles.css`, `theme.js`) stay at the static root and are referenced with relative paths. A
 tool that needs a build step (like Slidedown) lives in its own top-level folder with its own
-toolchain and is compiled into the site during deploy. Tools that need a server live in their own
-repos (see [meso.poker](https://github.com/long-vo/meso.poker)) and are linked from the hub with an
+toolchain and is compiled into the site during deploy. Tools that can't be a page on this site at
+all — one that needs a server (see [meso.poker](https://github.com/long-vo/meso.poker)), one that
+has to be a browser extension (Runbook) — live outside the repo and are linked from the hub with an
 ↗ card.
 
 ## Development

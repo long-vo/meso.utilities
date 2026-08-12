@@ -96,6 +96,15 @@ export const TOOL_ICONS = {
     '<rect class="i1" x="2.5" y="5" width="9" height="7.5" rx="1.6" />' +
     '<path d="M5 7.9l2 2 2-2" fill="none" stroke="#fff" stroke-width="1.3" ' +
     'stroke-linecap="round" stroke-linejoin="round" /></svg></span>',
+  // Two form-field bars over a run triangle — the small-size reading of the hub
+  // card's form panel and its ▸ badge. The step rail and the third bar are what
+  // drop: at 14px they close the gap between the bars and the triangle, and the
+  // glyph reads as a solid block rather than "fields, then run".
+  runbook: '<span class="crumb-icon card--blue">' +
+    '<svg width="14" height="14" viewBox="0 0 16 16">' +
+    '<rect class="i2" x="1.5" y="2.5" width="11" height="2" rx="1" />' +
+    '<rect class="i2" x="1.5" y="6.3" width="6.5" height="2" rx="1" />' +
+    '<path class="i1" d="M4.5 9.4l6.2 3.1-6.2 3.1z" /></svg></span>',
 };
 
 const TOOL_LINKS = [
@@ -158,6 +167,13 @@ const TOOL_LINKS = [
     title: "Scrum Poker",
     href: "https://meso-poker.onrender.com/",
     keywords: ["estimate", "planning", "team"],
+  },
+  {
+    icon: TOOL_ICONS.runbook,
+    title: "Runbook",
+    href:
+      "https://chromewebstore.google.com/detail/runbook-%E2%80%94-multi-step-form/kgammijeilbindmlecgccmanmababhha",
+    keywords: ["form", "autofill", "wizard", "steps", "replay", "chrome", "extension", "json"],
   },
 ];
 

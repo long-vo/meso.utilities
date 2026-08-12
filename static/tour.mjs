@@ -30,9 +30,18 @@ export function shouldNudge(stored) {
    Per-tool prose, keyed by the card's `data-tool`. Each feature is a
    [label, text] pair: the label is the claim, the text is what backs it up.
    `src/tour.test.ts` fails if a card on the hub has no entry here (or an entry
-   here has no card), so adding a tool cannot silently skip the tour. */
+   here has no card), so adding a tool cannot silently skip the tour.
 
-/** @type {Record<string, { lede: string, features: [string, string][] }>} */
+   `offsite` is the only per-tool wrinkle: an off-hub card's kicker says how it
+   is off-hub, and "hosted" stopped covering both once one of them became a
+   Chrome extension. Omit it and the hosted wording applies. */
+
+/**
+ * @type {Record<
+ *   string,
+ *   { lede: string, features: [string, string][], offsite?: string }
+ * >}
+ */
 export const TOUR_CONTENT = {
   sanitize: {
     lede: "Mask the sensitive fields in a payload or a whole log file before you paste it into a " +
@@ -327,6 +336,36 @@ export const TOUR_CONTENT = {
       ],
     ],
   },
+
+  runbook: {
+    offsite: "Chrome extension, opens the store",
+    lede:
+      "Replay a whole multi-step form on one of your own web apps: describe the steps once as " +
+      "JSON, then run the wizard with a single click instead of retyping twelve fields again.",
+    features: [
+      [
+        "The steps are a JSON file.",
+        "fill, type, click, clickByText, select, check, radioByLabel, setText, waitFor, " +
+        "waitForNavigation and sleep — one definition you can export, review and keep in the " +
+        "repo of the app it drives.",
+      ],
+      [
+        "It survives the page changing.",
+        "A real wizard navigates between its steps, and the run continues on the next page " +
+        "rather than stopping at the first one — AJAX panels and PrimeFaces dropdowns included.",
+      ],
+      [
+        "It says where it stopped.",
+        "Progress is reported step by step, so a run that fails names the selector that didn't " +
+        "match instead of leaving you to work out which field moved.",
+      ],
+      [
+        "The one you install.",
+        "Driving a page the hub doesn't own takes an extension, so this one lives in the Chrome " +
+        "Web Store rather than here. Your definitions stay in the browser's own storage.",
+      ],
+    ],
+  },
 };
 
 /* ---------------------------- the two book-ends ----------------------------
@@ -340,17 +379,18 @@ export const INTRO = {
   id: "intro",
   kind: "intro",
   color: "card--brand",
-  title: "Eight small tools, one page",
+  title: "Nine small tools, one page",
   kicker: "Welcome",
-  tags: ["8 tools", "One page"],
+  tags: ["9 tools", "One page"],
   lede: "Every tool here does one job and does it without a server — your data stays in the tab. " +
     "This tour spends one screen on each. Two minutes, and you can leave any time.",
   features: [
     [
       "Nothing is uploaded.",
       "Sanitize, Decode, Log Analysis, Leave, Availability, Shortlink and Slidedown all run " +
-      "entirely in your browser. Scrum Poker is the one exception — live rooms need a server, " +
-      "so it is hosted and opens in its own tab.",
+      "entirely in your browser. Two live off the hub and open in their own tab: Scrum Poker is " +
+      "hosted, because live rooms need a server, and Runbook is a Chrome extension, because " +
+      "driving someone else's page takes one.",
     ],
     [
       "⌘K goes anywhere.",
@@ -419,7 +459,9 @@ export function buildSteps(cards) {
       color: card.color,
       title: card.title,
       kicker: `Tool ${index + 1} of ${tools.length} · ${
-        card.external ? "hosted, opens in a new tab" : "runs in your browser"
+        card.external
+          ? TOUR_CONTENT[card.id].offsite ?? "hosted, opens in a new tab"
+          : "runs in your browser"
       }`,
       tags: card.tags ?? [],
       href: card.href,

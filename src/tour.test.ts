@@ -46,7 +46,7 @@ function cards(ids: string[]) {
     color: `card--${id}`,
     href: `${id}/`,
     tags: ["tag"],
-    external: id === "poker",
+    external: id === "poker" || id === "runbook",
   }));
 }
 
@@ -78,10 +78,17 @@ Deno.test("buildSteps: intro first, outro last, tools in the order given", () =>
   assertEquals(steps[steps.length - 1], OUTRO);
 });
 
-Deno.test("buildSteps: numbers the tool steps and names the hosted one", () => {
-  const steps = buildSteps(cards(["sanitize", "poker"]));
-  assertEquals(steps[1].kicker, "Tool 1 of 2 · runs in your browser");
-  assertEquals(steps[2].kicker, "Tool 2 of 2 · hosted, opens in a new tab");
+// Each off-hub tool is off-hub for its own reason, so the kicker takes the
+// wording from that tool's `offsite` and only falls back to "hosted" without it.
+Deno.test("buildSteps: numbers the tool steps and says how each off-hub one is off-hub", () => {
+  const steps = buildSteps(cards(["sanitize", "poker", "runbook"]));
+  assertEquals(steps[1].kicker, "Tool 1 of 3 · runs in your browser");
+  assertEquals(
+    steps[2].kicker,
+    "Tool 2 of 3 · hosted, opens in a new tab",
+    "no offsite of its own",
+  );
+  assertEquals(steps[3].kicker, "Tool 3 of 3 · Chrome extension, opens the store");
 });
 
 Deno.test("buildSteps: skips a card with no content, and survives no cards at all", () => {
@@ -136,11 +143,11 @@ Deno.test("every feature is a [label, text] pair with a label that ends in a ful
   }
 });
 
-Deno.test("only the hosted tool is external, and it carries an absolute URL", async () => {
+Deno.test("only the off-hub tools are external, and they carry absolute URLs", async () => {
   const html = await Deno.readTextFile(new URL("../static/index.html", import.meta.url));
   // The hub's own markup decides which tools are off-site; the tour must agree,
   // because an external step opens in a new tab and the others must not.
   const external = [...html.matchAll(/data-tool="([^"]+)"\s+href="(https?:[^"]+)"/g)]
     .map((m) => m[1]);
-  assertEquals(external, ["poker"], "hub cards pointing off-site");
+  assertEquals(external, ["poker", "runbook"], "hub cards pointing off-site");
 });
