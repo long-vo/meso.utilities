@@ -33,7 +33,7 @@ function registeredCommands() {
  * favicon refresh — the same crumb-icon markup the tool pages use, so the
  * palette matches their breadcrumbs. Icons that start with "<" are rendered
  * as markup by `render`; exported for pages that reference these tools in
- * their own commands (e.g. Text Transform's "Send to" entries).
+ * their own commands (e.g. Decode's "Send to" entries).
  */
 export const TOOL_ICONS = {
   sanitize: '<span class="crumb-icon card--purple">' +
@@ -66,14 +66,11 @@ export const TOOL_ICONS = {
     '<rect class="is1" x="1.5" y="5.5" width="8" height="5" rx="2.5" stroke-width="1.8" />' +
     '<rect class="is2" x="6.5" y="5.5" width="8" height="5" rx="2.5" stroke-width="1.8" />' +
     "</svg></span>",
-  transform: '<span class="crumb-icon card--blue">' +
-    '<svg width="14" height="14" viewBox="0 0 16 16">' +
-    '<text class="i1" x="1.5" y="12" font-size="11" font-weight="700">Aa</text></svg></span>',
   // Log lines of decreasing length beside a magnifier — the small-size reading
   // of the hub card's illustration. The bars shorten as they descend so each one
   // clears the lens: at 14px an overlap reads as a smudge, not two shapes. The
   // handle is what makes it a magnifier rather than a circle — the tour's recap
-  // grid, nine glyphs in a row, is where a lens without one stops reading.
+  // grid, eight glyphs in a row, is where a lens without one stops reading.
   loganalysis: '<span class="crumb-icon card--violet">' +
     '<svg width="14" height="14" viewBox="0 0 16 16">' +
     '<rect class="i1" x="1.5" y="2.5" width="11" height="2" rx="1" />' +
@@ -149,23 +146,6 @@ const TOOL_LINKS = [
     title: "Shortlink",
     href: "shortlink/",
     keywords: ["link", "url", "bookmark", "go", "redirect", "group"],
-  },
-  {
-    icon: TOOL_ICONS.transform,
-    title: "Text Transform",
-    href: "transform/",
-    keywords: [
-      "case",
-      "camel",
-      "snake",
-      "kebab",
-      "sort",
-      "grep",
-      "trim",
-      "align",
-      "yaml",
-      "quotes",
-    ],
   },
   {
     icon: TOOL_ICONS.slidedown,

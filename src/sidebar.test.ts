@@ -22,7 +22,7 @@ Deno.test("storageKey: one namespaced key per tool, distinct from the width key"
 
 Deno.test("railStorageKey: its own key per tool, never the sidebar's", () => {
   assertEquals(railStorageKey("/leave/"), "meso-rail-hidden-leave");
-  assertEquals(railStorageKey("/transform/index.html"), "meso-rail-hidden-transform");
+  assertEquals(railStorageKey("/shortlink/index.html"), "meso-rail-hidden-shortlink");
   assertEquals(railStorageKey("/meso.utilities/availability/"), "meso-rail-hidden-availability");
   const path = "/shortlink/";
   if (railStorageKey(path) === storageKey(path)) {

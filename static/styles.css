@@ -1339,8 +1339,8 @@ body.is-resizing {
 
 /* ---- rail show/hide ----
    The same machinery, one axis over: #rail-toggle collapses the tool's
-   right-hand rail (Leave's templates, Shortlink's filter rail, Transform's
-   favourites, Availability's legend — every rail carries `.rail`). Hiding the
+   right-hand rail (Leave's templates, Shortlink's filter rail, Availability's
+   legend — every rail carries `.rail`). Hiding the
    panel is shared; dropping its grid column is not, because the three-column
    templates are page-scoped and outrank anything written here — each page
    spells its collapsed grid out next to its own rules further down. Those
@@ -1859,8 +1859,8 @@ input[aria-invalid="true"] {
   /* Same reasoning one level down: the breadcrumb is itself a nowrap row, and
      `.crumb-current` is `white-space: nowrap` with the default `min-width: auto`,
      so it cannot shrink below its label. On a 320px phone that pushed the whole
-     document sideways on the longest names (Decode Anything, Team Availability,
-     Text Transform) — the tool name has to be free to drop under the wordmark. */
+     document sideways on the longest names (Decode Anything, Team
+     Availability) — the tool name has to be free to drop under the wordmark. */
   .brand {
     flex-wrap: wrap;
   }
@@ -1944,8 +1944,7 @@ input[aria-invalid="true"] {
 /* The star and the grip share the corner. Their hit areas must not overlap, so
    both are 26px wide and sit side by side: star 8→34px, grip 34→60px from the
    card's right edge (the .card-head padding above keeps the title clear of the
-   pair). `.page-transform` reuses the star inline — it resets `position`, so the
-   offsets here are hub-only. */
+   pair). */
 .fav-btn {
   position: absolute;
   top: 15px;
@@ -4307,148 +4306,6 @@ button.out:focus-visible::after {
   margin-top: 8px;
 }
 
-/* ---- Text Transform tool ---- */
-/* The sidebar's searchable action list: its own scroll region so the search
-   box and Options stay reachable however long the list grows. */
-.page-transform .action-list {
-  margin-top: 10px;
-  max-height: calc(100vh - 430px);
-  min-height: 240px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  /* Keep the rows' ☆ stars clear of the scrollbar: reserve a stable gutter
-     (classic scrollbars) plus padding wide enough for overlay scrollbars. */
-  scrollbar-gutter: stable;
-  padding-right: 10px;
-}
-.page-transform .action-group {
-  position: sticky;
-  top: 0;
-  background: var(--bg-elev);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-faint);
-  padding: 8px 0 3px;
-}
-.page-transform .action-group:first-child {
-  padding-top: 0;
-}
-.page-transform .action-btn {
-  text-align: left;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  font: inherit;
-  font-size: 12.5px;
-  padding: 5px 8px;
-  cursor: pointer;
-}
-.page-transform .action-btn:hover,
-.page-transform .action-btn:focus-visible {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-}
-/* The two Options inputs sit directly on top of each other. */
-.page-transform .controls input + input {
-  margin-top: 8px;
-}
-.page-transform .code-area {
-  min-height: 440px;
-}
-@media (max-width: 1080px) {
-  /* Stacked layout: cap the list so the editor stays in reach. */
-  .page-transform .action-list {
-    max-height: 320px;
-    min-height: 0;
-  }
-}
-
-/* ---- Text Transform: favourites rail ----
-   Same three-column pattern as .page-leave (templates) and .page-shortlink
-   (right rail): a sticky 260px column on the right. Spelled out at matching
-   specificity for the collapsed-sidebar state, so the shared
-   `:root[data-controls-collapsed] .layout` rule never drops the favs area. */
-.page-transform .favorites {
-  grid-area: favs;
-}
-@media (min-width: 1081px) {
-  .page-transform .layout {
-    /* 100px over the shared 1440 cap so the flexible editor keeps its width
-       once the fixed 260px column is added. */
-    max-width: 1540px;
-    grid-template-columns: var(--controls-w, 320px) minmax(0, 1fr) 260px;
-    grid-template-areas: "controls editor favs";
-  }
-  :root[data-controls-collapsed] .page-transform .layout {
-    grid-template-columns: minmax(0, 1fr) 260px;
-    grid-template-areas: "editor favs";
-  }
-  /* Collapsed rail: back to the shared two-column layout and its width cap. */
-  :root[data-rail-collapsed] .page-transform .layout {
-    max-width: 1440px;
-    grid-template-columns: var(--controls-w, 320px) minmax(0, 1fr);
-    grid-template-areas: "controls editor";
-  }
-  :root[data-controls-collapsed][data-rail-collapsed] .page-transform .layout {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "editor";
-  }
-  .page-transform .favorites {
-    position: sticky;
-    top: 86px;
-  }
-}
-/* Stacked (single-column) layout keeps the favourites panel last. */
-@media (max-width: 1080px) {
-  .page-transform .layout {
-    grid-template-areas:
-      "controls"
-      "editor"
-      "favs";
-  }
-  :root[data-controls-collapsed] .page-transform .layout {
-    grid-template-areas:
-      "editor"
-      "favs";
-  }
-}
-.page-transform .fav-list {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-/* Action rows: the action button fills the row, its ☆ star sits inline
-   (the shared .fav-btn is absolutely positioned for the hub cards). */
-.page-transform .action-row {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.page-transform .action-row .action-btn {
-  flex: 1;
-  min-width: 0;
-}
-.page-transform .fav-btn {
-  position: static;
-  flex: none;
-  padding: 2px 5px;
-  font-size: 14px;
-}
-/* The applied-action status sits in the editor's toolbar; long labels
-   ("Educate quotes (straight → curly) — no change") would wrap the whole
-   toolbar onto a second row, so it ellipsizes instead (full text in the
-   tooltip, set by app.js). */
-.page-transform .result-tools .status {
-  max-width: 200px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 /* Send-to buttons (on every tool page) carry the target tool's SVG icon —
    the same crumb-icon SVGs the tool pages use since the favicon refresh —
    instead of the old emojis; nudge the inline-flex icon onto the button's
@@ -4470,8 +4327,8 @@ button.out:focus-visible::after {
    from theme tokens. */
 
 /* ---- Team Availability: legend rail ----
-   Same three-column pattern as .page-leave (templates) and .page-transform
-   (favourites): a sticky 260px column on the right. Spelled out at matching
+   Same three-column pattern as .page-leave (templates): a sticky 260px column
+   on the right. Spelled out at matching
    specificity for the collapsed-sidebar state, so the shared
    `:root[data-controls-collapsed] .layout` rule never drops the legend area.
    The rail is [hidden] until a workbook is imported — the :has() variants

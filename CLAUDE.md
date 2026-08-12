@@ -118,10 +118,10 @@ silently drop the extra area, hiding a panel. Check any shared layout change aga
 
 `sidebar.js` + `sidebar.mjs` collapse the side panels: `#controls-toggle` (Ctrl/⌘ B) the controls
 sidebar, `#rail-toggle` (Ctrl/⌘ Shift B) the third column on the tools that have one — Leave's
-templates, Shortlink's rail, Transform's favourites, Availability's legend. A rail opts in by
-carrying `class="rail"` and a `data-rail-label` (the button reads "Hide <label> panel"); the wiring
-then follows the sidebar's: a flag on `<html>` (`data-rail-collapsed`), set pre-paint by the inline
-head script from `meso-rail-hidden-<tool>`, so nothing flashes. Three consequences worth knowing:
+templates, Shortlink's rail, Availability's legend. A rail opts in by carrying `class="rail"` and a
+`data-rail-label` (the button reads "Hide <label> panel"); the wiring then follows the sidebar's: a
+flag on `<html>` (`data-rail-collapsed`), set pre-paint by the inline head script from
+`meso-rail-hidden-<tool>`, so nothing flashes. Three consequences worth knowing:
 
 - Hiding the panel is shared (`:root[data-rail-collapsed] .rail`), but **dropping its grid column is
   per page** — the three-column templates are page-scoped and outrank anything generic, so each page
@@ -180,7 +180,7 @@ Anywhere tools are shown together, one emoji among SVGs reads as a bug:
   `<` render via `innerHTML`; trusted codebase strings only). `TOOL_LINKS` and any page-registered
   "Send to <tool>" commands must reference `TOOL_ICONS.<tool>`, never an emoji.
 - **Send-to buttons** on other tool pages — reuse the same crumb-icon markup inline (see the
-  Sanitize/Decode/Transform pages); `.btn .crumb-icon` handles the baseline alignment.
+  Sanitize/Decode pages); `.btn .crumb-icon` handles the baseline alignment.
 
 SVG part classes are **context-scoped** — using one outside its context renders unstyled (black):
 `.crumb-icon` styles only `i1`/`i2` (fills) and `is1`/`is2` (strokes); `.card-art` styles

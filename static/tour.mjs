@@ -228,43 +228,6 @@ export const TOUR_CONTENT = {
     ],
   },
 
-  transform: {
-    lede:
-      "One text area and a searchable action list, modelled on IntelliJ's String Manipulation " +
-      "plugin. Pick an action and the text changes in place — or select part of it first and " +
-      "change only that.",
-    features: [
-      [
-        "Case, every way round.",
-        "camelCase, kebab, snake, SCREAMING_SNAKE, dot.case, PascalCase — or cycle, which " +
-        "detects the current format and moves to the next. Conversions run per line, so a " +
-        "pasted list of identifiers converts in one go, indentation intact.",
-      ],
-      [
-        "Sorting that knows what it's sorting.",
-        "Natural order via Intl.Collator (so a2 comes before a10), by length, hexadecimally, " +
-        "hierarchically — indented children stay attached to their parent — plus reverse, " +
-        "shuffle and recursive JSON key sort.",
-      ],
-      [
-        "Filter, trim, align.",
-        "grep, inverted grep and group-by-grep take plain text or /regex/flags. Trim, collapse " +
-        "whitespace, dedupe lines, drop empty ones. Align turns delimited lines into padded " +
-        "columns.",
-      ],
-      [
-        "Convert and re-quote.",
-        'Minify JSON, JSON ↔ YAML, shift quotes " → \' → ` → " with the contents re-escaped, ' +
-        "curly ↔ straight, and path separators Windows ↔ UNIX.",
-      ],
-      [
-        "Undo, favourites, ⌘K.",
-        "Every action steps through an undo history, ☆ pins the ones you use to a favourites " +
-        "rail, and all of them are runnable from the command palette.",
-      ],
-    ],
-  },
-
   loganalysis: {
     lede:
       "Drop the log files off a ticket — several at once, from different applications — and read " +
@@ -377,15 +340,15 @@ export const INTRO = {
   id: "intro",
   kind: "intro",
   color: "card--brand",
-  title: "Nine small tools, one page",
+  title: "Eight small tools, one page",
   kicker: "Welcome",
-  tags: ["9 tools", "One page"],
+  tags: ["8 tools", "One page"],
   lede: "Every tool here does one job and does it without a server — your data stays in the tab. " +
     "This tour spends one screen on each. Two minutes, and you can leave any time.",
   features: [
     [
       "Nothing is uploaded.",
-      "Sanitize, Decode, Leave, Availability, Shortlink, Transform and Slidedown all run " +
+      "Sanitize, Decode, Log Analysis, Leave, Availability, Shortlink and Slidedown all run " +
       "entirely in your browser. Scrum Poker is the one exception — live rooms need a server, " +
       "so it is hosted and opens in its own tab.",
     ],
