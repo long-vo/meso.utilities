@@ -228,7 +228,12 @@ Deno.test("collectLogFields: object-dump lines land as flat keys", () => {
     "    nested: {",
     "}",
   ].join("\n");
-  assertEquals(collectLogFields(log)[0], { email: ["jara@example.com"] });
+  // The flat keys are the *last* element, as everywhere else here. This dump
+  // also holds one balanced pair (`nested: {` … `}`), which parses as an empty
+  // block and takes index 0 — it used to find none at all only because an
+  // unclosed brace ended the scan.
+  const got = collectLogFields(log);
+  assertEquals(got[got.length - 1], { email: ["jara@example.com"] });
 });
 
 Deno.test("collectLogFields: a JSON block's quoted keys are not also read as dump lines", () => {
@@ -323,4 +328,45 @@ Deno.test("maskLog: field mode masks listed keys; redact still nukes UUIDs", () 
   });
   assertEquals(r.text.includes("GOB_DEV"), false); // masked by field-list pass
   assertEquals(r.text.includes("f346611c-6a34-4c32-b7d0-759f8299f8c4"), false); // redacted by pattern pass
+});
+
+/* ---------------- regressions: masking must not stop or under-mask -------- */
+
+Deno.test("maskLog: an unclosed brace does not stop masking the rest of the log", () => {
+  // A lone `{` in prose — a parse-error message, a truncated tail — used to
+  // abandon the whole scan, shipping every later value in clear.
+  const log = [
+    "INFO parse error near { unexpected token",
+    'INFO payload {"password":"hunter2","iban":"CH9300762011623852957"}',
+  ].join("\n");
+  const r = runSanitizeLog(log, { keepLast: 0 });
+  assertEquals(r.text.includes("hunter2"), false);
+  assertEquals(r.text.includes("CH9300762011623852957"), false);
+  assertEquals(r.stats.jsonBlocks, 1);
+});
+
+Deno.test("maskLog: a Java-map value containing a comma is masked whole", () => {
+  // Splitting on a bare ", " cut the value in two and passed the tail through.
+  const r = runSanitizeLog("x {user=bob, address=Main St, 5, token=abc123}", { keepLast: 0 });
+  assertEquals(r.text, "x {user=***, address=**********, token=******}");
+});
+
+Deno.test("maskLog: a block with nothing maskable is left byte-for-byte", () => {
+  const log = 'a={\n}\nb={"pw":"secret"}';
+  const r = runSanitizeLog(log, { keepLast: 0 });
+  assertEquals(r.text, 'a={\n}\nb={"pw":"******"}');
+});
+
+Deno.test("sanitize: a __proto__ key keeps its place in the output", () => {
+  // Assigning it in the browser invokes the prototype setter and the key — plus
+  // everything under it — vanishes from the masked payload. Deno hardens
+  // `__proto__`, so this test passes either way; it documents the contract that
+  // `setKey` exists to hold, and JSON.parse really does make it an own key.
+  const r = runSanitize('{"__proto__":{"password":"secret"},"b":1}', "password", 0);
+  assertEquals(r.ok, true);
+  if (!r.ok) return;
+  const out = JSON.parse(r.pretty);
+  assertEquals(Object.keys(out), ["__proto__", "b"]);
+  assertEquals(out["__proto__"], { password: "******" });
+  assertEquals(r.stats.maskedValues, 1);
 });

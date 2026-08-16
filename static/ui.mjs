@@ -4,20 +4,38 @@
 // (`makeToast` only does so when its returned function runs), so the module
 // loads cleanly in Deno for the parity tests.
 
-/** Escape HTML so arbitrary text is safe to inject via innerHTML. */
+/**
+ * Escape HTML so arbitrary text is safe to inject via innerHTML.
+ *
+ * Quotes are escaped too, which matters more than it looks: several callers
+ * interpolate escaped text into an *attribute* (`title="…"`, `aria-label="…"`),
+ * and log-derived text — a REST URL, an exception message — routinely contains
+ * a `"`. Escaping only `&<>` let such a value close the attribute and inject a
+ * handler, on an origin that also holds the vacation workbook in localStorage.
+ */
 export function escapeHtml(s) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 /**
  * Lightweight JSON syntax highlighter. Masked string values (those starting
  * with one or more "*") get a distinct colour so redactions stand out against
  * the rest of the payload.
+ *
+ * The pattern matches string literals as `&quot;…&quot;` because escaping runs
+ * first (offsets would shift the other way round) and now escapes the quotes:
+ * `\&quot;` — an escaped quote inside a string — is consumed by the
+ * backslash alternative, so it cannot terminate the literal early.
  */
 export function highlightJson(jsonString) {
   const esc = escapeHtml(jsonString);
   return esc.replace(
-    /("(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(?:true|false)\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)/g,
+    /(&quot;(?:\\u[a-fA-F0-9]{4}|\\[^u]|(?!&quot;)[^\\])*&quot;(\s*:)?|\b(?:true|false)\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)/g,
     (match) => {
       let cls = "j-num";
       if (match.startsWith("&quot;") || match.startsWith('"')) {

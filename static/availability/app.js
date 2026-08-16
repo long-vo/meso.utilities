@@ -23,6 +23,7 @@ import {
   historyText,
   holidayName,
   HOLIDAYS_CH_ZURICH,
+  ISO_DATE,
   isWeekend,
   KIND_LABELS,
   leavableDays,
@@ -648,7 +649,14 @@ function loadState() {
       state.view.mode = saved.view.mode;
     }
     if (Array.isArray(saved.history)) {
-      state.history = saved.history.filter((e) => e !== null && typeof e === "object");
+      // A record is replayed against the grid on every render, which walks its
+      // range a day at a time — so the dates have to be dates, not merely
+      // present. Anything else is dropped rather than kept as a landmine.
+      state.history = saved.history.filter((e) =>
+        e !== null && typeof e === "object" &&
+        ISO_DATE.test(e.from ?? "") && ISO_DATE.test(e.to ?? "") &&
+        typeof e.code === "string"
+      );
     }
     if (Number.isInteger(saved.updatedAt) && saved.updatedAt > 0) {
       state.updatedAt = saved.updatedAt;

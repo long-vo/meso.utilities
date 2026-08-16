@@ -171,6 +171,10 @@ export function quarterDates(year, quarter) {
   return dates;
 }
 
+/** The shape every stored date must have before it is stepped through with
+ *  {@link nextDate}, which throws on anything else. */
+export const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 /** The next calendar day of an ISO date, DST-proof via UTC. @param {string} iso */
 export function nextDate(iso) {
   const t = Date.parse(`${iso}T00:00:00Z`) + 86_400_000;
@@ -1240,10 +1244,9 @@ export function leaveHandoffText({ name, code, from, to, type, duration }) {
  */
 export function applyDayCodes(model, update) {
   const nothing = { model, name: null, written: 0, weekend: 0, outside: 0, before: {} };
-  const iso = /^\d{4}-\d{2}-\d{2}$/;
   // `nextDate` throws on an unparsable date, and this input crossed a storage
   // boundary — check before stepping through the range with it.
-  if (!iso.test(update?.from ?? "") || !iso.test(update?.to ?? "")) return nothing;
+  if (!ISO_DATE.test(update?.from ?? "") || !ISO_DATE.test(update?.to ?? "")) return nothing;
   const wanted = String(update?.name ?? "").trim().toLowerCase();
   const person = model.people.find((p) => p.name.toLowerCase() === wanted) ?? null;
   if (person === null) return nothing;
@@ -1418,6 +1421,13 @@ export function historyText(entry) {
 export function recordOnGrid(model, entry) {
   const dates = Object.keys(entry.before ?? {});
   if (dates.length === 0) {
+    // The same guard {@link applyDayCodes} states its reason for: `nextDate`
+    // throws on an unparsable date, and a history record crossed a storage
+    // boundary. Without it one malformed entry takes the whole history panel
+    // down with a RangeError mid-render.
+    if (!ISO_DATE.test(entry.from ?? "") || !ISO_DATE.test(entry.to ?? "")) {
+      return { days: 0, kept: 0 };
+    }
     for (let d = entry.from; d <= entry.to; d = nextDate(d)) {
       if (!isWeekend(d)) dates.push(d);
     }

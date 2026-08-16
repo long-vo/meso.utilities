@@ -63,6 +63,36 @@ export function maskString(value, keepLast) {
 }
 
 /**
+ * Copy one key onto the output object.
+ *
+ * Plain assignment cannot be used for `__proto__`: in the browser it invokes
+ * the prototype setter instead of creating an own property, so the key and
+ * everything under it silently vanish from the masked output (and the output
+ * object inherits from whatever the payload supplied). A payload is untrusted
+ * input, and losing part of it without a word is worse than masking it.
+ *
+ * Do not "simplify" this back to `target[key] = value` on the strength of a
+ * green test run: Deno neuters `Object.prototype.__proto__`, so under the
+ * parity tests the plain assignment looks perfectly correct and only the
+ * browser — the runtime that actually ships — drops the key.
+ * @param {JsonObject} target
+ * @param {string} key
+ * @param {unknown} value
+ */
+function setKey(target, key, value) {
+  if (key === "__proto__") {
+    Object.defineProperty(target, key, {
+      value,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  } else {
+    target[key] = value;
+  }
+}
+
+/**
  * Mask a matched value. Handles strings, numbers, arrays, objects and null.
  * Booleans and null pass through unchanged.
  * @param {unknown} val
@@ -79,7 +109,7 @@ export function maskValue(val, keepLast) {
     /** @type {JsonObject} */
     const out = {};
     for (const [key, nested] of Object.entries(val)) {
-      out[key] = maskValue(nested, keepLast);
+      setKey(out, key, maskValue(nested, keepLast));
     }
     return out;
   }
@@ -125,9 +155,9 @@ export function sanitize(value, fieldSet, keepLast, stats) {
           stats.matchedKeys.add(key);
           stats.maskedValues += countMaskable(val);
         }
-        out[key] = maskValue(val, keepLast);
+        setKey(out, key, maskValue(val, keepLast));
       } else {
-        out[key] = sanitize(val, fieldSet, keepLast, stats);
+        setKey(out, key, sanitize(val, fieldSet, keepLast, stats));
       }
     }
     return out;
@@ -224,6 +254,66 @@ export function findBalancedEnd(text, start) {
   return -1;
 }
 
+/**
+ * Match every `{` in the text to its `}` in a single pass.
+ *
+ * Two bugs live in the obvious alternative — calling {@link findBalancedEnd}
+ * from each `{` as the scanners walk the text:
+ *
+ * - A `{` that never closes (a truncated tail, or a lone brace in a message
+ *   like `unexpected token {`) used to abandon the scan, leaving every value
+ *   after it unmasked. Here it is simply absent from the map, so its block is
+ *   skipped and the rest of the log is still masked.
+ * - Each call re-scanned to the end of the file, so a log with many braces cost
+ *   O(n²) on the main thread. One pass is O(n).
+ *
+ * The in-string flag resets at every newline: a log line is not a JSON
+ * document, and a lone `"` in prose must not swallow the braces in the rest of
+ * the file the way a running flag would.
+ * @param {string} text
+ * @returns {Map<number, number>} index of a `{` → index just past its `}`
+ */
+function matchBraces(text) {
+  /** @type {Map<number, number>} */
+  const ends = new Map();
+  /** @type {number[]} */
+  const open = [];
+  let inStr = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === "\n") {
+      inStr = false;
+      escaped = false;
+    } else if (inStr) {
+      if (escaped) escaped = false;
+      else if (c === "\\") escaped = true;
+      else if (c === '"') inStr = false;
+    } else if (c === '"') {
+      inStr = true;
+    } else if (c === "{") {
+      open.push(i);
+    } else if (c === "}" && open.length > 0) {
+      ends.set(/** @type {number} */ (open.pop()), i + 1);
+    }
+  }
+  return ends;
+}
+
+/**
+ * Split a flat Java map body into its `key=value` segments.
+ *
+ * Splitting on a bare `", "` cut values that contain one — an address, a
+ * message — into pieces, and the tail piece carried no `=`, so it was passed
+ * through in clear next to the masked head. The separator only counts when a
+ * key follows it.
+ * @param {string} inner content between the braces
+ * @returns {string[]}
+ */
+function splitMapSegments(inner) {
+  return inner.split(/,\s+(?=[\w.$-]+\s*=)/);
+}
+
 /** Value-shape patterns redacted anywhere in a log, regardless of structure. */
 export const REDACT_PATTERNS = [
   // UUID
@@ -305,8 +395,7 @@ function isJavaMap(inner) {
  */
 function maskJavaMap(inner, keepLast, fieldSet, maskAll, matched) {
   let masked = 0;
-  const text = inner
-    .split(", ")
+  const text = splitMapSegments(inner)
     .map((segment) => {
       const eq = segment.indexOf("=");
       if (eq === -1) return segment;
@@ -342,10 +431,13 @@ function maskBraceBlocks(src, keepLast, fieldSet, maskAll, matched) {
   let mapBlocks = 0;
   let masked = 0;
 
+  const ends = matchBraces(src);
   for (let i = 0; i < n; i++) {
     if (src[i] !== "{") continue;
-    const end = findBalancedEnd(src, i);
-    if (end === -1) break;
+    const end = ends.get(i);
+    // A brace that never closes is skipped, not fatal: abandoning the scan here
+    // left the whole rest of the log unmasked.
+    if (end === undefined) continue;
 
     const candidate = src.slice(i, end);
     let parsed;
@@ -355,7 +447,14 @@ function maskBraceBlocks(src, keepLast, fieldSet, maskAll, matched) {
       parsed = undefined;
     }
 
-    if (parsed !== undefined && parsed !== null && typeof parsed === "object") {
+    // A block holding no maskable leaf (`{}`, or containers of containers) has
+    // nothing to rewrite, and re-emitting it only risks re-flowing the source
+    // across a different number of lines — which is what costs the Diff view
+    // its line-for-line pairing. Left exactly as it arrived.
+    if (
+      parsed !== undefined && parsed !== null && typeof parsed === "object" &&
+      countMaskable(parsed) > 0
+    ) {
       let maskedBlock;
       if (maskAll) {
         maskedBlock = maskValue(parsed, keepLast);
@@ -530,11 +629,14 @@ export function collectLogFields(text, keyLimit = 500) {
   };
 
   // Mirrors maskBraceBlocks: JSON and Java-map blocks are consumed whole, while
-  // other braces (`class X { … }`) are scanned into for the blocks they nest.
+  // other braces (`class X { … }`) are scanned into for the blocks they nest —
+  // including how an unclosed brace is skipped rather than ending the scan, so
+  // the suggestions still cover the keys the masker can reach past it.
+  const ends = matchBraces(src);
   for (let i = 0; i < src.length; i++) {
     if (src[i] !== "{") continue;
-    const end = findBalancedEnd(src, i);
-    if (end === -1) break;
+    const end = ends.get(i);
+    if (end === undefined) continue;
 
     const candidate = src.slice(i, end);
     let parsed;
@@ -551,7 +653,7 @@ export function collectLogFields(text, keyLimit = 500) {
 
     const inner = candidate.slice(1, -1);
     if (isJavaMap(inner)) {
-      for (const segment of inner.split(", ")) {
+      for (const segment of splitMapSegments(inner)) {
         const eq = segment.indexOf("=");
         if (eq === -1) continue;
         const value = segment.slice(eq + 1);

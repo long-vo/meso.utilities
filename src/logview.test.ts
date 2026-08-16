@@ -161,7 +161,7 @@ Deno.test("linesAligned: a block masking re-flows is reported unaligned", () => 
 });
 
 Deno.test("rowHtml: escapes the line", () => {
-  assertEquals(rowHtml('<a href="x">& more'), '&lt;a href="x"&gt;&amp; more');
+  assertEquals(rowHtml('<a href="x">& more'), "&lt;a href=&quot;x&quot;&gt;&amp; more");
 });
 
 Deno.test("rowHtml: tints masked runs", () => {
