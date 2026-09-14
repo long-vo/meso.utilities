@@ -835,6 +835,17 @@ function bodyFieldChanged() {
   formChanged();
 }
 
+// Moving the start past the end leaves a backwards range the user never asked for and
+// an error to clear by hand — booking consecutive days hits it every time. `end.min`
+// alone only stops the picker offering an earlier date; it never corrects a value
+// already there. A backwards range describes one day, the same reading formatPeriod and
+// parseLeaveHandoff use. Only the start does this: an end typed before the start is a
+// real mistake and keeps its error. Registered before the render listeners below, which
+// would otherwise paint that error beside a range the field has already corrected.
+els.start.addEventListener("input", () => {
+  if (els.end.value !== "" && els.end.value < els.start.value) els.end.value = els.start.value;
+});
+
 for (const el of [els.name, els.reason, els.start, els.end]) {
   el.addEventListener("input", bodyFieldChanged);
 }
