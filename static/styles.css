@@ -3690,6 +3690,21 @@ button.out:focus-visible::after {
 .mail-help b {
   color: var(--text-dim);
 }
+.mail-help code {
+  font-family: var(--mono);
+  color: var(--text-dim);
+}
+/* One click selects the whole command, ready to copy into Terminal. */
+.mail-help-cmd {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: all;
+}
 
 /* ---- shortlink ---- */
 /* A #name visit hides the page until app.js has resolved it, so a working

@@ -204,6 +204,9 @@
           <li><b>Windows:</b> Settings → Apps → Default apps → set <b>Outlook</b> for email / mailto.</li>
           <li><b>macOS:</b> Apple Mail → Settings → General → <b>Default email reader</b> → Microsoft
             Outlook (the default is Apple Mail).</li>
+          <li><b>macOS, no such setting (e.g. Apple Mail has no account):</b> paste this into
+            Terminal — it prints <code>Success</code> when done:
+            <pre class="mail-help-cmd"><code>swift -e 'import AppKit; NSWorkspace.shared.setDefaultApplication(at: URL(fileURLWithPath: "/Applications/Microsoft Outlook.app"), toOpenURLsWithScheme: "mailto") { print($0 ?? "Success") }'</code></pre></li>
           <li><b>iOS / iPadOS (Outlook app):</b> install Outlook from the App Store, then
             Settings → Apps → <b>Default Apps</b> → Email → Outlook.</li>
           <li><b>iOS / iPadOS (Apple Mail + Outlook account):</b> Settings → Apps → Mail →
